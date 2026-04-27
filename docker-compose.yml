@@ -1,0 +1,207 @@
+# ============================================
+# PT Sopiak Satria Saga — Docker Compose (Coolify edition)
+#
+# Architecture (uses Coolify's built-in Traefik for routing & SSL):
+#   sopiaksatriasaga.com         → website (commercial site)
+#   hq.sopiaksatriasaga.com      → web-admin (Next.js dashboard)
+#   api.sopiaksatriasaga.com     → backend  (REST + Socket.io + uploads + APK download)
+#   pgadmin.sopiaksatriasaga.com → pgAdmin
+#
+# How Coolify reads this file:
+#   - Each service listed under `domains` in Coolify's UI gets a Traefik route.
+#   - The `expose:` ports are what Traefik will proxy to.
+#   - Postgres is internal-only (no expose needed externally).
+#
+# Secrets:
+#   All ${VAR} placeholders are filled from Coolify's
+#   "Production Environment Variables" panel. Do NOT commit a .env file.
+# ============================================
+
+services:
+
+  # ============================================================
+  # PostgreSQL 16
+  # ============================================================
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${DB_NAME:-ptsss_db}
+      POSTGRES_USER: ${DB_USER:-ptsss_user}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+      TZ: Asia/Jakarta
+    # NOTE: We deliberately do NOT mount database/ptsss_db.sql to
+    # /docker-entrypoint-initdb.d/ here. That mechanism only fires the
+    # first time a fresh data volume is created, which fails silently
+    # in Coolify when the volume already exists. Instead, the backend
+    # service runs src/utils/bootstrap.js on every startup which is
+    # idempotent and self-healing. (See backend/src/utils/bootstrap.js.)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    expose:
+      - "5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-ptsss_user} -d ${DB_NAME:-ptsss_db}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ============================================================
+  # Express.js Backend  →  api.sopiaksatriasaga.com
+  # ============================================================
+  backend:
+    build:
+      # Context is the repo root (not ./backend) so we can also COPY database/
+      # into the image — bootstrap needs it on first boot.
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+
+      # --- DB connection (postgres = compose service hostname) ---
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${DB_NAME:-ptsss_db}
+      DB_USER: ${DB_USER:-ptsss_user}
+      DB_PASSWORD: ${DB_PASSWORD:?DB_PASSWORD is required}
+      DB_SSL: "false"
+      DB_POOL_MAX: "10"
+
+      # --- Auth ---
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-30m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      BCRYPT_ROUNDS: ${BCRYPT_ROUNDS:-12}
+
+      # --- Bootstrap behavior ---
+      # "true"        → load schema if missing AND seed default users (DEV / first deploy)
+      # "schema-only" → load schema if missing, DON'T seed users
+      # "false"       → do nothing (trust me, the DB is already managed)
+      AUTO_BOOTSTRAP: ${AUTO_BOOTSTRAP:-true}
+
+      # --- Uploads ---
+      UPLOAD_DIR: ./uploads
+      MAX_FILE_SIZE: ${MAX_FILE_SIZE:-10485760}
+
+      # --- CORS / cookies ---
+      # COOKIE_DOMAIN: parent domain with leading dot — covers hq.* AND api.*.
+      # Without it, login loops /login → / → /login forever.
+      # COOKIE_SAMESITE=none REQUIRED for cross-site fetch().
+      CORS_ORIGIN: ${CORS_ORIGIN}
+      API_URL:     ${API_URL}
+      COOKIE_DOMAIN:    ${COOKIE_DOMAIN:-}
+      COOKIE_SECURE:    ${COOKIE_SECURE:-true}
+      COOKIE_SAMESITE:  ${COOKIE_SAMESITE:-none}
+
+      # --- Firebase Cloud Messaging (optional) ---
+      FIREBASE_PROJECT_ID:   ${FIREBASE_PROJECT_ID:-}
+      FIREBASE_PRIVATE_KEY:  ${FIREBASE_PRIVATE_KEY:-}
+      FIREBASE_CLIENT_EMAIL: ${FIREBASE_CLIENT_EMAIL:-}
+
+      # --- Rate limit bypass (testing) ---
+      RATE_LIMIT_BYPASS_SECRET: ${RATE_LIMIT_BYPASS_SECRET:-}
+
+      # --- Magic env Coolify substitutes with the chosen domain ---
+      SERVICE_FQDN_BACKEND_3000: ${SERVICE_FQDN_BACKEND_3000:-}
+
+      TZ: Asia/Jakarta
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_logs:/app/logs
+      - backend_backups:/app/backups
+      - backend_downloads:/app/downloads
+    expose:
+      - "3000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ============================================================
+  # Web Admin (Next.js)  →  hq.sopiaksatriasaga.com
+  # ============================================================
+  web-admin:
+    build:
+      context: ./web-admin-next
+      dockerfile: Dockerfile
+      args:
+        # NEXT_PUBLIC_* are baked into the JS bundle at build time.
+        # For Coolify deployments these are set in
+        # "Build-time Environment Variables" (or in the Production env
+        # block — Coolify forwards them to build args automatically).
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
+    restart: unless-stopped
+    environment:
+      SERVICE_FQDN_WEBADMIN_3001: ${SERVICE_FQDN_WEBADMIN_3001:-}
+      TZ: Asia/Jakarta
+    expose:
+      - "3001"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # Public Website (Next.js)  →  sopiaksatriasaga.com
+  # ============================================================
+  website:
+    build:
+      context: ./website
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      SERVICE_FQDN_WEBSITE_3002: ${SERVICE_FQDN_WEBSITE_3002:-}
+      TZ: Asia/Jakarta
+    expose:
+      - "3002"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3002/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # ============================================================
+  # pgAdmin  →  pgadmin.sopiaksatriasaga.com
+  # ============================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:?PGADMIN_EMAIL required}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:?PGADMIN_PASSWORD required}
+      # Run pgAdmin in single-user-friendly mode behind the reverse proxy
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+      PGADMIN_LISTEN_PORT: 80
+      SERVICE_FQDN_PGADMIN_80: ${SERVICE_FQDN_PGADMIN_80:-}
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    expose:
+      - "80"
+
+volumes:
+  postgres_data:
+  backend_uploads:
+  backend_logs:
+  backend_backups:
+  backend_downloads:
+  pgadmin_data:

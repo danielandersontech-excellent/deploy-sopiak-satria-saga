@@ -1,0 +1,12 @@
+node_modules
+npm-debug.log
+.env
+.env.local
+.env.development
+uploads/*
+logs/*
+__tests__
+*.test.js
+.git
+.gitignore
+tunnel.js

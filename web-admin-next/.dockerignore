@@ -1,0 +1,11 @@
+.git
+node_modules
+.next
+.env
+.env.local
+README.md
+tsconfig.tsbuildinfo
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map

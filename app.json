@@ -1,0 +1,62 @@
+{
+  "expo": {
+    "name": "PT Sopiak Satria Saga",
+    "slug": "sopiak-satria-saga",
+    "version": "2.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/logo-ptsss.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/logo-ptsss.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0F172A"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ptsss.mobile"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo-ptsss.png",
+        "backgroundColor": "#0F172A"
+      },
+      "package": "com.ptsss.mobile",
+      "permissions": [
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "VIBRATE"
+      ]
+    },
+    "web": {
+      "favicon": "./assets/logo-ptsss.png"
+    },
+    "plugins": [
+      "expo-camera",
+      "expo-location",
+      [
+        "expo-image-picker",
+        { "photosPermission": "Izinkan PT Sopiak Satria Saga mengakses foto." }
+      ],
+      "expo-sqlite"
+    ],
+    "updates": {
+      "enabled": true,
+      "url": "https://u.expo.dev/768431b5-4e12-4efe-94a6-1a5195e0f23f",
+      "checkAutomatically": "ON_LOAD",
+      "fallbackToCacheTimeout": 30000
+    },
+    "runtimeVersion": {
+      "policy": "sdkVersion"
+    },
+    "extra": {
+      "apiUrl": "https://api.sopiaksatriasaga.com",
+      "eas": {
+        "projectId": "768431b5-4e12-4efe-94a6-1a5195e0f23f"
+      }
+    }
+  }
+}
