@@ -9,7 +9,7 @@
     "splash": {
       "image": "./assets/logo-ptsss.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0F172A"
+      "backgroundColor": "#1a5276"
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
@@ -19,7 +19,7 @@
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/logo-ptsss.png",
-        "backgroundColor": "#0F172A"
+        "backgroundColor": "#1a5276"
       },
       "package": "com.ptsss.mobile",
       "permissions": [
@@ -45,9 +45,8 @@
     ],
     "updates": {
       "enabled": true,
-      "url": "https://u.expo.dev/768431b5-4e12-4efe-94a6-1a5195e0f23f",
       "checkAutomatically": "ON_LOAD",
-      "fallbackToCacheTimeout": 30000
+      "url": "https://u.expo.dev/3e12dbd3-03f5-4d81-b4f3-be851a8d8956"
     },
     "runtimeVersion": {
       "policy": "sdkVersion"
@@ -55,7 +54,7 @@
     "extra": {
       "apiUrl": "https://api.sopiaksatriasaga.com",
       "eas": {
-        "projectId": "768431b5-4e12-4efe-94a6-1a5195e0f23f"
+        "projectId": "3e12dbd3-03f5-4d81-b4f3-be851a8d8956"
       }
     }
   }
