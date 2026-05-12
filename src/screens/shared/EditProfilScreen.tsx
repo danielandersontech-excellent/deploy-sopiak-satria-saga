@@ -1,20 +1,28 @@
 /**
- * ============================================================
- * EDIT PROFIL v3 - Camera + Gallery + Crop + Upload Progress
- * ============================================================
- * Fitur baru:
- *  ✅ Kamera depan/belakang dengan face guide
- *  ✅ Gallery picker dengan 1:1 crop aspect ratio
- *  ✅ Upload progress indicator
- *  ✅ Photo preview zoom sebelum confirm
- *  ✅ Retry upload jika gagal
- *  ✅ Dark mode + i18n support
- *  ✅ Persistent local URI fallback jika upload gagal
+ * EDIT PROFIL - v4 (Bug-Fix Pass on top of v3)
+ *
+ * FIXES (v4):
+ *  🚨 Backend field name fix: `noHp` → `no_hp`. Express backend uses snake_case
+ *     for the users table column. Sending camelCase `noHp` would be dropped by
+ *     the API. Now sends both formats for safety + canonical `no_hp`.
+ *  🚨 Empty `user?.id` check — if id is falsy, abort instead of POST to
+ *     `/api/users/` (which would 404 or worse). Also dropped client-side
+ *     `updated_at` (backend's job, prevents clock skew).
+ *  ✅ Unsaved-changes warning when navigating back (don't lose typed data).
+ *  ✅ Error & progress box colors now theme-aware (was hardcoded #fee2e2 etc.
+ *     looking bad in dark mode).
+ *  ✅ Phone digit-only filter — strip non-digits as user types.
+ *  ✅ `hasChanges` check disables Save button when no fields modified.
+ *  ✅ Resets `fotoChanged` state after successful save.
+ *  ✅ Trailing whitespace stripped from inputs before validation.
  */
-import React, { useState, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  Image, ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
+import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Badge, Button, CameraModal } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
@@ -31,25 +39,58 @@ export default function EditProfilScreen({ navigation }: any) {
   const updateUser = useAuthStore((s) => s.updateUser);
   const updateTeamMember = useDataStore((s) => s.updateTeamMember);
 
-  const [nama, setNama] = useState(user?.nama || '');
-  const [noHp, setNoHp] = useState(user?.no_hp || '');
+  const initialNama = user?.nama || '';
+  const initialNoHp = user?.no_hp || (user as any)?.noHp || '';
+  const initialFoto = user?.foto_url || (user as any)?.foto || null;
+
+  const [nama, setNama] = useState(initialNama);
+  const [noHp, setNoHp] = useState(initialNoHp);
   const [saving, setSaving] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
-  const [fotoUri, setFotoUri] = useState<string | null>(user?.foto_url || null);
+  const [fotoUri, setFotoUri] = useState<string | null>(initialFoto);
   const [fotoChanged, setFotoChanged] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState('');
 
   const defaultAvatar = 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face';
 
-  // --- Camera capture ---
+  // Detect unsaved changes
+  const hasChanges = useMemo(
+    () => nama.trim() !== initialNama.trim() || noHp.trim() !== initialNoHp.trim() || fotoChanged,
+    [nama, noHp, initialNama, initialNoHp, fotoChanged]
+  );
+
+  // Warn about unsaved changes when leaving
+  useEffect(() => {
+    const sub = navigation.addListener('beforeRemove', (e: any) => {
+      if (!hasChanges || saving) return; // OK to leave
+      e.preventDefault();
+      Alert.alert(
+        lang === 'en' ? 'Discard changes?' : 'Buang Perubahan?',
+        lang === 'en'
+          ? 'You have unsaved changes. Are you sure you want to leave?'
+          : 'Ada perubahan yang belum disimpan. Yakin ingin keluar?',
+        [
+          { text: lang === 'en' ? 'Cancel' : 'Batal', style: 'cancel' },
+          {
+            text: lang === 'en' ? 'Leave' : 'Keluar',
+            style: 'destructive',
+            onPress: () => navigation.dispatch(e.data.action),
+          },
+        ]
+      );
+    });
+    return sub;
+  }, [navigation, hasChanges, saving, lang]);
+
+  // Camera capture
   const handleCameraCapture = useCallback((uri: string) => {
     setFotoUri(uri);
     setFotoChanged(true);
     setShowCamera(false);
   }, []);
 
-  // --- Gallery pick with 1:1 crop ---
+  // Gallery pick with 1:1 crop
   const handlePickFromGallery = useCallback(async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
@@ -60,24 +101,26 @@ export default function EditProfilScreen({ navigation }: any) {
         );
         return;
       }
-
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        allowsEditing: true,     // Enable built-in crop
-        aspect: [1, 1],          // Square crop for profile photo
+        allowsEditing: true,
+        aspect: [1, 1],
         quality: 0.8,
       });
-
       if (!result.canceled && result.assets[0]?.uri) {
         setFotoUri(result.assets[0].uri);
         setFotoChanged(true);
       }
-    } catch (err) {
-      console.error('Gallery picker error:', err);
+    } catch (err: any) {
+      console.log('Gallery picker error:', err?.message);
+      Alert.alert(
+        'Error',
+        lang === 'en' ? 'Failed to open gallery' : 'Gagal membuka galeri'
+      );
     }
   }, [lang]);
 
-  // --- Photo source selection ---
+  // Photo source selection
   const handleChangePhoto = useCallback(() => {
     Alert.alert(
       lang === 'en' ? 'Profile Photo' : 'Foto Profil',
@@ -85,39 +128,66 @@ export default function EditProfilScreen({ navigation }: any) {
       [
         { text: lang === 'en' ? 'Camera' : 'Kamera', onPress: () => setShowCamera(true) },
         { text: lang === 'en' ? 'Gallery' : 'Galeri', onPress: handlePickFromGallery },
-        ...(fotoUri && fotoUri !== defaultAvatar ? [{ text: lang === 'en' ? 'Remove Photo' : 'Hapus Foto', style: 'destructive' as const, onPress: () => { setFotoUri(null); setFotoChanged(true); } }] : []),
+        ...(fotoUri && fotoUri !== defaultAvatar
+          ? [
+              {
+                text: lang === 'en' ? 'Remove Photo' : 'Hapus Foto',
+                style: 'destructive' as const,
+                onPress: () => {
+                  setFotoUri(null);
+                  setFotoChanged(true);
+                },
+              },
+            ]
+          : []),
         { text: lang === 'en' ? 'Cancel' : 'Batal', style: 'cancel' as const },
       ]
     );
   }, [lang, fotoUri, handlePickFromGallery]);
 
-  // --- Save with upload ---
+  // Phone digits-only sanitizer
+  const handleNoHpChange = (text: string) => {
+    setNoHp(text.replace(/[^0-9+]/g, ''));
+    if (errorMsg) setErrorMsg('');
+  };
+
+  // Save with upload
   const handleSave = async () => {
-    if (!nama.trim()) {
+    setErrorMsg('');
+    if (!user?.id) {
+      return Alert.alert(
+        'Error',
+        lang === 'en' ? 'User not loaded. Please re-login.' : 'User belum dimuat. Silakan login ulang.'
+      );
+    }
+    const trimNama = nama.trim();
+    const trimNoHp = noHp.trim();
+    if (!trimNama) {
       return Alert.alert('Error', lang === 'en' ? 'Name cannot be empty' : 'Nama tidak boleh kosong');
     }
-    if (!noHp.trim() || noHp.length < 10) {
-      return Alert.alert('Error', lang === 'en' ? 'Phone number min 10 digits' : 'No HP minimal 10 digit');
+    if (!trimNoHp || trimNoHp.length < 10) {
+      return Alert.alert(
+        'Error',
+        lang === 'en' ? 'Phone number minimum 10 digits' : 'No HP minimal 10 digit'
+      );
     }
 
     setSaving(true);
-    setErrorMsg('');
     setUploadProgress(null);
 
     try {
+      // Backend expects snake_case (no_hp) — send canonical + camelCase alias.
       const updateData: Record<string, any> = {
-        nama: nama.trim(),
-        noHp: noHp.trim(),
-        updated_at: new Date().toISOString(),
+        nama: trimNama,
+        no_hp: trimNoHp,
+        noHp: trimNoHp,
       };
 
       // Upload photo if changed
       if (fotoChanged && fotoUri && fotoUri.startsWith('file://')) {
         setUploadProgress(lang === 'en' ? 'Compressing photo...' : 'Mengkompres foto...');
-
         let uploadAttempts = 0;
         let uploadedUrl: string | null = null;
-
         while (uploadAttempts < 3 && !uploadedUrl) {
           uploadAttempts++;
           setUploadProgress(
@@ -126,15 +196,11 @@ export default function EditProfilScreen({ navigation }: any) {
               : (lang === 'en' ? 'Uploading photo...' : 'Mengupload foto...')
           );
           try {
-            const result = await uploadProfilePhoto(fotoUri, user?.id || 'unknown');
-            if (result && result.startsWith('http')) {
-              uploadedUrl = result;
-            }
+            const result = await uploadProfilePhoto(fotoUri, user.id);
+            if (result && result.startsWith('http')) uploadedUrl = result;
           } catch (uploadErr: any) {
-            console.log(`Photo upload attempt ${uploadAttempts} failed:`, uploadErr.message);
-            if (uploadAttempts < 3) {
-              await new Promise(r => setTimeout(r, 1000 * uploadAttempts));
-            }
+            console.log(`Photo upload attempt ${uploadAttempts} failed:`, uploadErr?.message);
+            if (uploadAttempts < 3) await new Promise((r) => setTimeout(r, 1000 * uploadAttempts));
           }
         }
 
@@ -142,8 +208,8 @@ export default function EditProfilScreen({ navigation }: any) {
           updateData.foto_url = uploadedUrl;
           setUploadProgress(lang === 'en' ? 'Photo uploaded!' : 'Foto berhasil diupload!');
         } else {
-          // Keep local URI as fallback
           setUploadProgress(lang === 'en' ? 'Upload failed, saving locally...' : 'Upload gagal, disimpan lokal...');
+          // Don't include foto_url in payload — keep server's current
         }
       } else if (fotoChanged && !fotoUri) {
         // Photo removed
@@ -151,45 +217,48 @@ export default function EditProfilScreen({ navigation }: any) {
       }
 
       setUploadProgress(lang === 'en' ? 'Saving to server...' : 'Menyimpan ke server...');
-      await usersApi.update(user?.id || '', updateData);
+      await usersApi.update(user.id, updateData);
 
-      // Update local state
-      if (user) {
-        updateUser({
-          nama: nama.trim(),
-          noHp: noHp.trim(),
-          foto_url: updateData.foto_url !== undefined ? updateData.foto_url : user.foto_url,
-        });
-        updateTeamMember?.(user.id, {
-          nama: nama.trim(),
-          noHp: noHp.trim(),
-        });
-      }
+      // Update local stores
+      updateUser({
+        nama: trimNama,
+        no_hp: trimNoHp,
+        noHp: trimNoHp,
+        foto_url: updateData.foto_url !== undefined ? updateData.foto_url : user.foto_url,
+      });
+      updateTeamMember?.(user.id, {
+        nama: trimNama,
+        noHp: trimNoHp,
+        ...(updateData.foto_url !== undefined ? { foto: updateData.foto_url || '' } : {}),
+      } as any);
 
       setSaving(false);
       setUploadProgress(null);
+      setFotoChanged(false); // important: prevent unsaved-changes warning
       Alert.alert(
-        '✅',
-        lang === 'en' ? 'Profile saved successfully' : 'Profil berhasil diperbarui',
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        t('profile.saved'),
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
     } catch (err: any) {
       setSaving(false);
       setUploadProgress(null);
-      setErrorMsg(`Error: ${err.message || 'Unknown'}`);
+      const raw = String(err?.message || '');
+      let msg = raw;
+      if (/network|fetch|timeout/i.test(raw)) {
+        msg = lang === 'en' ? 'Network error. Check your connection.' : 'Gagal konek server. Cek koneksi.';
+      }
+      setErrorMsg(msg || (lang === 'en' ? 'Failed to save profile' : 'Gagal menyimpan profil'));
     }
   };
 
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
-      {/* Header */}
       <View style={[s.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
-        <Text style={[s.headerTitle, { color: theme.text }]}>
-          {lang === 'en' ? 'Edit Profile' : 'Edit Profil'}
-        </Text>
+        <Text style={[s.headerTitle, { color: theme.text }]}>{t('profile.edit')}</Text>
         <View style={{ width: 40 }} />
       </View>
 
@@ -220,59 +289,77 @@ export default function EditProfilScreen({ navigation }: any) {
           )}
         </View>
 
-        {/* Form */}
         <Text style={[s.label, { color: theme.textSecondary }]}>
-          {lang === 'en' ? 'Full Name' : 'Nama Lengkap'} *
+          {t('profile.name')} *
         </Text>
         <TextInput
           style={[s.input, { backgroundColor: theme.bgInput, color: theme.text, borderColor: theme.border }]}
           value={nama}
-          onChangeText={setNama}
-          placeholder={lang === 'en' ? 'Full Name' : 'Nama Lengkap'}
+          onChangeText={(txt) => { if (errorMsg) setErrorMsg(''); setNama(txt); }}
+          placeholder={t('profile.name')}
           placeholderTextColor={theme.textMuted}
+          editable={!saving}
+          maxLength={64}
         />
 
-        <Text style={[s.label, { color: theme.textSecondary }]}>NRP</Text>
+        <Text style={[s.label, { color: theme.textSecondary }]}>{t('profile.nrp')}</Text>
         <View style={[s.readOnly, { backgroundColor: isDark ? theme.bgInput : '#f8fafc', borderColor: theme.border }]}>
           <Text style={[s.roText, { color: theme.textMuted }]}>{user?.nrp || '-'}</Text>
           <Badge text="Read-only" variant="default" />
         </View>
 
-        <Text style={[s.label, { color: theme.textSecondary }]}>No. HP *</Text>
+        <Text style={[s.label, { color: theme.textSecondary }]}>{t('profile.phone')} *</Text>
         <TextInput
           style={[s.input, { backgroundColor: theme.bgInput, color: theme.text, borderColor: theme.border }]}
           value={noHp}
-          onChangeText={setNoHp}
+          onChangeText={handleNoHpChange}
           placeholder="08xxxxxxxxxx"
           placeholderTextColor={theme.textMuted}
           keyboardType="phone-pad"
           maxLength={15}
+          editable={!saving}
         />
 
-        <Text style={[s.label, { color: theme.textSecondary }]}>Role</Text>
+        <Text style={[s.label, { color: theme.textSecondary }]}>{t('profile.role')}</Text>
         <View style={[s.readOnly, { backgroundColor: isDark ? theme.bgInput : '#f8fafc', borderColor: theme.border }]}>
           <Text style={[s.roText, { color: theme.textMuted }]}>
             {user?.role ? user.role.charAt(0).toUpperCase() + user.role.slice(1) : '-'}
           </Text>
         </View>
 
-        {/* Upload progress */}
+        {/* Upload progress — theme-aware */}
         {uploadProgress && (
-          <View style={[s.progressBox, { backgroundColor: isDark ? '#0c2d48' : '#e8f4fd', borderColor: isDark ? '#1a5276' : '#b3d7f2' }]}>
+          <View
+            style={[
+              s.progressBox,
+              {
+                backgroundColor: isDark ? `${Colors.primary}15` : Colors.primaryBg,
+                borderColor: isDark ? `${Colors.primary}50` : Colors.primarySoft,
+              },
+            ]}
+          >
             <ActivityIndicator size="small" color={Colors.primary} />
-            <Text style={[s.progressText, { color: isDark ? '#7ec8e3' : Colors.primary }]}>{uploadProgress}</Text>
+            <Text style={[s.progressText, { color: theme.primary }]}>{uploadProgress}</Text>
           </View>
         )}
 
-        {/* Error */}
+        {/* Error — theme-aware */}
         {errorMsg !== '' && (
-          <View style={s.errorBox}>
+          <View
+            style={[
+              s.errorBox,
+              {
+                backgroundColor: isDark ? `${Colors.danger}15` : Colors.dangerBg,
+                borderColor: isDark ? `${Colors.danger}50` : Colors.dangerSoft,
+              },
+            ]}
+          >
             <Ionicons name="alert-circle" size={16} color={Colors.danger} />
-            <Text style={s.errorText}>{errorMsg}</Text>
+            <Text style={[s.errorText, { color: Colors.danger }]}>{errorMsg}</Text>
           </View>
         )}
 
-        {/* Save info */}
+        {/* Save hint */}
         <View style={s.saveInfo}>
           <Ionicons name="cloud-upload-outline" size={14} color={theme.textMuted} />
           <Text style={[s.saveInfoText, { color: theme.textMuted }]}>
@@ -281,19 +368,23 @@ export default function EditProfilScreen({ navigation }: any) {
         </View>
 
         <Button
-          title={saving ? (lang === 'en' ? 'Saving...' : 'Menyimpan...') : (lang === 'en' ? 'SAVE CHANGES' : 'SIMPAN PERUBAHAN')}
+          title={
+            saving
+              ? (lang === 'en' ? 'Saving...' : 'Menyimpan...')
+              : t('profile.save').toUpperCase()
+          }
           variant="primary"
           size="large"
           fullWidth
           icon="save-outline"
           onPress={handleSave}
-          disabled={saving}
+          disabled={saving || !hasChanges}
+          loading={saving}
           style={{ marginTop: 16 }}
         />
         <View style={{ height: 40 }} />
       </ScrollView>
 
-      {/* Camera Modal */}
       <CameraModal
         visible={showCamera}
         onClose={() => setShowCamera(false)}
@@ -311,8 +402,12 @@ export default function EditProfilScreen({ navigation }: any) {
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12,
-    paddingHorizontal: Spacing.base, borderBottomWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: Spacing.base,
+    borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, flex: 1, textAlign: 'center' },
@@ -346,9 +441,9 @@ const s = StyleSheet.create({
   errorBox: {
     flexDirection: 'row', alignItems: 'center', gap: 6,
     marginTop: 12, padding: 10,
-    backgroundColor: '#fee2e2', borderRadius: Radius.sm, borderWidth: 1, borderColor: '#fca5a5',
+    borderRadius: Radius.sm, borderWidth: 1,
   },
-  errorText: { ...Typography.small, color: Colors.danger, flex: 1 },
+  errorText: { ...Typography.small, flex: 1 },
   saveInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   saveInfoText: { ...Typography.caption },
 });
