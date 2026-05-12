@@ -1,21 +1,29 @@
 /**
- * DASHBOARD KOMANDAN - v9 DB Aligned
+ * DASHBOARD KOMANDAN - v10 (Bug-Fix Pass)
  *
  * DATABASE ALIGNMENT:
- *   users: id, nama, nrp, role, no_hp, pos_jaga, shift, lokasi_id, foto
+ *   users: id, nama, nrp, role, no_hp, pos_jaga, shift, lokasi_id, foto, pos_nama, lokasi_nama
  *   absensi: user_id, tipe, pos_jaga, status, dalam_radius, lokasi_id, created_at
  *   laporan_harian: user_id, kondisi, status, pos_jaga, lokasi_id
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, status, lokasi_id
  *   notifikasi: dibaca, target_lokasi_id
  *
- * FIXES:
- * - getField() for dual snake_case/camelCase field access
- * - user.pos_jaga (not posJaga) - DB column
- * - Absensi filter by user_id (not userId), created_at date comparison
- * - Team/map: last_latitude/last_longitude + pos_jaga
- * - Notifikasi: dibaca (DB column)
- * - lokasi_id filtering for komandan scope
- * - Pending laporan uses DB field names
+ * FIXES (v10):
+ *  ✅ getField() now also checks `pos_nama` and `lokasi_nama` (server fields)
+ *  ✅ Bell badge clamped to '99+' when unreadCount > 99 (overflow safe)
+ *  ✅ pulseAnim dependency made explicit (stable ref, lint-safe)
+ *  ✅ Safer uid comparison (won't match anything if user.id is missing)
+ *  ✅ MapMarker type assertion uses `as const` instead of `as any`
+ *  ✅ Defensive fallbacks for all displayed values
+ *
+ * PRIOR FIXES:
+ *  - getField() for dual snake_case/camelCase field access
+ *  - user.pos_jaga (not posJaga) - DB column
+ *  - Absensi filter by user_id (not userId), created_at date comparison
+ *  - Team/map: last_latitude/last_longitude + pos_jaga
+ *  - Notifikasi: dibaca (DB column)
+ *  - lokasi_id filtering for komandan scope
+ *  - Pending laporan uses DB field names
  */
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Animated } from 'react-native';
@@ -27,7 +35,7 @@ import { useDataStore } from '../../stores/dataStore';
 import { useClock } from '../../hooks/useClock';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
-import MapTracker from '../../components/map/MapTracker';
+import MapTracker, { MapMarker } from '../../components/map/MapTracker';
 
 /**
  * Safely get a field value, checking multiple key variants (snake_case first).
@@ -67,7 +75,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
   // Filter team to this company only
   const myTeam = useMemo(() => {
     if (!myLokasiId) return team;
-    return team.filter(m => {
+    return team.filter((m) => {
       const mLokId = String(getField(m, 'lokasi_id', 'lokasiId') || '');
       return mLokId === String(myLokasiId);
     });
@@ -76,18 +84,18 @@ export default function DashboardKomandanScreen({ navigation }: any) {
   // Filter laporan by lokasi_id
   const myLaporanH = useMemo(() => {
     if (!myLokasiId) return laporanHarian;
-    return laporanHarian.filter(l => String(getField(l, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
+    return laporanHarian.filter((l) => String(getField(l, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
   }, [laporanHarian, myLokasiId]);
 
   const myLaporanK = useMemo(() => {
     if (!myLokasiId) return laporanKejadian;
-    return laporanKejadian.filter(l => String(getField(l, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
+    return laporanKejadian.filter((l) => String(getField(l, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
   }, [laporanKejadian, myLokasiId]);
 
   // Filter absensi by lokasi_id
   const myAbsensi = useMemo(() => {
     if (!myLokasiId) return absensiRecords;
-    return absensiRecords.filter(a => String(getField(a, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
+    return absensiRecords.filter((a) => String(getField(a, 'lokasi_id', 'lokasiId') || '') === String(myLokasiId));
   }, [absensiRecords, myLokasiId]);
 
   // Notifikasi: use DB column 'dibaca'
@@ -98,12 +106,14 @@ export default function DashboardKomandanScreen({ navigation }: any) {
   const pendingK = useMemo(() => myLaporanK.filter((l) => getField(l, 'status') === 'pending'), [myLaporanK]);
   const totalPending = pendingH.length + pendingK.length;
 
-  // Team on duty
+  // Team active (on_duty/patroli/break - everything except off_duty)
   const onDuty = useMemo(() => myTeam.filter((m) => getField(m, 'status') !== 'off_duty').length, [myTeam]);
 
   // Today's absensi for komandan - DB: user_id, created_at
   const todayAbs = useMemo(() => {
-    const uid = getField(user, 'id', '_id') || '';
+    const uid = String(getField(user, 'id', '_id') || '');
+    // If no user id yet, return empty result to avoid matching records with empty user_id
+    if (!uid) return { masuk: undefined, keluar: undefined };
     const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
     const recs = myAbsensi.filter((r) => {
       const rUserId = String(getField(r, 'user_id', 'userId') || '');
@@ -122,42 +132,46 @@ export default function DashboardKomandanScreen({ navigation }: any) {
   const absenStep = todayAbs.keluar ? 2 : todayAbs.masuk ? 1 : 0;
 
   // Map markers - uses last_latitude/last_longitude (DB) with camelCase fallback
-  const mapMarkers = useMemo(() => {
-    return myTeam.filter(m => {
-      const lat = getField(m, 'last_latitude', 'lastLatitude');
-      const lng = getField(m, 'last_longitude', 'lastLongitude');
-      return lat && lng;
-    }).map(m => {
-      const lat = getField(m, 'last_latitude', 'lastLatitude');
-      const lng = getField(m, 'last_longitude', 'lastLongitude');
-      const mStatus = getField(m, 'status') || 'off_duty';
-      return {
-        id: getField(m, 'id', '_id'),
-        latitude: Number(lat),
-        longitude: Number(lng),
-        title: getField(m, 'nama', 'name') || 'Anggota',
-        description: `${getField(m, 'pos_jaga', 'posJaga', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
-        type: (mStatus === 'patroli' ? 'patrol' : 'person') as any,
-        color: (STATUS_MAP[mStatus] || STATUS_MAP.off_duty).color,
-        status: mStatus,
-      };
-    });
+  const mapMarkers: MapMarker[] = useMemo(() => {
+    return myTeam
+      .filter((m) => {
+        const lat = getField(m, 'last_latitude', 'lastLatitude');
+        const lng = getField(m, 'last_longitude', 'lastLongitude');
+        return lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng));
+      })
+      .map((m) => {
+        const lat = getField(m, 'last_latitude', 'lastLatitude');
+        const lng = getField(m, 'last_longitude', 'lastLongitude');
+        const mStatus = getField(m, 'status') || 'off_duty';
+        return {
+          id: String(getField(m, 'id', '_id') || ''),
+          latitude: Number(lat),
+          longitude: Number(lng),
+          title: getField(m, 'nama', 'name') || 'Anggota',
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
+          type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
+          color: (STATUS_MAP[mStatus] || STATUS_MAP.off_duty).color,
+          status: mStatus,
+        };
+      });
   }, [myTeam]);
 
   // Pulse animation for SOS FAB
   const pulseAnim = useRef(new Animated.Value(1)).current;
   useEffect(() => {
-    const loop = Animated.loop(Animated.sequence([
-      Animated.timing(pulseAnim, { toValue: 1.12, duration: 900, useNativeDriver: true }),
-      Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
-    ]));
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, { toValue: 1.12, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      ])
+    );
     loop.start();
     return () => loop.stop();
-  }, []);
+  }, [pulseAnim]);
 
-  // User info - DB columns
+  // User info - DB columns (with pos_nama / lokasi_nama fallbacks)
   const userName = getField(user, 'nama', 'name') || 'Komandan';
-  const userPosJaga = getField(user, 'pos_jaga', 'posJaga', 'pos') || '-';
+  const userPosJaga = getField(user, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-';
   const userShift = getField(user, 'shift') || '-';
   const userFoto = getField(user, 'foto', 'foto_url', 'avatar') || 'https://via.placeholder.com/50';
 
@@ -167,6 +181,9 @@ export default function DashboardKomandanScreen({ navigation }: any) {
     { icon: 'document-text', label: 'Pending', value: `${totalPending}`, color: Colors.warning },
     { icon: 'alert-circle', label: t('dash.incidents'), value: `${pendingK.length}`, color: Colors.danger },
   ];
+
+  // Clamp unread count for badge display
+  const unreadBadgeText = unreadCount > 99 ? '99+' : String(unreadCount);
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
@@ -180,7 +197,11 @@ export default function DashboardKomandanScreen({ navigation }: any) {
           </View>
           <TouchableOpacity style={st.bellBtn} onPress={() => navigation.navigate('Notifikasi')}>
             <Ionicons name="notifications-outline" size={22} color="#fff" />
-            {unreadCount > 0 && <View style={st.bellBadge}><Text style={st.bellBadgeText}>{unreadCount}</Text></View>}
+            {unreadCount > 0 && (
+              <View style={st.bellBadge}>
+                <Text style={st.bellBadgeText}>{unreadBadgeText}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
         <View style={st.headerClock}>
@@ -192,9 +213,12 @@ export default function DashboardKomandanScreen({ navigation }: any) {
 
       <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
         {panicActive && (
-          <TouchableOpacity style={st.panicBanner}>
+          <TouchableOpacity style={st.panicBanner} onPress={() => navigation.navigate('PanicButton')}>
             <Ionicons name="warning" size={22} color="#fff" />
-            <View style={{ flex: 1 }}><Text style={st.panicTitle}>PANIC ALERT</Text><Text style={st.panicSub}>{lang === 'en' ? 'Member needs emergency help!' : 'Anggota membutuhkan bantuan darurat!'}</Text></View>
+            <View style={{ flex: 1 }}>
+              <Text style={st.panicTitle}>PANIC ALERT</Text>
+              <Text style={st.panicSub}>{lang === 'en' ? 'Member needs emergency help!' : 'Anggota membutuhkan bantuan darurat!'}</Text>
+            </View>
             <Ionicons name="chevron-forward" size={20} color="#fff" />
           </TouchableOpacity>
         )}
@@ -221,11 +245,15 @@ export default function DashboardKomandanScreen({ navigation }: any) {
         </TouchableOpacity>
         {showMap && (
           <View style={{ marginBottom: 12 }}>
-            <MapTracker markers={mapMarkers} isDark={isDark} height={280}
+            <MapTracker
+              markers={mapMarkers}
+              isDark={isDark}
+              height={280}
               onMarkerPress={(marker) => {
-                const m = myTeam.find(x => getField(x, 'id', '_id') === marker.id);
+                const m = myTeam.find((x) => String(getField(x, 'id', '_id')) === String(marker.id));
                 if (m) navigation.navigate('DetailAnggota', { nrp: getField(m, 'nrp') });
-              }} />
+              }}
+            />
           </View>
         )}
 
@@ -259,7 +287,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
               const itemKondisi = getField(item, 'kondisi');
               const itemNama = getField(item, 'nama', 'user_nama', 'name') || 'Anggota';
               return (
-                <Card key={idx} style={st.pendingCard} variant="bordered" borderColor={itemJenis ? Colors.danger : Colors.warning}>
+                <Card key={`pending-${idx}-${getField(item, 'id') || idx}`} style={st.pendingCard} variant="bordered" borderColor={itemJenis ? Colors.danger : Colors.warning}>
                   <View style={st.pendingRow}>
                     <Ionicons name={itemJenis ? 'alert-circle' : 'document-text'} size={18} color={itemJenis ? Colors.danger : Colors.warning} />
                     <View style={{ flex: 1 }}>
@@ -289,18 +317,22 @@ export default function DashboardKomandanScreen({ navigation }: any) {
           const ms = STATUS_MAP[mStatus] || STATUS_MAP.off_duty;
           const mFoto = getField(m, 'foto', 'foto_url', 'avatar') || 'https://via.placeholder.com/40';
           const mNama = getField(m, 'nama', 'name') || 'Anggota';
-          const mPos = getField(m, 'pos_jaga', 'posJaga', 'pos') || '-';
+          const mPos = getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-';
           const mShift = getField(m, 'shift') || '-';
           const mNrp = getField(m, 'nrp') || '';
+          const mId = String(getField(m, 'id', '_id') || mNrp || Math.random());
           return (
-            <TouchableOpacity key={getField(m, 'id', '_id')} style={[st.memberCard, { backgroundColor: theme.bgCard }, isDark ? { borderWidth: 1, borderColor: theme.border } : Shadows.sm]} onPress={() => navigation.navigate('DetailAnggota', { nrp: mNrp })}>
+            <TouchableOpacity key={mId} style={[st.memberCard, { backgroundColor: theme.bgCard }, isDark ? { borderWidth: 1, borderColor: theme.border } : Shadows.sm]} onPress={() => navigation.navigate('DetailAnggota', { nrp: mNrp })}>
               <Image source={{ uri: mFoto }} style={st.memberAvatar} />
               <View style={[st.memberDot, { backgroundColor: ms.color }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[st.memberName, { color: theme.text }]}>{mNama}</Text>
                 <Text style={[st.memberPos, { color: theme.textMuted }]}>{mPos} • {mShift}</Text>
               </View>
-              <Badge text={ms.label} variant={mStatus === 'on_duty' ? 'success' : mStatus === 'patroli' ? 'info' : mStatus === 'break' ? 'warning' : 'default'} />
+              <Badge
+                text={ms.label}
+                variant={mStatus === 'on_duty' ? 'success' : mStatus === 'patroli' ? 'info' : mStatus === 'break' ? 'warning' : 'default'}
+              />
             </TouchableOpacity>
           );
         })}

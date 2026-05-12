@@ -1,5 +1,5 @@
 /**
- * DETAIL ANGGOTA SCREEN - v4 DB Aligned
+ * DETAIL ANGGOTA SCREEN - v5 (Bug-Fix Pass)
  *
  * DATABASE ALIGNMENT:
  *   users: id, nama, nrp, role, no_hp, pos_jaga, shift, lokasi_id, foto, skor
@@ -8,29 +8,48 @@
  *   laporan_harian: user_id, tanggal, shift, pos_jaga, kondisi, aktivitas, temuan, status, lokasi_id, created_at
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, kronologi, status, lokasi_id, created_at
  *
- * FIXES:
- * - getField() for dual snake_case/camelCase field access throughout
- * - member.pos_jaga (not pos), member.no_hp (not noHp), member.lokasi_id (not lokasi)
- * - Absensi fallback: user_id, pos_jaga, dalam_radius, created_at
- * - Patroli: route_name, checkpoint_scanned, checkpoint_total, start_time, end_time
- * - Lokasi tab: resolves lokasi_id → lokasi table, finds pos in posList
- * - Map markers: last_latitude/last_longitude
- * - Checkpoint filter by lokasi_id (not lokasi name)
+ * CRITICAL FIXES (v5):
+ *  🚨 All API fetches now use extractArray() to handle paginated response
+ *     { data: [...], pagination: {...} }. Previously Array.isArray(result)
+ *     was ALWAYS FALSE → activity tab was ALWAYS empty (fell back to
+ *     store filter which was also incomplete). Fixed for:
+ *     - absensiApi.list (line 134)
+ *     - patroliApi.list user-specific + global (line 157, 163)
+ *     - laporanApi.harianList (line 172)
+ *     - laporanApi.kejadianList (line 192)
+ *
+ *  ✅ fmtDate now detects Invalid Date and returns original string instead
+ *     of literal "Invalid Date" text in the UI.
+ *  ✅ useEffect deps include fetchActivityData (no stale closures)
+ *  ✅ Refresh control now also refreshes when on profile/location tabs
+ *  ✅ Safe key generation - no Math.random() in render (was causing
+ *     React key churn on re-render → unnecessary remounts)
+ *  ✅ Type-safe member null-check earlier (avoid undefined member access)
+ *  ✅ pos_jaga fallback chain includes pos_nama
+ *  ✅ Map marker type uses proper union type instead of `as any`
+ *
+ * PRIOR FIXES:
+ *  - getField() for dual snake_case/camelCase field access
+ *  - member.pos_jaga (not pos), member.no_hp (not noHp), member.lokasi_id
+ *  - Absensi fallback: user_id, pos_jaga, dalam_radius, created_at
+ *  - Patroli: route_name, checkpoint_scanned, checkpoint_total, start_time, end_time
+ *  - Lokasi tab: resolves lokasi_id → lokasi table, finds pos in posList
+ *  - Map markers: last_latitude/last_longitude
+ *  - Checkpoint filter by lokasi_id (not lokasi name)
  */
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
+import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
-import { useAuthStore } from '../../stores/authStore';
 import { absensiApi, patroliApi, laporanApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
-import MapTracker from '../../components/map/MapTracker';
+import MapTracker, { MapMarker } from '../../components/map/MapTracker';
 
 /**
  * Safely get a field value, checking multiple key variants (snake_case first).
@@ -41,6 +60,17 @@ function getField(obj: any, ...keys: string[]): any {
     if (obj[key] !== undefined && obj[key] !== null) return obj[key];
   }
   return undefined;
+}
+
+/**
+ * Extract array from API response (handles paginated { data: [...], pagination: {...} }).
+ */
+function extractArray(result: any): any[] {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.data)) return result.data;
+  if (result && Array.isArray(result.rows)) return result.rows;
+  if (result && Array.isArray(result.items)) return result.items;
+  return [];
 }
 
 const TABS_ID = ['Profil', 'Aktivitas', 'Lokasi'];
@@ -75,6 +105,9 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
   const [laporanKList, setLaporanKList] = useState<any[]>([]);
   const [activityLoading, setActivityLoading] = useState(false);
 
+  // Track if activity has been loaded at least once (avoid spinner on tab toggle)
+  const activityFetchedRef = useRef(false);
+
   const TABS = lang === 'en' ? TABS_EN : TABS_ID;
 
   const member = useMemo(() => team.find((m) => getField(m, 'nrp') === nrp), [team, nrp]);
@@ -82,13 +115,13 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
   const ms = STATUS_MAP[mStatus] || STATUS_MAP.off_duty;
 
   // Member fields via getField - DB columns
-  const memberId = getField(member, 'id', '_id') || '';
+  const memberId = String(getField(member, 'id', '_id') || '');
   const memberNama = getField(member, 'nama', 'name') || 'Anggota';
   const memberNrp = getField(member, 'nrp') || nrp || '-';
   const memberRole = getField(member, 'role') || 'anggota';
   const memberNoHp = getField(member, 'no_hp', 'noHp', 'nohp', 'phone') || '-';
   const memberFoto = getField(member, 'foto', 'foto_url', 'avatar') || 'https://via.placeholder.com/72';
-  const memberPosJaga = getField(member, 'pos_jaga', 'posJaga', 'pos') || '-';
+  const memberPosJaga = getField(member, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-';
   const memberShift = getField(member, 'shift') || '-';
   const memberLokasiId = getField(member, 'lokasi_id', 'lokasiId') || null;
   const memberSkor = Number(getField(member, 'skor', 'score') || 0);
@@ -104,14 +137,16 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
     return lokasiList.find((l) => String(getField(l, 'id', '_id')) === String(memberLokasiId));
   }, [memberLokasiId, lokasiList]);
 
-  const memberLokasiNama = getField(memberLokasi, 'nama', 'name')
-    || getField(member, 'lokasi', 'lokasi_nama')
-    || (lang === 'en' ? 'Not Assigned' : 'Belum Ditentukan');
+  const memberLokasiNama =
+    getField(memberLokasi, 'nama', 'name') ||
+    getField(member, 'lokasi', 'lokasi_nama') ||
+    (lang === 'en' ? 'Not Assigned' : 'Belum Ditentukan');
 
   // Find member's pos within lokasi.posList
   const memberPos = useMemo(() => {
     if (!memberLokasi || !member) return null;
     const posList = getField(memberLokasi, 'posList', 'pos_list') || [];
+    if (!Array.isArray(posList)) return null;
     return posList.find((p: any) => getField(p, 'nama', 'name') === memberPosJaga);
   }, [memberLokasi, member, memberPosJaga]);
 
@@ -125,116 +160,199 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
     });
   }, [storeCheckpoints, memberLokasiId, memberLokasiNama]);
 
-  // === Fetch activity data ===
+  // === Fetch activity data (CRITICAL FIX: now uses extractArray for paginated response) ===
   const fetchActivityData = useCallback(async () => {
-    if (!member) return;
+    if (!member || !memberId) return;
     setActivityLoading(true);
     try {
       // Fetch absensi for this user - DB: user_id
-      const abData = await absensiApi.list(`user_id=${memberId}`).catch(() => null);
-      if (Array.isArray(abData) && abData.length > 0) {
-        setAbsensiList(abData.sort((a: any, b: any) =>
-          new Date(getField(b, 'created_at') || 0).getTime() - new Date(getField(a, 'created_at') || 0).getTime()
-        ));
+      let absArr: any[] = [];
+      try {
+        const abData = await absensiApi.list(`user_id=${memberId}`);
+        absArr = extractArray(abData);
+      } catch (e) {
+        console.log('[Detail] absensi fetch error:', e);
+      }
+
+      if (absArr.length > 0) {
+        setAbsensiList(
+          absArr.sort((a: any, b: any) =>
+            new Date(getField(b, 'created_at', 'createdAt') || 0).getTime() -
+            new Date(getField(a, 'created_at', 'createdAt') || 0).getTime()
+          )
+        );
       } else {
-        // Fallback to store - handle both user_id and userId
+        // Fallback to store
         const filtered = storeAbsensi.filter((a) => {
           const aUserId = String(getField(a, 'user_id', 'userId') || '');
           return aUserId === memberId;
         });
-        setAbsensiList(filtered.map((a) => ({
-          id: getField(a, 'id'),
-          tipe: getField(a, 'tipe'),
-          status: getField(a, 'status'),
-          pos_jaga: getField(a, 'pos_jaga', 'posJaga'),
-          alamat: getField(a, 'alamat'),
-          dalam_radius: getField(a, 'dalam_radius', 'dalamRadius'),
-          created_at: getField(a, 'created_at', 'createdAt', 'waktu'),
-        })));
+        setAbsensiList(
+          filtered.map((a) => ({
+            id: getField(a, 'id'),
+            tipe: getField(a, 'tipe'),
+            status: getField(a, 'status'),
+            pos_jaga: getField(a, 'pos_jaga', 'posJaga'),
+            alamat: getField(a, 'alamat'),
+            dalam_radius: getField(a, 'dalam_radius', 'dalamRadius'),
+            created_at: getField(a, 'created_at', 'createdAt', 'waktu'),
+          }))
+        );
       }
 
       // Fetch patroli - DB: user_id
-      const ptData = await patroliApi.list(`user_id=${memberId}`).catch(() => null);
-      if (Array.isArray(ptData) && ptData.length > 0) {
-        setPatroliList(ptData.sort((a: any, b: any) =>
-          new Date(getField(b, 'created_at') || 0).getTime() - new Date(getField(a, 'created_at') || 0).getTime()
-        ));
+      let ptArr: any[] = [];
+      try {
+        const ptData = await patroliApi.list(`user_id=${memberId}`);
+        ptArr = extractArray(ptData);
+      } catch (e) {
+        console.log('[Detail] patroli fetch error:', e);
+      }
+
+      if (ptArr.length > 0) {
+        setPatroliList(
+          ptArr.sort((a: any, b: any) =>
+            new Date(getField(b, 'created_at', 'createdAt') || 0).getTime() -
+            new Date(getField(a, 'created_at', 'createdAt') || 0).getTime()
+          )
+        );
       } else {
-        const allPt = await patroliApi.list().catch(() => []);
-        if (Array.isArray(allPt)) {
-          setPatroliList(allPt.filter((p: any) => getField(p, 'user_id', 'userId') === memberId).sort((a: any, b: any) =>
-            new Date(getField(b, 'created_at') || 0).getTime() - new Date(getField(a, 'created_at') || 0).getTime()
-          ));
+        // Fall back to global patroli list filtered by user_id
+        try {
+          const allPtRaw = await patroliApi.list();
+          const allPt = extractArray(allPtRaw);
+          setPatroliList(
+            allPt
+              .filter((p: any) => String(getField(p, 'user_id', 'userId') || '') === memberId)
+              .sort((a: any, b: any) =>
+                new Date(getField(b, 'created_at', 'createdAt') || 0).getTime() -
+                new Date(getField(a, 'created_at', 'createdAt') || 0).getTime()
+              )
+          );
+        } catch (e) {
+          console.log('[Detail] patroli fallback error:', e);
+          setPatroliList([]);
         }
       }
 
       // Fetch laporan harian - DB: user_id
-      const lhData = await laporanApi.harianList(`user_id=${memberId}`).catch(() => null);
-      if (Array.isArray(lhData) && lhData.length > 0) {
-        setLaporanHList(lhData);
+      let lhArr: any[] = [];
+      try {
+        const lhData = await laporanApi.harianList(`user_id=${memberId}`);
+        lhArr = extractArray(lhData);
+      } catch (e) {
+        console.log('[Detail] LH fetch error:', e);
+      }
+
+      if (lhArr.length > 0) {
+        setLaporanHList(lhArr);
       } else {
-        setLaporanHList(storeLH.filter((l) => {
-          const lUserId = String(getField(l, 'user_id', 'userId') || '');
-          return lUserId === memberId;
-        }).map((l) => ({
-          id: getField(l, 'id'),
-          tanggal: getField(l, 'tanggal'),
-          shift: getField(l, 'shift'),
-          kondisi: getField(l, 'kondisi'),
-          aktivitas: getField(l, 'aktivitas') || '',
-          temuan: getField(l, 'temuan') || '',
-          status: getField(l, 'status'),
-          created_at: getField(l, 'created_at', 'createdAt') || '',
-        })));
+        setLaporanHList(
+          storeLH
+            .filter((l) => {
+              const lUserId = String(getField(l, 'user_id', 'userId') || '');
+              return lUserId === memberId;
+            })
+            .map((l) => ({
+              id: getField(l, 'id'),
+              tanggal: getField(l, 'tanggal'),
+              shift: getField(l, 'shift'),
+              kondisi: getField(l, 'kondisi'),
+              aktivitas: getField(l, 'aktivitas') || '',
+              temuan: getField(l, 'temuan') || '',
+              status: getField(l, 'status'),
+              created_at: getField(l, 'created_at', 'createdAt') || '',
+            }))
+        );
       }
 
       // Fetch laporan kejadian - DB: user_id
-      const lkData = await laporanApi.kejadianList(`user_id=${memberId}`).catch(() => null);
-      if (Array.isArray(lkData) && lkData.length > 0) {
-        setLaporanKList(lkData);
-      } else {
-        setLaporanKList(storeLK.filter((l) => {
-          const lUserId = String(getField(l, 'user_id', 'userId') || '');
-          return lUserId === memberId;
-        }).map((l) => ({
-          id: getField(l, 'id'),
-          jenis: getField(l, 'jenis'),
-          prioritas: getField(l, 'prioritas'),
-          status: getField(l, 'status'),
-          kronologi: getField(l, 'kronologi') || '',
-          lokasi_text: getField(l, 'lokasi_text', 'lokasi') || '',
-          waktu_kejadian: getField(l, 'waktu_kejadian', 'waktuKejadian') || '',
-          created_at: getField(l, 'created_at', 'createdAt') || '',
-        })));
+      let lkArr: any[] = [];
+      try {
+        const lkData = await laporanApi.kejadianList(`user_id=${memberId}`);
+        lkArr = extractArray(lkData);
+      } catch (e) {
+        console.log('[Detail] LK fetch error:', e);
       }
+
+      if (lkArr.length > 0) {
+        setLaporanKList(lkArr);
+      } else {
+        setLaporanKList(
+          storeLK
+            .filter((l) => {
+              const lUserId = String(getField(l, 'user_id', 'userId') || '');
+              return lUserId === memberId;
+            })
+            .map((l) => ({
+              id: getField(l, 'id'),
+              jenis: getField(l, 'jenis'),
+              prioritas: getField(l, 'prioritas'),
+              status: getField(l, 'status'),
+              kronologi: getField(l, 'kronologi') || '',
+              lokasi_text: getField(l, 'lokasi_text', 'lokasi') || '',
+              waktu_kejadian: getField(l, 'waktu_kejadian', 'waktuKejadian') || '',
+              created_at: getField(l, 'created_at', 'createdAt') || '',
+            }))
+        );
+      }
+
+      activityFetchedRef.current = true;
     } catch (err) {
-      console.log('Fetch activity error:', err);
-      setAbsensiList(storeAbsensi.filter((a) => String(getField(a, 'user_id', 'userId') || '') === memberId).map((a) => ({
-        id: getField(a, 'id'), tipe: getField(a, 'tipe'), status: getField(a, 'status'),
-        pos_jaga: getField(a, 'pos_jaga', 'posJaga'), alamat: getField(a, 'alamat'),
-        created_at: getField(a, 'created_at', 'createdAt', 'waktu'),
-      })));
+      console.log('[Detail] Activity fetch error:', err);
+      // Last-resort fallback for absensi from store
+      setAbsensiList(
+        storeAbsensi
+          .filter((a) => String(getField(a, 'user_id', 'userId') || '') === memberId)
+          .map((a) => ({
+            id: getField(a, 'id'),
+            tipe: getField(a, 'tipe'),
+            status: getField(a, 'status'),
+            pos_jaga: getField(a, 'pos_jaga', 'posJaga'),
+            alamat: getField(a, 'alamat'),
+            created_at: getField(a, 'created_at', 'createdAt', 'waktu'),
+          }))
+      );
+    } finally {
+      setActivityLoading(false);
     }
-    setActivityLoading(false);
   }, [member, memberId, storeAbsensi, storeLH, storeLK]);
 
   useEffect(() => {
     if (tab === 1) fetchActivityData();
-  }, [tab, member]);
+  }, [tab, fetchActivityData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchActivityData();
-    setRefreshing(false);
-  }, [fetchActivityData]);
+    try {
+      if (tab === 1) await fetchActivityData();
+      await useDataStore.getState().loadAllData?.();
+    } catch (e) {
+      console.log('[Detail] Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [tab, fetchActivityData]);
 
-  const fmtDate = (d: any) => {
+  // Safe date formatter - returns "-" for empty/invalid input
+  const fmtDate = useCallback((d: any) => {
     if (!d) return '-';
     try {
-      return new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    } catch { return String(d); }
-  };
+      const dt = new Date(d);
+      if (isNaN(dt.getTime())) return String(d);
+      return dt.toLocaleDateString('id-ID', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+    } catch {
+      return String(d);
+    }
+  }, []);
 
+  // --- EARLY RETURN: Member not found ---
   if (!member) {
     return (
       <View style={[styl.container, { backgroundColor: theme.bg }]}>
@@ -246,12 +364,32 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
         </View>
         <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 8 }}>
           <Ionicons name="person-outline" size={48} color={theme.textMuted} />
-          <Text style={{ color: theme.textMuted }}>NRP: {nrp}</Text>
-          <Button title={lang === 'en' ? 'Go Back' : 'Kembali'} variant="outline" size="medium" onPress={() => navigation.goBack()} />
+          <Text style={{ color: theme.textMuted }}>NRP: {nrp || '-'}</Text>
+          <Button
+            title={lang === 'en' ? 'Go Back' : 'Kembali'}
+            variant="outline"
+            size="medium"
+            onPress={() => navigation.goBack()}
+          />
         </View>
       </View>
     );
   }
+
+  // --- Pre-compute map marker for Lokasi tab ---
+  const mapMarker: MapMarker | null =
+    memberLastLat != null && memberLastLng != null && !isNaN(Number(memberLastLat)) && !isNaN(Number(memberLastLng))
+      ? {
+          id: memberId,
+          latitude: Number(memberLastLat),
+          longitude: Number(memberLastLng),
+          title: memberNama,
+          description: `${memberPosJaga} • ${memberShift}`,
+          type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
+          color: ms.color,
+          status: mStatus,
+        }
+      : null;
 
   return (
     <View style={[styl.container, { backgroundColor: theme.bg }]}>
@@ -297,7 +435,9 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
             </Text>
           </View>
           <View style={styl.qsItem}>
-            <Text style={[styl.qsVal, { color: isDark ? theme.text : '#fff' }]}>{memberLastSeen}</Text>
+            <Text style={[styl.qsVal, { color: isDark ? theme.text : '#fff' }]} numberOfLines={1}>
+              {memberLastSeen}
+            </Text>
             <Text style={[styl.qsLabel, { color: isDark ? theme.textMuted : 'rgba(255,255,255,0.5)' }]}>
               {lang === 'en' ? 'Last Seen' : 'Terakhir'}
             </Text>
@@ -309,8 +449,8 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
       <View style={[styl.tabRow, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         {TABS.map((name, i) => (
           <TouchableOpacity
-            key={i}
-            style={[styl.tab, tab === i && [styl.tabActive, { borderBottomColor: theme.primary }]]}
+            key={`tab-${i}`}
+            style={[styl.tab, tab === i && { borderBottomColor: theme.primary }]}
             onPress={() => setTab(i)}
           >
             <Text style={[styl.tabText, { color: tab === i ? theme.primary : theme.textMuted }]}>{name}</Text>
@@ -320,7 +460,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
 
       <ScrollView
         contentContainerStyle={styl.content}
-        refreshControl={tab === 1 ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={Colors.primary} /> : undefined}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {/* ===== TAB: PROFIL ===== */}
         {tab === 0 && (
@@ -333,14 +473,34 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
               <InfoRow icon="business" label={lang === 'en' ? 'Location' : 'Lokasi'} value={memberLokasiNama} theme={theme} />
               <InfoRow icon="location" label={lang === 'en' ? 'Guard Post' : 'Pos Jaga'} value={memberPosJaga} theme={theme} />
               <InfoRow icon="time" label="Shift" value={memberShift} theme={theme} />
-              <InfoRow icon="star" label={lang === 'en' ? 'Score' : 'Skor'} value={`${memberSkor}`} theme={theme} color={Colors.success} />
+              <InfoRow
+                icon="star"
+                label={lang === 'en' ? 'Score' : 'Skor'}
+                value={`${memberSkor}`}
+                theme={theme}
+                color={Colors.success}
+              />
             </Card>
 
             <View style={styl.actionsRow}>
-              <Button title="Edit" variant="outline" size="small" icon="create-outline"
-                onPress={() => navigation.navigate('TambahEditUser', { userId: memberId })} style={{ flex: 1 }} />
-              <Button title={lang === 'en' ? 'Message' : 'Pesan'} variant="outline" size="small" icon="chatbubble-outline"
-                onPress={() => Alert.alert('Info', lang === 'en' ? 'Messaging feature coming soon' : 'Fitur pesan segera hadir')} style={{ flex: 1 }} />
+              <Button
+                title="Edit"
+                variant="outline"
+                size="small"
+                icon="create-outline"
+                onPress={() => navigation.navigate('TambahEditUser', { userId: memberId })}
+                style={{ flex: 1 }}
+              />
+              <Button
+                title={lang === 'en' ? 'Message' : 'Pesan'}
+                variant="outline"
+                size="small"
+                icon="chatbubble-outline"
+                onPress={() =>
+                  Alert.alert('Info', lang === 'en' ? 'Messaging feature coming soon' : 'Fitur pesan segera hadir')
+                }
+                style={{ flex: 1 }}
+              />
             </View>
           </>
         )}
@@ -348,7 +508,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
         {/* ===== TAB: AKTIVITAS ===== */}
         {tab === 1 && (
           <>
-            {activityLoading ? (
+            {activityLoading && !activityFetchedRef.current ? (
               <View style={styl.loadingWrap}>
                 <ActivityIndicator size="large" color={Colors.primary} />
                 <Text style={[styl.loadingText, { color: theme.textMuted }]}>
@@ -361,15 +521,23 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 <View style={styl.actSummary}>
                   <View style={[styl.actSumCard, { backgroundColor: theme.bgCard, borderLeftColor: Colors.success }]}>
                     <Text style={[styl.actSumVal, { color: Colors.success }]}>{absensiList.length}</Text>
-                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Check-ins' : 'Absensi'}</Text>
+                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'Check-ins' : 'Absensi'}
+                    </Text>
                   </View>
                   <View style={[styl.actSumCard, { backgroundColor: theme.bgCard, borderLeftColor: Colors.primary }]}>
                     <Text style={[styl.actSumVal, { color: Colors.primary }]}>{patroliList.length}</Text>
-                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Patrols' : 'Patroli'}</Text>
+                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'Patrols' : 'Patroli'}
+                    </Text>
                   </View>
                   <View style={[styl.actSumCard, { backgroundColor: theme.bgCard, borderLeftColor: Colors.warning }]}>
-                    <Text style={[styl.actSumVal, { color: Colors.warning }]}>{laporanHList.length + laporanKList.length}</Text>
-                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Reports' : 'Laporan'}</Text>
+                    <Text style={[styl.actSumVal, { color: Colors.warning }]}>
+                      {laporanHList.length + laporanKList.length}
+                    </Text>
+                    <Text style={[styl.actSumLbl, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'Reports' : 'Laporan'}
+                    </Text>
                   </View>
                 </View>
 
@@ -379,30 +547,63 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 </Text>
                 {absensiList.length === 0 ? (
                   <Card style={{ backgroundColor: theme.bgCard }}>
-                    <Text style={[styl.emptyText, { color: theme.textMuted }]}>{lang === 'en' ? 'No attendance records yet' : 'Belum ada data absensi'}</Text>
+                    <Text style={[styl.emptyText, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'No attendance records yet' : 'Belum ada data absensi'}
+                    </Text>
                   </Card>
-                ) : absensiList.slice(0, 10).map((a: any) => {
-                  const aTipe = getField(a, 'tipe') || 'masuk';
-                  const aStatus = getField(a, 'status') || 'hadir';
-                  const aPos = getField(a, 'pos_jaga', 'posJaga') || getField(a, 'alamat') || '-';
-                  const aDate = getField(a, 'created_at', 'createdAt', 'waktu') || '';
-                  return (
-                    <Card key={getField(a, 'id') || Math.random()} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
-                      <View style={styl.actRow}>
-                        <View style={[styl.actIcon, { backgroundColor: aTipe === 'masuk' ? `${Colors.success}15` : `${Colors.danger}15` }]}>
-                          <Ionicons name={aTipe === 'masuk' ? 'log-in' : 'log-out'} size={18} color={aTipe === 'masuk' ? Colors.success : Colors.danger} />
+                ) : (
+                  absensiList.slice(0, 10).map((a: any, idx: number) => {
+                    const aTipe = getField(a, 'tipe') || 'masuk';
+                    const aStatus = getField(a, 'status') || 'hadir';
+                    const aPos = getField(a, 'pos_jaga', 'posJaga') || getField(a, 'alamat') || '-';
+                    const aDate = getField(a, 'created_at', 'createdAt', 'waktu') || '';
+                    const aId = getField(a, 'id') || `abs-${idx}`;
+                    return (
+                      <Card key={`abs-${aId}`} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
+                        <View style={styl.actRow}>
+                          <View
+                            style={[
+                              styl.actIcon,
+                              { backgroundColor: aTipe === 'masuk' ? `${Colors.success}15` : `${Colors.danger}15` },
+                            ]}
+                          >
+                            <Ionicons
+                              name={aTipe === 'masuk' ? 'log-in' : 'log-out'}
+                              size={18}
+                              color={aTipe === 'masuk' ? Colors.success : Colors.danger}
+                            />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styl.actTitle, { color: theme.text }]}>
+                              {aTipe === 'masuk'
+                                ? lang === 'en'
+                                  ? 'Check In'
+                                  : 'Masuk'
+                                : lang === 'en'
+                                ? 'Check Out'
+                                : 'Keluar'}
+                            </Text>
+                            <Text style={[styl.actSub, { color: theme.textMuted }]}>
+                              {aPos} • {fmtDate(aDate)}
+                            </Text>
+                          </View>
+                          <Badge
+                            text={
+                              aStatus === 'hadir'
+                                ? lang === 'en'
+                                  ? 'On Time'
+                                  : 'Tepat'
+                                : lang === 'en'
+                                ? 'Late'
+                                : 'Terlambat'
+                            }
+                            variant={aStatus === 'hadir' ? 'success' : 'warning'}
+                          />
                         </View>
-                        <View style={{ flex: 1 }}>
-                          <Text style={[styl.actTitle, { color: theme.text }]}>
-                            {aTipe === 'masuk' ? (lang === 'en' ? 'Check In' : 'Masuk') : (lang === 'en' ? 'Check Out' : 'Keluar')}
-                          </Text>
-                          <Text style={[styl.actSub, { color: theme.textMuted }]}>{aPos} • {fmtDate(aDate)}</Text>
-                        </View>
-                        <Badge text={aStatus === 'hadir' ? (lang === 'en' ? 'On Time' : 'Tepat') : (lang === 'en' ? 'Late' : 'Terlambat')} variant={aStatus === 'hadir' ? 'success' : 'warning'} />
-                      </View>
-                    </Card>
-                  );
-                })}
+                      </Card>
+                    );
+                  })
+                )}
 
                 {/* Patroli */}
                 <Text style={[styl.sectionTitle, { color: theme.text }]}>
@@ -410,24 +611,46 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 </Text>
                 {patroliList.length === 0 ? (
                   <Card style={{ backgroundColor: theme.bgCard }}>
-                    <Text style={[styl.emptyText, { color: theme.textMuted }]}>{lang === 'en' ? 'No patrol records yet' : 'Belum ada data patroli'}</Text>
+                    <Text style={[styl.emptyText, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'No patrol records yet' : 'Belum ada data patroli'}
+                    </Text>
                   </Card>
-                ) : patroliList.slice(0, 10).map((p: any) => (
-                  <Card key={getField(p, 'id') || Math.random()} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
-                    <View style={styl.actRow}>
-                      <View style={[styl.actIcon, { backgroundColor: `${Colors.primary}15` }]}>
-                        <Ionicons name="footsteps" size={18} color={Colors.primary} />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styl.actTitle, { color: theme.text }]}>{getField(p, 'route_name', 'routeName') || 'Patroli'}</Text>
-                        <Text style={[styl.actSub, { color: theme.textMuted }]}>
-                          {getField(p, 'checkpoint_scanned', 'checkpointScanned') || 0}/{getField(p, 'checkpoint_total', 'checkpointTotal') || 0} checkpoint • {fmtDate(getField(p, 'created_at', 'createdAt'))}
-                        </Text>
-                      </View>
-                      <Badge text={getField(p, 'status') === 'completed' ? (lang === 'en' ? 'Done' : 'Selesai') : (lang === 'en' ? 'In Progress' : 'Berjalan')} variant={getField(p, 'status') === 'completed' ? 'success' : 'info'} />
-                    </View>
-                  </Card>
-                ))}
+                ) : (
+                  patroliList.slice(0, 10).map((p: any, idx: number) => {
+                    const pId = getField(p, 'id') || `pt-${idx}`;
+                    return (
+                      <Card key={`pt-${pId}`} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
+                        <View style={styl.actRow}>
+                          <View style={[styl.actIcon, { backgroundColor: `${Colors.primary}15` }]}>
+                            <Ionicons name="footsteps" size={18} color={Colors.primary} />
+                          </View>
+                          <View style={{ flex: 1 }}>
+                            <Text style={[styl.actTitle, { color: theme.text }]}>
+                              {getField(p, 'route_name', 'routeName') || 'Patroli'}
+                            </Text>
+                            <Text style={[styl.actSub, { color: theme.textMuted }]}>
+                              {getField(p, 'checkpoint_scanned', 'checkpointScanned') || 0}/
+                              {getField(p, 'checkpoint_total', 'checkpointTotal') || 0} checkpoint •{' '}
+                              {fmtDate(getField(p, 'created_at', 'createdAt'))}
+                            </Text>
+                          </View>
+                          <Badge
+                            text={
+                              getField(p, 'status') === 'completed'
+                                ? lang === 'en'
+                                  ? 'Done'
+                                  : 'Selesai'
+                                : lang === 'en'
+                                ? 'In Progress'
+                                : 'Berjalan'
+                            }
+                            variant={getField(p, 'status') === 'completed' ? 'success' : 'info'}
+                          />
+                        </View>
+                      </Card>
+                    );
+                  })
+                )}
 
                 {/* Laporan */}
                 {(laporanHList.length > 0 || laporanKList.length > 0) && (
@@ -435,50 +658,84 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                     <Text style={[styl.sectionTitle, { color: theme.text }]}>
                       {lang === 'en' ? 'Reports' : 'Laporan'} ({laporanHList.length + laporanKList.length})
                     </Text>
-                    {laporanHList.map((l: any) => (
-                      <Card key={getField(l, 'id') || Math.random()} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
-                        <View style={styl.actRow}>
-                          <View style={[styl.actIcon, { backgroundColor: `${Colors.warning}15` }]}>
-                            <Ionicons name="document-text" size={18} color={Colors.warning} />
+                    {laporanHList.map((l: any, idx: number) => {
+                      const lId = getField(l, 'id') || `lh-${idx}`;
+                      const lKondisi = getField(l, 'kondisi');
+                      return (
+                        <Card key={`lh-${lId}`} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
+                          <View style={styl.actRow}>
+                            <View style={[styl.actIcon, { backgroundColor: `${Colors.warning}15` }]}>
+                              <Ionicons name="document-text" size={18} color={Colors.warning} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styl.actTitle, { color: theme.text }]}>
+                                {lang === 'en' ? 'Daily Report' : 'Laporan Harian'} -{' '}
+                                {lKondisi === 'aman'
+                                  ? lang === 'en'
+                                    ? 'Safe'
+                                    : 'Aman'
+                                  : lKondisi === 'ada_masalah'
+                                  ? lang === 'en'
+                                    ? 'Issue'
+                                    : 'Ada Masalah'
+                                  : lKondisi || '-'}
+                              </Text>
+                              <Text style={[styl.actSub, { color: theme.textMuted }]}>
+                                {getField(l, 'tanggal') || '-'} • {getField(l, 'shift') || '-'}
+                              </Text>
+                            </View>
+                            <Badge
+                              text={getField(l, 'status') === 'approved' ? '✓' : '⏳'}
+                              variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'}
+                            />
                           </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styl.actTitle, { color: theme.text }]}>
-                              {lang === 'en' ? 'Daily Report' : 'Laporan Harian'} - {getField(l, 'kondisi') === 'aman' ? (lang === 'en' ? 'Safe' : 'Aman') : getField(l, 'kondisi') === 'ada_masalah' ? (lang === 'en' ? 'Issue' : 'Ada Masalah') : getField(l, 'kondisi') || '-'}
-                            </Text>
-                            <Text style={[styl.actSub, { color: theme.textMuted }]}>{getField(l, 'tanggal') || '-'} • {getField(l, 'shift') || '-'}</Text>
+                        </Card>
+                      );
+                    })}
+                    {laporanKList.map((l: any, idx: number) => {
+                      const lId = getField(l, 'id') || `lk-${idx}`;
+                      return (
+                        <Card key={`lk-${lId}`} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
+                          <View style={styl.actRow}>
+                            <View style={[styl.actIcon, { backgroundColor: `${Colors.danger}15` }]}>
+                              <Ionicons name="alert-circle" size={18} color={Colors.danger} />
+                            </View>
+                            <View style={{ flex: 1 }}>
+                              <Text style={[styl.actTitle, { color: theme.text }]}>
+                                {getField(l, 'jenis') || '-'}
+                              </Text>
+                              <Text style={[styl.actSub, { color: theme.textMuted }]}>
+                                {lang === 'en' ? 'Priority' : 'Prioritas'}: {getField(l, 'prioritas') || '-'} •{' '}
+                                {fmtDate(getField(l, 'created_at', 'createdAt'))}
+                              </Text>
+                            </View>
+                            <Badge
+                              text={getField(l, 'status') === 'approved' ? '✓' : '⏳'}
+                              variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'}
+                            />
                           </View>
-                          <Badge text={getField(l, 'status') === 'approved' ? '✓' : '⏳'} variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'} />
-                        </View>
-                      </Card>
-                    ))}
-                    {laporanKList.map((l: any) => (
-                      <Card key={getField(l, 'id') || Math.random()} style={[styl.actCard, { backgroundColor: theme.bgCard }]}>
-                        <View style={styl.actRow}>
-                          <View style={[styl.actIcon, { backgroundColor: `${Colors.danger}15` }]}>
-                            <Ionicons name="alert-circle" size={18} color={Colors.danger} />
-                          </View>
-                          <View style={{ flex: 1 }}>
-                            <Text style={[styl.actTitle, { color: theme.text }]}>{getField(l, 'jenis') || '-'}</Text>
-                            <Text style={[styl.actSub, { color: theme.textMuted }]}>
-                              {lang === 'en' ? 'Priority' : 'Prioritas'}: {getField(l, 'prioritas') || '-'} • {fmtDate(getField(l, 'created_at', 'createdAt'))}
-                            </Text>
-                          </View>
-                          <Badge text={getField(l, 'status') === 'approved' ? '✓' : '⏳'} variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'} />
-                        </View>
-                      </Card>
-                    ))}
+                        </Card>
+                      );
+                    })}
                   </>
                 )}
 
-                {absensiList.length === 0 && patroliList.length === 0 && laporanHList.length === 0 && laporanKList.length === 0 && (
-                  <View style={styl.emptyWrap}>
-                    <Ionicons name="analytics-outline" size={48} color={theme.textMuted} />
-                    <Text style={[styl.emptyTitle, { color: theme.text }]}>{lang === 'en' ? 'No activity yet' : 'Belum ada aktivitas'}</Text>
-                    <Text style={[styl.emptyDesc, { color: theme.textMuted }]}>
-                      {lang === 'en' ? 'Attendance, patrols, and reports will appear here.' : 'Absensi, patroli, dan laporan akan muncul di sini.'}
-                    </Text>
-                  </View>
-                )}
+                {absensiList.length === 0 &&
+                  patroliList.length === 0 &&
+                  laporanHList.length === 0 &&
+                  laporanKList.length === 0 && (
+                    <View style={styl.emptyWrap}>
+                      <Ionicons name="analytics-outline" size={48} color={theme.textMuted} />
+                      <Text style={[styl.emptyTitle, { color: theme.text }]}>
+                        {lang === 'en' ? 'No activity yet' : 'Belum ada aktivitas'}
+                      </Text>
+                      <Text style={[styl.emptyDesc, { color: theme.textMuted }]}>
+                        {lang === 'en'
+                          ? 'Attendance, patrols, and reports will appear here.'
+                          : 'Absensi, patroli, dan laporan akan muncul di sini.'}
+                      </Text>
+                    </View>
+                  )}
               </>
             )}
           </>
@@ -494,29 +751,62 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styl.locName, { color: theme.text }]}>{memberLokasiNama}</Text>
-                  {memberLokasi && <Text style={[styl.locAddr, { color: theme.textMuted }]}>{getField(memberLokasi, 'alamat', 'address') || ''}</Text>}
+                  {memberLokasi && (
+                    <Text style={[styl.locAddr, { color: theme.textMuted }]}>
+                      {getField(memberLokasi, 'alamat', 'address') || ''}
+                    </Text>
+                  )}
                 </View>
-                {memberLokasi && <Badge text={getField(memberLokasi, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'} variant={getField(memberLokasi, 'status') === 'active' ? 'success' : 'default'} />}
+                {memberLokasi && (
+                  <Badge
+                    text={
+                      getField(memberLokasi, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'
+                    }
+                    variant={getField(memberLokasi, 'status') === 'active' ? 'success' : 'default'}
+                  />
+                )}
               </View>
             </Card>
 
-            <Text style={[styl.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Assigned Guard Post' : 'Pos Jaga Ditugaskan'}</Text>
+            <Text style={[styl.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Assigned Guard Post' : 'Pos Jaga Ditugaskan'}
+            </Text>
             <Card style={[styl.locCard, { backgroundColor: theme.bgCard }]}>
               {memberPos ? (
                 <View style={styl.posInfo}>
-                  <View style={[styl.posIcon, { backgroundColor: getField(memberPos, 'status') === 'active' ? `${Colors.success}15` : `${Colors.textMuted}15` }]}>
-                    <Ionicons name="location" size={20} color={getField(memberPos, 'status') === 'active' ? Colors.success : Colors.textMuted} />
+                  <View
+                    style={[
+                      styl.posIcon,
+                      {
+                        backgroundColor:
+                          getField(memberPos, 'status') === 'active' ? `${Colors.success}15` : `${Colors.textMuted}15`,
+                      },
+                    ]}
+                  >
+                    <Ionicons
+                      name="location"
+                      size={20}
+                      color={getField(memberPos, 'status') === 'active' ? Colors.success : Colors.textMuted}
+                    />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[styl.posName, { color: theme.text }]}>{getField(memberPos, 'nama', 'name') || '-'}</Text>
-                    <Text style={[styl.posMeta, { color: theme.textMuted }]}>Radius: {getField(memberPos, 'radius') || 100}m</Text>
-                    {getField(memberPos, 'latitude') ? (
+                    <Text style={[styl.posName, { color: theme.text }]}>
+                      {getField(memberPos, 'nama', 'name') || '-'}
+                    </Text>
+                    <Text style={[styl.posMeta, { color: theme.textMuted }]}>
+                      Radius: {getField(memberPos, 'radius') || 100}m
+                    </Text>
+                    {getField(memberPos, 'latitude') != null ? (
                       <Text style={[styl.posCoords, { color: theme.textMuted }]}>
-                        📍 {Number(getField(memberPos, 'latitude')).toFixed(4)}, {Number(getField(memberPos, 'longitude')).toFixed(4)}
+                        📍 {Number(getField(memberPos, 'latitude')).toFixed(4)},{' '}
+                        {Number(getField(memberPos, 'longitude')).toFixed(4)}
                       </Text>
                     ) : null}
                   </View>
-                  <Badge text={getField(memberPos, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'} variant={getField(memberPos, 'status') === 'active' ? 'success' : 'default'} />
+                  <Badge
+                    text={getField(memberPos, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'}
+                    variant={getField(memberPos, 'status') === 'active' ? 'success' : 'default'}
+                  />
                 </View>
               ) : (
                 <View style={styl.noPos}>
@@ -524,7 +814,9 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                   <Text style={[styl.noPosText, { color: theme.textMuted }]}>
                     {memberPosJaga !== '-'
                       ? `${memberPosJaga} (${lang === 'en' ? 'post data not found' : 'data pos tidak ditemukan'})`
-                      : (lang === 'en' ? 'No post assigned' : 'Belum ada pos ditugaskan')}
+                      : lang === 'en'
+                      ? 'No post assigned'
+                      : 'Belum ada pos ditugaskan'}
                   </Text>
                 </View>
               )}
@@ -532,38 +824,41 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
 
             <Text style={[styl.sectionTitle, { color: theme.text }]}>GPS Tracking</Text>
             <Card style={[styl.locCard, { backgroundColor: theme.bgCard }]}>
-              {memberLastLat && memberLastLng ? (
+              {mapMarker ? (
                 <>
                   <View style={styl.gpsRow}>
                     <View style={[styl.gpsIcon, { backgroundColor: `${Colors.success}15` }]}>
                       <Ionicons name="navigate" size={20} color={Colors.success} />
                     </View>
                     <View style={{ flex: 1 }}>
-                      <Text style={[styl.gpsTitle, { color: theme.text }]}>{lang === 'en' ? 'GPS Active' : 'GPS Aktif'}</Text>
-                      <Text style={[styl.gpsMeta, { color: theme.textMuted }]}>{Number(memberLastLat).toFixed(6)}, {Number(memberLastLng).toFixed(6)}</Text>
-                      <Text style={[styl.gpsMeta, { color: theme.textMuted }]}>{lang === 'en' ? 'Last update' : 'Terakhir diperbarui'}: {memberLastSeen}</Text>
+                      <Text style={[styl.gpsTitle, { color: theme.text }]}>
+                        {lang === 'en' ? 'GPS Active' : 'GPS Aktif'}
+                      </Text>
+                      <Text style={[styl.gpsMeta, { color: theme.textMuted }]}>
+                        {Number(memberLastLat).toFixed(6)}, {Number(memberLastLng).toFixed(6)}
+                      </Text>
+                      <Text style={[styl.gpsMeta, { color: theme.textMuted }]}>
+                        {lang === 'en' ? 'Last update' : 'Terakhir diperbarui'}: {memberLastSeen}
+                      </Text>
                     </View>
                     <Badge text={lang === 'en' ? 'Tracked' : 'Terlacak'} variant="success" />
                   </View>
                   <View style={{ marginTop: 12, borderRadius: Radius.md, overflow: 'hidden' }}>
                     <MapTracker
-                      markers={[{
-                        id: memberId,
-                        latitude: Number(memberLastLat),
-                        longitude: Number(memberLastLng),
-                        title: memberNama,
-                        description: `${memberPosJaga} • ${memberShift}`,
-                        type: mStatus === 'patroli' ? 'patrol' : 'person',
-                        color: ms.color,
-                        status: mStatus,
-                      }]}
-                      circles={getField(memberPos, 'latitude') ? [{
-                        latitude: getField(memberPos, 'latitude'),
-                        longitude: getField(memberPos, 'longitude'),
-                        radius: getField(memberPos, 'radius') || 100,
-                        color: Colors.purple,
-                        label: getField(memberPos, 'nama', 'name') || '',
-                      }] : []}
+                      markers={[mapMarker]}
+                      circles={
+                        getField(memberPos, 'latitude') != null
+                          ? [
+                              {
+                                latitude: Number(getField(memberPos, 'latitude')),
+                                longitude: Number(getField(memberPos, 'longitude')),
+                                radius: Number(getField(memberPos, 'radius')) || 100,
+                                color: Colors.purple,
+                                label: getField(memberPos, 'nama', 'name') || '',
+                              },
+                            ]
+                          : []
+                      }
                       isDark={isDark}
                       height={200}
                     />
@@ -572,9 +867,13 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
               ) : (
                 <View style={styl.noGps}>
                   <Ionicons name="navigate-outline" size={28} color={theme.textMuted} />
-                  <Text style={[styl.noGpsTitle, { color: theme.text }]}>{lang === 'en' ? 'GPS Not Available' : 'GPS Tidak Tersedia'}</Text>
+                  <Text style={[styl.noGpsTitle, { color: theme.text }]}>
+                    {lang === 'en' ? 'GPS Not Available' : 'GPS Tidak Tersedia'}
+                  </Text>
                   <Text style={[styl.noGpsDesc, { color: theme.textMuted }]}>
-                    {lang === 'en' ? 'Location data will appear when the member enables GPS on their device.' : 'Data lokasi akan muncul saat anggota mengaktifkan GPS di perangkat mereka.'}
+                    {lang === 'en'
+                      ? 'Location data will appear when the member enables GPS on their device.'
+                      : 'Data lokasi akan muncul saat anggota mengaktifkan GPS di perangkat mereka.'}
                   </Text>
                 </View>
               )}
@@ -585,24 +884,43 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 <Text style={[styl.sectionTitle, { color: theme.text }]}>
                   {lang === 'en' ? 'Nearby Checkpoints' : 'Checkpoint Terdekat'} ({memberCheckpoints.length})
                 </Text>
-                {memberCheckpoints.map((cp) => (
-                  <Card key={getField(cp, 'id')} style={[styl.cpCard, { backgroundColor: theme.bgCard }]}>
-                    <View style={styl.cpRow}>
-                      <View style={[styl.cpIcon, { backgroundColor: isDark ? `${Colors.purple}20` : Colors.purpleSoft }]}>
-                        <Ionicons name="qr-code" size={16} color={Colors.purple} />
+                {memberCheckpoints.map((cp, idx) => {
+                  const cpId = getField(cp, 'id') || `cp-${idx}`;
+                  return (
+                    <Card key={`cp-${cpId}`} style={[styl.cpCard, { backgroundColor: theme.bgCard }]}>
+                      <View style={styl.cpRow}>
+                        <View
+                          style={[
+                            styl.cpIcon,
+                            { backgroundColor: isDark ? `${Colors.purple}20` : Colors.purpleSoft },
+                          ]}
+                        >
+                          <Ionicons name="qr-code" size={16} color={Colors.purple} />
+                        </View>
+                        <View style={{ flex: 1 }}>
+                          <Text style={[styl.cpName, { color: theme.text }]}>
+                            {getField(cp, 'nama', 'name') || '-'}
+                          </Text>
+                          <Text style={[styl.cpMeta, { color: theme.textMuted }]}>
+                            {getField(cp, 'area') || '-'} • Radius {getField(cp, 'radius') || 100}m
+                          </Text>
+                        </View>
+                        <Badge
+                          text={
+                            getField(cp, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'
+                          }
+                          variant={getField(cp, 'status') === 'active' ? 'success' : 'default'}
+                        />
                       </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={[styl.cpName, { color: theme.text }]}>{getField(cp, 'nama', 'name') || '-'}</Text>
-                        <Text style={[styl.cpMeta, { color: theme.textMuted }]}>{getField(cp, 'area') || '-'} • Radius {getField(cp, 'radius') || 100}m</Text>
-                      </View>
-                      <Badge text={getField(cp, 'status') === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'} variant={getField(cp, 'status') === 'active' ? 'success' : 'default'} />
-                    </View>
-                  </Card>
-                ))}
+                    </Card>
+                  );
+                })}
               </>
             )}
 
-            <Text style={[styl.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Shift Schedule' : 'Jadwal Shift'}</Text>
+            <Text style={[styl.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Shift Schedule' : 'Jadwal Shift'}
+            </Text>
             <Card style={[styl.locCard, { backgroundColor: theme.bgCard }]}>
               <View style={styl.shiftInfo}>
                 <View style={[styl.shiftIcon, { backgroundColor: `${Colors.warning}15` }]}>
@@ -610,7 +928,9 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[styl.shiftLabel, { color: theme.text }]}>{memberShift}</Text>
-                  <Text style={[styl.shiftDesc, { color: theme.textMuted }]}>{lang === 'en' ? 'Current assigned shift' : 'Shift yang sedang ditugaskan'}</Text>
+                  <Text style={[styl.shiftDesc, { color: theme.textMuted }]}>
+                    {lang === 'en' ? 'Current assigned shift' : 'Shift yang sedang ditugaskan'}
+                  </Text>
                 </View>
               </View>
             </Card>
@@ -623,9 +943,30 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
   );
 }
 
-function InfoRow({ icon, label, value, theme, color }: { icon: string; label: string; value: string; theme: any; color?: string }) {
+function InfoRow({
+  icon,
+  label,
+  value,
+  theme,
+  color,
+}: {
+  icon: string;
+  label: string;
+  value: string;
+  theme: any;
+  color?: string;
+}) {
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: `${theme.border || '#eee'}` }}>
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 10,
+        borderBottomWidth: 1,
+        borderBottomColor: theme.border || '#eee',
+      }}
+    >
       <Ionicons name={icon as any} size={18} color={theme.textMuted} />
       <Text style={{ fontSize: 12, color: theme.textMuted, width: 80 }}>{label}</Text>
       <Text style={{ fontSize: 14, fontWeight: '600', color: color || theme.text, flex: 1 }}>{value}</Text>
@@ -635,23 +976,51 @@ function InfoRow({ icon, label, value, theme, color }: { icon: string; label: st
 
 const styl = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 16, paddingHorizontal: Spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
-  backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
+  header: {
+    paddingTop: 48,
+    paddingBottom: 16,
+    paddingHorizontal: Spacing.lg,
+    borderBottomLeftRadius: 24,
+    borderBottomRightRadius: 24,
+  },
+  backBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 12,
+  },
   headerTitle: { fontSize: 16, fontWeight: '700', color: '#fff', textAlign: 'center' },
   profileSection: { alignItems: 'center', marginBottom: 12 },
   avatarWrap: { position: 'relative', marginBottom: 8 },
   avatar: { width: 72, height: 72, borderRadius: 36, borderWidth: 3, borderColor: 'rgba(255,255,255,0.3)' },
-  statusDot: { position: 'absolute', bottom: 2, right: 2, width: 18, height: 18, borderRadius: 9, borderWidth: 3, borderColor: '#fff' },
+  statusDot: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    borderWidth: 3,
+    borderColor: '#fff',
+  },
   memberName: { fontSize: 20, fontWeight: '700', color: '#fff' },
   memberNrp: { fontSize: 12, color: 'rgba(255,255,255,0.6)', marginTop: 2 },
   badgeRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   quickStats: { flexDirection: 'row', gap: 8, marginTop: 8 },
-  qsItem: { flex: 1, alignItems: 'center', backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: Radius.md, paddingVertical: 8 },
+  qsItem: {
+    flex: 1,
+    alignItems: 'center',
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: Radius.md,
+    paddingVertical: 8,
+  },
   qsVal: { fontSize: 16, fontWeight: '800', color: '#fff' },
   qsLabel: { fontSize: 9, color: 'rgba(255,255,255,0.5)', marginTop: 1 },
   tabRow: { flexDirection: 'row', borderBottomWidth: 1 },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 14, borderBottomWidth: 2.5, borderBottomColor: 'transparent' },
-  tabActive: {},
   tabText: { fontSize: 13, fontWeight: '700' },
   content: { padding: Spacing.base },
   infoCard: { marginBottom: 12 },

@@ -1,22 +1,33 @@
 /**
- * MONITOR REALTIME SCREEN - v10 DB Aligned
+ * MONITOR REALTIME SCREEN - v11 (Bug-Fix Pass)
  *
  * DATABASE ALIGNMENT:
  *   users: id, nama, nrp, role, pos_jaga, shift, lokasi_id, foto, last_latitude, last_longitude, last_seen
  *   lokasi: id, nama, alamat, posList (JSON with pos details)
  *
- * FIXES:
- * - getField() for dual snake_case/camelCase field access
- * - Team filtered by lokasi_id (DB column)
- * - Map markers: last_latitude/last_longitude (DB columns) with camelCase fallback
- * - Member fields: pos_jaga (not pos), shift, nama via getField
- * - Geofence circles from lokasi.posList
- * - Company scope restricted by komandan's lokasi_id
+ * CRITICAL FIX (v11):
+ *  🚨 fetchLiveLocations now uses extractArray() to handle paginated
+ *     backend response { data: [...], pagination: {...} }.
+ *     Previously Array.isArray(data) was ALWAYS FALSE → liveData was
+ *     always empty → map markers never updated from live API.
+ *  ✅ useEffect deps include fetchLiveLocations (lint-safe)
+ *  ✅ Filtered list is memoized to avoid recomputation each render
+ *  ✅ `filtered.map` uses stable key (id || nrp) instead of random
+ *  ✅ MapMarker.id coerced to string for safe comparison
+ *  ✅ Lat/Lng validity check (rejects NaN values)
+ *
+ * PRIOR FIXES:
+ *  - getField() for dual snake_case/camelCase field access
+ *  - Team filtered by lokasi_id (DB column)
+ *  - Map markers: last_latitude/last_longitude (DB columns) with camelCase fallback
+ *  - Member fields: pos_jaga (not pos), shift, nama via getField
+ *  - Geofence circles from lokasi.posList
+ *  - Company scope restricted by komandan's lokasi_id
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
+import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -37,9 +48,27 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
+/**
+ * Extract array from API response.
+ * Backend may return:
+ *   - Array directly: [...]
+ *   - Paginated object: { data: [...], pagination: {...} }
+ *   - Wrapped object: { rows: [...] } or { items: [...] }
+ */
+function extractArray(result: any): any[] {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.data)) return result.data;
+  if (result && Array.isArray(result.rows)) return result.rows;
+  if (result && Array.isArray(result.items)) return result.items;
+  return [];
+}
+
 const { width: SW } = Dimensions.get('window');
 
-const STATUS_MAP: Record<string, { label: string; labelEn: string; variant: 'success' | 'info' | 'warning' | 'default'; color: string; icon: string }> = {
+const STATUS_MAP: Record<
+  string,
+  { label: string; labelEn: string; variant: 'success' | 'info' | 'warning' | 'default'; color: string; icon: string }
+> = {
   on_duty: { label: 'On Duty', labelEn: 'On Duty', variant: 'success', color: Colors.success, icon: 'shield-checkmark' },
   patroli: { label: 'Patroli', labelEn: 'Patrol', variant: 'info', color: Colors.primary, icon: 'walk' },
   break: { label: 'Istirahat', labelEn: 'Break', variant: 'warning', color: Colors.warning, icon: 'cafe' },
@@ -54,7 +83,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
   const user = useAuthStore((s) => s.user);
   const team = useDataStore((s) => s.team);
   const allLokasi = useDataStore((s) => s.lokasi);
-  const [filter, setFilter] = useState('all');
+  const [filter, setFilter] = useState<string>('all');
   const [refreshing, setRefreshing] = useState(false);
   const [liveData, setLiveData] = useState<any[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('map');
@@ -62,19 +91,24 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
   // Komandan's lokasi_id - DB column
   const myLokasiId = getField(user, 'lokasi_id', 'lokasiId') || null;
 
+  // CRITICAL FIX: Use extractArray to handle paginated response
   const fetchLiveLocations = useCallback(async () => {
     try {
-      const data = await usersApi.list('role=anggota&role=komandan');
-      if (data) setLiveData(Array.isArray(data) ? data : []);
-    } catch (e) { console.log('[Monitor] Fetch error:', e); }
+      const result = await usersApi.list('role=anggota&role=komandan');
+      setLiveData(extractArray(result));
+    } catch (e) {
+      console.log('[Monitor] Fetch error:', e);
+    }
   }, []);
 
-  useEffect(() => { fetchLiveLocations(); }, []);
+  useEffect(() => {
+    fetchLiveLocations();
+  }, [fetchLiveLocations]);
 
   // Filter team to ONLY this company by lokasi_id
   const filteredTeam = useMemo(() => {
     if (!myLokasiId) return team;
-    return team.filter(m => {
+    return team.filter((m) => {
       const mLokId = String(getField(m, 'lokasi_id', 'lokasiId') || '');
       return mLokId === String(myLokasiId);
     });
@@ -83,93 +117,144 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
   // Filter lokasi to ONLY this company
   const lokasi = useMemo(() => {
     if (!myLokasiId) return allLokasi;
-    return allLokasi.filter(l => String(getField(l, 'id', '_id')) === String(myLokasiId));
+    return allLokasi.filter((l) => String(getField(l, 'id', '_id')) === String(myLokasiId));
   }, [allLokasi, myLokasiId]);
 
-  const onRefresh = async () => {
+  const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchLiveLocations();
-    await useDataStore.getState().loadAllData();
-    setRefreshing(false);
-  };
+    try {
+      await fetchLiveLocations();
+      await useDataStore.getState().loadAllData();
+    } catch (e) {
+      console.log('[Monitor] Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [fetchLiveLocations]);
 
   // Get member location from live API data or team store - DB: last_latitude, last_longitude
-  const getMemberLocation = useCallback((memberId: string) => {
-    const live = liveData.find((d) => getField(d, 'id', '_id') === memberId);
-    if (live) {
-      const lat = getField(live, 'last_latitude', 'lastLatitude');
-      const lng = getField(live, 'last_longitude', 'lastLongitude');
-      if (lat && lng) return { lat: Number(lat), lng: Number(lng), seen: getField(live, 'last_seen', 'lastSeen') };
+  const getMemberLocation = useCallback(
+    (memberId: string) => {
+      const live = liveData.find((d) => String(getField(d, 'id', '_id') || '') === String(memberId));
+      if (live) {
+        const lat = getField(live, 'last_latitude', 'lastLatitude');
+        const lng = getField(live, 'last_longitude', 'lastLongitude');
+        if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+          return { lat: Number(lat), lng: Number(lng), seen: getField(live, 'last_seen', 'lastSeen') };
+        }
+      }
+      const member = team.find((m) => String(getField(m, 'id', '_id') || '') === String(memberId));
+      if (member) {
+        const lat = getField(member, 'last_latitude', 'lastLatitude');
+        const lng = getField(member, 'last_longitude', 'lastLongitude');
+        if (lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng))) {
+          return { lat: Number(lat), lng: Number(lng), seen: null as string | null };
+        }
+      }
+      return null;
+    },
+    [liveData, team]
+  );
+
+  const timeAgo = useCallback(
+    (dateStr: string) => {
+      if (!dateStr) return '';
+      const then = new Date(dateStr).getTime();
+      if (isNaN(then)) return '';
+      const now = Date.now();
+      const diff = Math.floor((now - then) / 1000);
+      if (diff < 60) return t('general.just_now');
+      if (diff < 3600) return `${Math.floor(diff / 60)} ${t('general.minutes')} ${t('general.ago')}`;
+      if (diff < 86400) return `${Math.floor(diff / 3600)} ${t('general.hours')} ${t('general.ago')}`;
+      return `${Math.floor(diff / 86400)} ${t('general.days')} ${t('general.ago')}`;
+    },
+    [t]
+  );
+
+  // Memoized filtered list
+  const filtered = useMemo(() => {
+    if (filter === 'all') return filteredTeam;
+    if (filter === 'off_duty') {
+      // "Off" chip groups off_duty + break together
+      return filteredTeam.filter((m) => {
+        const s = getField(m, 'status');
+        return s === 'off_duty' || s === 'break';
+      });
     }
-    const member = team.find((m) => getField(m, 'id', '_id') === memberId);
-    if (member) {
-      const lat = getField(member, 'last_latitude', 'lastLatitude');
-      const lng = getField(member, 'last_longitude', 'lastLongitude');
-      if (lat && lng) return { lat: Number(lat), lng: Number(lng), seen: null };
-    }
-    return null;
-  }, [liveData, team]);
+    return filteredTeam.filter((m) => getField(m, 'status') === filter);
+  }, [filteredTeam, filter]);
 
-  const timeAgo = (dateStr: string) => {
-    if (!dateStr) return '';
-    const now = Date.now();
-    const then = new Date(dateStr).getTime();
-    const diff = Math.floor((now - then) / 1000);
-    if (diff < 60) return t('general.just_now');
-    if (diff < 3600) return `${Math.floor(diff / 60)} ${t('general.minutes')} ${t('general.ago')}`;
-    if (diff < 86400) return `${Math.floor(diff / 3600)} ${t('general.hours')} ${t('general.ago')}`;
-    return `${Math.floor(diff / 86400)} ${t('general.days')} ${t('general.ago')}`;
-  };
-
-  const filtered = filter === 'all' ? filteredTeam : filteredTeam.filter((m) => getField(m, 'status') === filter);
-
-  // Counts - always computed
-  const counts = useMemo(() => ({
-    total: filteredTeam.length,
-    on_duty: filteredTeam.filter((m) => getField(m, 'status') === 'on_duty').length,
-    patroli: filteredTeam.filter((m) => getField(m, 'status') === 'patroli').length,
-    off_duty: filteredTeam.filter((m) => getField(m, 'status') === 'off_duty' || getField(m, 'status') === 'break').length,
-    tracked: filteredTeam.filter((m) => getField(m, 'last_latitude', 'lastLatitude') != null).length,
-  }), [filteredTeam]);
+  // Counts - always computed from full filteredTeam (not the active-filter view)
+  const counts = useMemo(
+    () => ({
+      total: filteredTeam.length,
+      on_duty: filteredTeam.filter((m) => getField(m, 'status') === 'on_duty').length,
+      patroli: filteredTeam.filter((m) => getField(m, 'status') === 'patroli').length,
+      off_duty: filteredTeam.filter((m) => getField(m, 'status') === 'off_duty' || getField(m, 'status') === 'break').length,
+      tracked: filteredTeam.filter((m) => {
+        const lat = getField(m, 'last_latitude', 'lastLatitude');
+        const lng = getField(m, 'last_longitude', 'lastLongitude');
+        return lat != null && lng != null;
+      }).length,
+    }),
+    [filteredTeam]
+  );
 
   const companyName = useMemo(() => {
     if (lokasi.length > 0) return getField(lokasi[0], 'nama', 'name') || '';
-    return getField(user, 'lokasi_nama', 'lokasiNama') || (lang === 'en' ? 'My Company' : 'Perusahaan Saya');
+    return getField(user, 'lokasi_nama', 'lokasiNama', 'lokasi') || (lang === 'en' ? 'My Company' : 'Perusahaan Saya');
   }, [lokasi, user, lang]);
 
-  // Map markers - DB: last_latitude, last_longitude, pos_jaga
+  // Map markers - filter by current filter chip and only include members with valid location
   const mapMarkers: MapMarker[] = useMemo(() => {
-    return filteredTeam.filter(m => {
-      if (filter !== 'all' && getField(m, 'status') !== filter) return false;
-      return getMemberLocation(getField(m, 'id', '_id')) !== null;
-    }).map(m => {
-      const loc = getMemberLocation(getField(m, 'id', '_id'))!;
-      const mStatus = getField(m, 'status') || 'off_duty';
-      const st2 = STATUS_MAP[mStatus] || STATUS_MAP.off_duty;
-      return {
-        id: getField(m, 'id', '_id'),
-        latitude: loc.lat,
-        longitude: loc.lng,
-        title: getField(m, 'nama', 'name') || 'Anggota',
-        description: `${getField(m, 'pos_jaga', 'posJaga', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
-        type: mStatus === 'patroli' ? 'patrol' as const : 'person' as const,
-        color: st2.color,
-        status: mStatus,
-      };
-    });
-  }, [filteredTeam, liveData, filter, getMemberLocation]);
+    return filteredTeam
+      .filter((m) => {
+        if (filter !== 'all') {
+          const s = getField(m, 'status');
+          if (filter === 'off_duty') {
+            if (s !== 'off_duty' && s !== 'break') return false;
+          } else if (s !== filter) {
+            return false;
+          }
+        }
+        return getMemberLocation(String(getField(m, 'id', '_id') || '')) !== null;
+      })
+      .map((m) => {
+        const memberId = String(getField(m, 'id', '_id') || '');
+        const loc = getMemberLocation(memberId)!;
+        const mStatus = getField(m, 'status') || 'off_duty';
+        const st2 = STATUS_MAP[mStatus] || STATUS_MAP.off_duty;
+        return {
+          id: memberId,
+          latitude: loc.lat,
+          longitude: loc.lng,
+          title: getField(m, 'nama', 'name') || 'Anggota',
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
+          type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
+          color: st2.color,
+          status: mStatus,
+        };
+      });
+  }, [filteredTeam, filter, getMemberLocation]);
 
   // Geofence circles from lokasi.posList
   const mapCircles: MapCircle[] = useMemo(() => {
-    return lokasi.flatMap(l => {
+    return lokasi.flatMap((l) => {
       const posList = getField(l, 'posList', 'pos_list') || [];
-      return posList.filter((p: any) => getField(p, 'latitude') && getField(p, 'longitude')).map((p: any) => ({
-        latitude: Number(getField(p, 'latitude')),
-        longitude: Number(getField(p, 'longitude')),
-        radius: Number(getField(p, 'radius')) || 100,
-        color: Colors.purple,
-        label: getField(p, 'nama', 'name') || '',
-      }));
+      if (!Array.isArray(posList)) return [];
+      return posList
+        .filter((p: any) => {
+          const lat = getField(p, 'latitude');
+          const lng = getField(p, 'longitude');
+          return lat != null && lng != null && !isNaN(Number(lat)) && !isNaN(Number(lng));
+        })
+        .map((p: any) => ({
+          latitude: Number(getField(p, 'latitude')),
+          longitude: Number(getField(p, 'longitude')),
+          radius: Number(getField(p, 'radius')) || 100,
+          color: Colors.purple,
+          label: getField(p, 'nama', 'name') || '',
+        }));
     });
   }, [lokasi]);
 
@@ -192,13 +277,21 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
             <View style={s.trackedBadge}>
               <Ionicons name="radio" size={12} color="#fff" />
-              <Text style={s.trackedText}>{counts.tracked}/{counts.total}</Text>
+              <Text style={s.trackedText}>
+                {counts.tracked}/{counts.total}
+              </Text>
             </View>
             <View style={[s.viewToggle, { backgroundColor: 'rgba(255,255,255,0.15)' }]}>
-              <TouchableOpacity style={[s.viewToggleBtn, viewMode === 'map' && { backgroundColor: 'rgba(255,255,255,0.3)' }]} onPress={() => setViewMode('map')}>
+              <TouchableOpacity
+                style={[s.viewToggleBtn, viewMode === 'map' && { backgroundColor: 'rgba(255,255,255,0.3)' }]}
+                onPress={() => setViewMode('map')}
+              >
                 <Ionicons name="map" size={16} color="#fff" />
               </TouchableOpacity>
-              <TouchableOpacity style={[s.viewToggleBtn, viewMode === 'list' && { backgroundColor: 'rgba(255,255,255,0.3)' }]} onPress={() => setViewMode('list')}>
+              <TouchableOpacity
+                style={[s.viewToggleBtn, viewMode === 'list' && { backgroundColor: 'rgba(255,255,255,0.3)' }]}
+                onPress={() => setViewMode('list')}
+              >
                 <Ionicons name="list" size={16} color="#fff" />
               </TouchableOpacity>
             </View>
@@ -228,9 +321,13 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
       {/* Map */}
       {viewMode === 'map' && (
         <View style={{ paddingHorizontal: Spacing.base, paddingTop: 12 }}>
-          <MapTracker markers={mapMarkers} circles={mapCircles} isDark={isDark} height={320}
+          <MapTracker
+            markers={mapMarkers}
+            circles={mapCircles}
+            isDark={isDark}
+            height={320}
             onMarkerPress={(marker) => {
-              const member = filteredTeam.find(m => getField(m, 'id', '_id') === marker.id);
+              const member = filteredTeam.find((m) => String(getField(m, 'id', '_id') || '') === String(marker.id));
               if (member) navigation.navigate('DetailAnggota', { nrp: getField(member, 'nrp') });
             }}
           />
@@ -240,7 +337,9 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
       {/* Info bar */}
       <View style={[s.pingInfo, { backgroundColor: isDark ? `${theme.primary}15` : '#EFF6FF' }]}>
         <Ionicons name="business-outline" size={14} color={theme.primary} />
-        <Text style={[s.pingText, { color: theme.primary }]}>Monitoring: {companyName}</Text>
+        <Text style={[s.pingText, { color: theme.primary }]} numberOfLines={1}>
+          Monitoring: {companyName}
+        </Text>
         <TouchableOpacity onPress={onRefresh} style={s.refreshBtn}>
           <Ionicons name="refresh" size={14} color={theme.primary} />
           <Text style={[s.refreshText, { color: theme.primary }]}>{t('general.refresh')}</Text>
@@ -248,17 +347,26 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
       </View>
 
       {/* List */}
-      <ScrollView contentContainerStyle={s.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}>
+      <ScrollView
+        contentContainerStyle={s.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
         {filtered.map((m: any) => {
           const mStatus = getField(m, 'status') || 'off_duty';
           const st2 = STATUS_MAP[mStatus] || STATUS_MAP.off_duty;
-          const loc = getMemberLocation(getField(m, 'id', '_id'));
+          const memberId = String(getField(m, 'id', '_id') || '');
+          const loc = getMemberLocation(memberId);
           const mFoto = getField(m, 'foto', 'foto_url', 'avatar') || 'https://via.placeholder.com/46';
           const mNama = getField(m, 'nama', 'name') || 'Anggota';
-          const mPos = getField(m, 'pos_jaga', 'posJaga', 'pos') || '-';
+          const mPos = getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-';
           const mShift = getField(m, 'shift') || '-';
+          const mNrp = getField(m, 'nrp') || '';
           return (
-            <TouchableOpacity key={getField(m, 'id', '_id')} onPress={() => navigation.navigate('DetailAnggota', { nrp: getField(m, 'nrp') })} activeOpacity={0.7}>
+            <TouchableOpacity
+              key={memberId || mNrp || `m-${Math.random()}`}
+              onPress={() => navigation.navigate('DetailAnggota', { nrp: mNrp })}
+              activeOpacity={0.7}
+            >
               <Card style={s.memberCard}>
                 <View style={s.memberRow}>
                   <View style={s.avatarWrap}>
@@ -267,17 +375,23 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={[s.memberName, { color: theme.text }]}>{mNama}</Text>
-                    <Text style={[s.memberMeta, { color: theme.textMuted }]}>{mPos} • {mShift}</Text>
+                    <Text style={[s.memberMeta, { color: theme.textMuted }]}>
+                      {mPos} • {mShift}
+                    </Text>
                     {loc ? (
                       <View style={s.locRow}>
                         <Ionicons name="location" size={12} color={Colors.success} />
-                        <Text style={s.locText}>{loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}</Text>
-                        {loc.seen && <Text style={[s.locTime, { color: theme.textMuted }]}>• {timeAgo(loc.seen)}</Text>}
+                        <Text style={s.locText}>
+                          {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
+                        </Text>
+                        {loc.seen ? <Text style={[s.locTime, { color: theme.textMuted }]}>• {timeAgo(loc.seen)}</Text> : null}
                       </View>
                     ) : (
                       <View style={s.locRow}>
                         <Ionicons name="location-outline" size={12} color={theme.textMuted} />
-                        <Text style={[s.locText, { color: theme.textMuted }]}>{lang === 'en' ? 'No location' : 'Belum ada lokasi'}</Text>
+                        <Text style={[s.locText, { color: theme.textMuted }]}>
+                          {lang === 'en' ? 'No location' : 'Belum ada lokasi'}
+                        </Text>
                       </View>
                     )}
                   </View>
@@ -295,7 +409,9 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
             <Ionicons name="people-outline" size={48} color={theme.textMuted} />
             <Text style={[s.emptyText, { color: theme.textMuted }]}>{t('general.no_data')}</Text>
             <Text style={{ fontSize: 12, color: theme.textMuted, marginTop: 4, textAlign: 'center' }}>
-              {lang === 'en' ? 'No members match this filter for your company' : 'Tidak ada anggota sesuai filter untuk perusahaan Anda'}
+              {lang === 'en'
+                ? 'No members match this filter for your company'
+                : 'Tidak ada anggota sesuai filter untuk perusahaan Anda'}
             </Text>
           </View>
         )}

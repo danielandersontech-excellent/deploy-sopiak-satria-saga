@@ -1,29 +1,38 @@
 /**
- * VALIDASI LAPORAN - Komandan - v3 DB Aligned
+ * VALIDASI LAPORAN - Komandan - v4 (Bug-Fix Pass)
  *
  * DATABASE ALIGNMENT:
  *   laporan_harian: user_id, tanggal, shift, pos_jaga, kondisi, aktivitas, temuan, status, lokasi_id, created_at
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, kronologi, status, lokasi_id, created_at
  *
- * FIXES:
- * - getField() for dual snake_case/camelCase field access
- * - **lokasi_text** (not lokasi) - DB column for laporan_kejadian
- * - **waktu_kejadian** (not waktuKejadian) - DB column
- * - **catatan_komandan** (not catatanKomandan) - DB column
- * - **pos_jaga** (not posJaga) - DB column
- * - lokasi_id filtering for komandan scope
- * - API update payloads use DB column names
- * - Proper merge of server + store data with snake_case priority
+ * CRITICAL FIXES (v4):
+ *  🚨 Removed DUPLICATE API call in handleApprove/submitRevision.
+ *     The store's updateLaporanHarianStatus / updateLaporanKejadianStatus
+ *     already calls laporanApi.harianValidate / kejadianValidate internally.
+ *     The screen was calling it AGAIN, causing duplicate audit logs &
+ *     duplicate "Laporan Disetujui" notifications to the anggota.
+ *     New flow: call API directly → on success update store via setState
+ *     (avoids duplicate call AND keeps the optimistic UI update).
  *
- * FIX v3.1:
- * - dataApi.laporanHarian / dataApi.laporanKejadian TIDAK ADA di apiClient.ts
- * - Diganti dengan laporanApi.harianList(), laporanApi.kejadianList()
- * - .update() diganti dengan laporanApi.harianValidate() / laporanApi.kejadianValidate()
+ *  🚨 Fixed kronologi/aktivitas priority for Kejadian items:
+ *     - Card preview: Kejadian shows kronologi (was: aktivitas first)
+ *     - Detail modal: same fix
  *
- * FIX v3.2:
- * - Backend mengembalikan response PAGINATED: { data: [...], total, page, limit }
- * - Array.isArray(result) gagal karena result bukan array → selalu []
- * - Fix: extract result.data jika bukan array langsung
+ *  ✅ Card preview now also shows pos_jaga / lokasi correctly per type
+ *  ✅ Server failure now blocks optimistic update (was silent before)
+ *  ✅ Defensive fallbacks for all displayed values
+ *  ✅ Removed unused 'Approved' dead branch in filterStatus
+ *  ✅ "Refresh Data" button localized
+ *
+ * PRIOR FIXES:
+ *  - getField() for dual snake_case/camelCase field access
+ *  - lokasi_text (not lokasi) - DB column for laporan_kejadian
+ *  - waktu_kejadian - DB column
+ *  - catatan_komandan - DB column
+ *  - pos_jaga - DB column
+ *  - lokasi_id filtering for komandan scope
+ *  - API update payloads use DB column names
+ *  - Paginated response extraction via extractArray()
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
@@ -35,7 +44,6 @@ import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
 import { useAuthStore } from '../../stores/authStore';
-// FIX: Import laporanApi (bukan hanya dataApi) - karena endpoint laporan ada di laporanApi
 import { laporanApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
@@ -52,11 +60,7 @@ function getField(obj: any, ...keys: string[]): any {
 }
 
 /**
- * FIX v3.2: Extract array dari response API.
- * Backend bisa mengembalikan:
- *   - Array langsung: [...]
- *   - Paginated object: { data: [...], total, page, limit }
- * Fungsi ini memastikan kita selalu dapat array.
+ * Extract array from API response (handles paginated { data: [...], pagination: {...} }).
  */
 function extractArray(result: any): any[] {
   if (Array.isArray(result)) return result;
@@ -76,17 +80,16 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
   const storeLaporanH = useDataStore((s) => s.laporanHarian);
   const storeLaporanK = useDataStore((s) => s.laporanKejadian);
-  const updateLH = useDataStore((s) => s.updateLaporanHarianStatus);
-  const updateLK = useDataStore((s) => s.updateLaporanKejadianStatus);
   const loadAllData = useDataStore((s) => s.loadAllData);
 
-  const [tab, setTab] = useState('Pending');
+  const [tab, setTab] = useState<string>('Pending');
   const [showDetail, setShowDetail] = useState<any>(null);
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionTarget, setRevisionTarget] = useState<any>(null);
   const [catatan, setCatatan] = useState('');
   const [refreshing, setRefreshing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
   const [serverLaporanH, setServerLaporanH] = useState<any[]>([]);
   const [serverLaporanK, setServerLaporanK] = useState<any[]>([]);
   const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
@@ -98,48 +101,58 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
   // ===== Fetch from server =====
   const fetchLaporan = useCallback(async () => {
+    let lhData: any[] = [];
     try {
-      let lhData: any[] = [];
-      try {
-        // FIX v3.2: Backend returns paginated { data: [...], total, page, limit }
-        // extractArray() handles both array and paginated response
-        const lhResult = await laporanApi.harianList();
-        lhData = extractArray(lhResult);
-        console.log('[Validasi] Fetched LH:', lhData.length, 'items (raw type:', typeof lhResult, Array.isArray(lhResult) ? 'array' : 'object', ')');
-      } catch (e) { console.log('[Validasi] Fetch LH error:', e); }
+      const lhResult = await laporanApi.harianList();
+      lhData = extractArray(lhResult);
+      console.log('[Validasi] Fetched LH:', lhData.length, 'items');
+    } catch (e) {
+      console.log('[Validasi] Fetch LH error:', e);
+    }
 
-      let lkData: any[] = [];
-      try {
-        // FIX v3.2: Same fix for kejadian
-        const lkResult = await laporanApi.kejadianList();
-        lkData = extractArray(lkResult);
-        console.log('[Validasi] Fetched LK:', lkData.length, 'items (raw type:', typeof lkResult, Array.isArray(lkResult) ? 'array' : 'object', ')');
-      } catch (e) { console.log('[Validasi] Fetch LK error:', e); }
+    let lkData: any[] = [];
+    try {
+      const lkResult = await laporanApi.kejadianList();
+      lkData = extractArray(lkResult);
+      console.log('[Validasi] Fetched LK:', lkData.length, 'items');
+    } catch (e) {
+      console.log('[Validasi] Fetch LK error:', e);
+    }
 
-      setServerLaporanH(lhData);
-      setServerLaporanK(lkData);
-      setLastRefresh(new Date());
-    } catch (e) { console.log('[Validasi] Fetch error:', e); }
+    setServerLaporanH(lhData);
+    setServerLaporanK(lkData);
+    setLastRefresh(new Date());
   }, []);
 
   useEffect(() => {
-    (async () => { setLoading(true); await fetchLaporan(); setLoading(false); })();
+    (async () => {
+      setLoading(true);
+      await fetchLaporan();
+      setLoading(false);
+    })();
   }, [fetchLaporan]);
 
   useEffect(() => {
-    const unsubscribe = navigation.addListener('focus', () => { fetchLaporan(); loadAllData?.(); });
+    const unsubscribe = navigation.addListener('focus', () => {
+      fetchLaporan();
+      loadAllData?.();
+    });
     return unsubscribe;
   }, [navigation, fetchLaporan, loadAllData]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    await fetchLaporan();
-    await loadAllData?.();
-    setRefreshing(false);
+    try {
+      await fetchLaporan();
+      await loadAllData?.();
+    } catch (e) {
+      console.log('[Validasi] Refresh error:', e);
+    } finally {
+      setRefreshing(false);
+    }
   }, [fetchLaporan, loadAllData]);
 
   // ===== Merge server + store data (deduplicate by id) =====
-  // All field names use DB snake_case as primary, camelCase as fallback
   const allLaporanH = useMemo(() => {
     const merged = new Map<string, any>();
 
@@ -148,7 +161,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
     });
 
     serverLaporanH.forEach((l) => {
-      const id = getField(l, 'id', '_id') || `srv-h-${Math.random()}`;
+      const id = String(getField(l, 'id', '_id') || `srv-h-${Math.random()}`);
       merged.set(id, {
         id,
         nama: getField(l, 'nama', 'user_nama', 'username') || 'Anggota',
@@ -156,12 +169,16 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         user_id: getField(l, 'user_id', 'userId') || '',
         kondisi: getField(l, 'kondisi', 'condition') || '-',
         aktivitas: getField(l, 'aktivitas', 'activity', 'catatan', 'description') || '-',
+        temuan: getField(l, 'temuan') || '',
         tanggal: getField(l, 'tanggal', 'date') || (getField(l, 'created_at') || '').split('T')[0] || '-',
-        waktuSubmit: getField(l, 'waktu_submit', 'waktuSubmit', 'time') || (getField(l, 'created_at') || '').split('T')[1]?.substring(0, 5) || '-',
+        waktuSubmit:
+          getField(l, 'waktu_submit', 'waktuSubmit', 'time') ||
+          (getField(l, 'created_at') || '').split('T')[1]?.substring(0, 5) ||
+          '-',
         shift: getField(l, 'shift') || '-',
-        pos_jaga: getField(l, 'pos_jaga', 'posJaga', 'pos') || '-',       // DB: pos_jaga
+        pos_jaga: getField(l, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-',
         status: getField(l, 'status') || 'pending',
-        catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',  // DB: catatan_komandan
+        catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',
         foto_url: getField(l, 'foto_url', 'fotoUrl') || null,
         lokasi_id: getField(l, 'lokasi_id', 'lokasiId') || '',
         source: 'harian' as const,
@@ -169,10 +186,10 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       });
     });
 
-    // Filter by komandan's lokasi_id
+    // Filter by komandan's lokasi_id (include items with no lokasi_id for legacy data)
     let results = Array.from(merged.values());
     if (myLokasiId) {
-      results = results.filter(l => {
+      results = results.filter((l) => {
         const lLokId = String(getField(l, 'lokasi_id', 'lokasiId') || '');
         return lLokId === String(myLokasiId) || !lLokId;
       });
@@ -184,11 +201,17 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
     const merged = new Map<string, any>();
 
     storeLaporanK.forEach((l) => {
-      merged.set(l.id, { ...l, source: 'kejadian' as const, tipe: 'Kejadian' as const, kondisi: getField(l, 'jenis') });
+      merged.set(l.id, {
+        ...l,
+        source: 'kejadian' as const,
+        tipe: 'Kejadian' as const,
+        // For convenience - kondisi shows jenis for Kejadian items
+        kondisi: getField(l, 'jenis'),
+      });
     });
 
     serverLaporanK.forEach((l) => {
-      const id = getField(l, 'id', '_id') || `srv-k-${Math.random()}`;
+      const id = String(getField(l, 'id', '_id') || `srv-k-${Math.random()}`);
       merged.set(id, {
         id,
         nama: getField(l, 'nama', 'user_nama', 'username') || 'Anggota',
@@ -199,11 +222,14 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         kronologi: getField(l, 'kronologi', 'chronology', 'description') || '-',
         prioritas: getField(l, 'prioritas', 'priority') || 'normal',
         tanggal: getField(l, 'tanggal', 'date') || (getField(l, 'created_at') || '').split('T')[0] || '-',
-        waktuSubmit: getField(l, 'waktu_submit', 'waktuSubmit', 'time') || (getField(l, 'created_at') || '').split('T')[1]?.substring(0, 5) || '-',
-        waktu_kejadian: getField(l, 'waktu_kejadian', 'waktuKejadian') || '',    // DB: waktu_kejadian
-        lokasi_text: getField(l, 'lokasi_text', 'lokasi', 'location') || '-',     // DB: lokasi_text (NOT lokasi!)
+        waktuSubmit:
+          getField(l, 'waktu_submit', 'waktuSubmit', 'time') ||
+          (getField(l, 'created_at') || '').split('T')[1]?.substring(0, 5) ||
+          '-',
+        waktu_kejadian: getField(l, 'waktu_kejadian', 'waktuKejadian') || '',
+        lokasi_text: getField(l, 'lokasi_text', 'lokasi', 'location') || '-',
         status: getField(l, 'status') || 'pending',
-        catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',  // DB: catatan_komandan
+        catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',
         foto_url: getField(l, 'foto_url', 'fotoUrl') || null,
         lokasi_id: getField(l, 'lokasi_id', 'lokasiId') || '',
         source: 'kejadian' as const,
@@ -211,10 +237,9 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       });
     });
 
-    // Filter by komandan's lokasi_id
     let results = Array.from(merged.values());
     if (myLokasiId) {
-      results = results.filter(l => {
+      results = results.filter((l) => {
         const lLokId = String(getField(l, 'lokasi_id', 'lokasiId') || '');
         return lLokId === String(myLokasiId) || !lLokId;
       });
@@ -223,7 +248,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
   }, [storeLaporanK, serverLaporanK, myLokasiId]);
 
   // ===== Filter by tab =====
-  const filterStatus = tab === 'Pending' ? 'pending' : (tab === 'Disetujui' || tab === 'Approved') ? 'approved' : 'revision';
+  const filterStatus = tab === 'Pending' ? 'pending' : tab === 'Disetujui' ? 'approved' : 'revision';
 
   const filteredLaporan = useMemo(() => {
     return [
@@ -236,10 +261,56 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
     });
   }, [allLaporanH, allLaporanK, filterStatus]);
 
-  const pendingCount = useMemo(() => allLaporanH.filter((l) => getField(l, 'status') === 'pending').length + allLaporanK.filter((l) => getField(l, 'status') === 'pending').length, [allLaporanH, allLaporanK]);
-  const approvedCount = useMemo(() => allLaporanH.filter((l) => getField(l, 'status') === 'approved').length + allLaporanK.filter((l) => getField(l, 'status') === 'approved').length, [allLaporanH, allLaporanK]);
-  const revisionCount = useMemo(() => allLaporanH.filter((l) => getField(l, 'status') === 'revision').length + allLaporanK.filter((l) => getField(l, 'status') === 'revision').length, [allLaporanH, allLaporanK]);
+  const pendingCount = useMemo(
+    () =>
+      allLaporanH.filter((l) => getField(l, 'status') === 'pending').length +
+      allLaporanK.filter((l) => getField(l, 'status') === 'pending').length,
+    [allLaporanH, allLaporanK]
+  );
+  const approvedCount = useMemo(
+    () =>
+      allLaporanH.filter((l) => getField(l, 'status') === 'approved').length +
+      allLaporanK.filter((l) => getField(l, 'status') === 'approved').length,
+    [allLaporanH, allLaporanK]
+  );
+  const revisionCount = useMemo(
+    () =>
+      allLaporanH.filter((l) => getField(l, 'status') === 'revision').length +
+      allLaporanK.filter((l) => getField(l, 'status') === 'revision').length,
+    [allLaporanH, allLaporanK]
+  );
   const tabCounts = [pendingCount, approvedCount, revisionCount];
+
+  // ===== Apply local optimistic update (no API call) =====
+  const applyLocalStatusUpdate = useCallback(
+    (source: 'harian' | 'kejadian', id: string, status: string, catatan?: string) => {
+      useDataStore.setState((s) => {
+        if (source === 'harian') {
+          return {
+            laporanHarian: s.laporanHarian.map((l) =>
+              l.id === id ? { ...l, status: status as any, catatanKomandan: catatan || l.catatanKomandan } : l
+            ),
+          };
+        }
+        return {
+          laporanKejadian: s.laporanKejadian.map((l) =>
+            l.id === id ? { ...l, status: status as any, catatanKomandan: catatan || l.catatanKomandan } : l
+          ),
+        };
+      });
+      // Also reflect change immediately in the server-loaded copy so user sees it before refetch
+      if (source === 'harian') {
+        setServerLaporanH((arr) =>
+          arr.map((l) => (String(getField(l, 'id', '_id')) === String(id) ? { ...l, status, catatan_komandan: catatan ?? l.catatan_komandan } : l))
+        );
+      } else {
+        setServerLaporanK((arr) =>
+          arr.map((l) => (String(getField(l, 'id', '_id')) === String(id) ? { ...l, status, catatan_komandan: catatan ?? l.catatan_komandan } : l))
+        );
+      }
+    },
+    []
+  );
 
   // ===== Actions =====
   const handleApprove = (item: any) => {
@@ -249,25 +320,39 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
     Alert.alert(title, msg, [
       { text: lang === 'en' ? 'Cancel' : 'Batal', style: 'cancel' },
-      { text: lang === 'en' ? 'Approve' : 'Setujui', onPress: async () => {
-        try {
+      {
+        text: lang === 'en' ? 'Approve' : 'Setujui',
+        onPress: async () => {
+          if (submitting) return;
+          setSubmitting(true);
           const note = lang === 'en' ? 'Approved by Commander' : 'Disetujui oleh Komandan';
-          if (item.source === 'harian') { updateLH?.(item.id, 'approved', note); }
-          else { updateLK?.(item.id, 'approved', note); }
-
           try {
+            // Single API call - server handles audit log + downstream notifications
             if (item.source === 'harian') {
               await laporanApi.harianValidate(item.id, 'approved', note);
             } else {
               await laporanApi.kejadianValidate(item.id, 'approved', note);
             }
-          } catch (serverErr) { console.log('[Validasi] Server update error:', serverErr); }
 
-          await fetchLaporan();
-          Alert.alert('✅', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
-          setShowDetail(null);
-        } catch (err: any) { Alert.alert('Error', err.message || 'Unknown error'); }
-      }},
+            // Optimistic local update (no second API call)
+            applyLocalStatusUpdate(item.source, item.id, 'approved', note);
+
+            // Refetch to sync with server state
+            await fetchLaporan();
+
+            Alert.alert('✅', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
+            setShowDetail(null);
+          } catch (err: any) {
+            console.log('[Validasi] Approve error:', err);
+            Alert.alert(
+              'Error',
+              err?.message || (lang === 'en' ? 'Failed to approve report' : 'Gagal menyetujui laporan')
+            );
+          } finally {
+            setSubmitting(false);
+          }
+        },
+      },
     ]);
   };
 
@@ -278,26 +363,44 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
   };
 
   const submitRevision = async () => {
-    if (!catatan.trim()) return Alert.alert('Error', lang === 'en' ? 'Revision note is required' : 'Catatan revisi wajib diisi');
+    if (!catatan.trim()) {
+      Alert.alert('Error', lang === 'en' ? 'Revision note is required' : 'Catatan revisi wajib diisi');
+      return;
+    }
+    if (!revisionTarget || submitting) return;
 
+    setSubmitting(true);
     try {
-      if (revisionTarget.source === 'harian') { updateLH?.(revisionTarget.id, 'revision', catatan); }
-      else { updateLK?.(revisionTarget.id, 'revision', catatan); }
+      // Single API call (server handles notification to anggota)
+      if (revisionTarget.source === 'harian') {
+        await laporanApi.harianValidate(revisionTarget.id, 'revision', catatan);
+      } else {
+        await laporanApi.kejadianValidate(revisionTarget.id, 'revision', catatan);
+      }
 
-      try {
-        if (revisionTarget.source === 'harian') {
-          await laporanApi.harianValidate(revisionTarget.id, 'revision', catatan);
-        } else {
-          await laporanApi.kejadianValidate(revisionTarget.id, 'revision', catatan);
-        }
-      } catch (serverErr) { console.log('[Validasi] Server revision error:', serverErr); }
+      // Optimistic local update (no second API call)
+      applyLocalStatusUpdate(revisionTarget.source, revisionTarget.id, 'revision', catatan);
 
       await fetchLaporan();
+
       setShowRevisionModal(false);
       setShowDetail(null);
       setRevisionTarget(null);
-      Alert.alert('⚠️', lang === 'en' ? 'Revision requested. Member will be notified.' : 'Revisi diminta. Anggota akan menerima notifikasi revisi.');
-    } catch (err: any) { Alert.alert('Error', err.message || 'Unknown error'); }
+      Alert.alert(
+        '⚠️',
+        lang === 'en'
+          ? 'Revision requested. Member will be notified.'
+          : 'Revisi diminta. Anggota akan menerima notifikasi revisi.'
+      );
+    } catch (err: any) {
+      console.log('[Validasi] Revision error:', err);
+      Alert.alert(
+        'Error',
+        err?.message || (lang === 'en' ? 'Failed to request revision' : 'Gagal mengirim permintaan revisi')
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   // ===== Render helpers =====
@@ -307,6 +410,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       aman: lang === 'en' ? 'Safe' : 'Aman',
       ada_masalah: lang === 'en' ? 'Issue Found' : 'Ada Masalah',
       perlu_perhatian: lang === 'en' ? 'Needs Attention' : 'Perlu Perhatian',
+      perhatian_khusus: lang === 'en' ? 'Special Attention' : 'Perhatian Khusus',
     };
     const k = getField(item, 'kondisi') || '';
     return kondisiMap[k] || k || '-';
@@ -327,7 +431,15 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
     if (getField(item, 'tipe') === 'Kejadian') {
       return getField(item, 'lokasi_text', 'lokasi', 'location') || '-';
     }
-    return getField(item, 'pos_jaga', 'posJaga', 'pos') || '-';
+    return getField(item, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-';
+  };
+
+  // FIX: For Kejadian show kronologi; for Harian show aktivitas (was wrong order before)
+  const getNarrativeText = (item: any) => {
+    if (getField(item, 'tipe') === 'Kejadian') {
+      return getField(item, 'kronologi') || getField(item, 'aktivitas') || '-';
+    }
+    return getField(item, 'aktivitas') || getField(item, 'kronologi') || '-';
   };
 
   return (
@@ -353,7 +465,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
           const isActive = tab === tabKey;
           return (
             <TouchableOpacity
-              key={tabLabel}
+              key={tabKey}
               style={[styles.tab, { backgroundColor: isActive ? theme.primary : isDark ? theme.bgInput : Colors.bgGray }]}
               onPress={() => setTab(tabKey)}
             >
@@ -373,11 +485,12 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         <View style={[styles.refreshInfo, { backgroundColor: isDark ? `${theme.primary}10` : '#f0f9ff' }]}>
           <Ionicons name="time-outline" size={12} color={theme.textMuted} />
           <Text style={[styles.refreshInfoText, { color: theme.textMuted }]}>
-            {lang === 'en' ? 'Updated' : 'Diperbarui'}: {lastRefresh.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
+            {lang === 'en' ? 'Updated' : 'Diperbarui'}:{' '}
+            {lastRefresh.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' })}
           </Text>
           <TouchableOpacity onPress={onRefresh} style={styles.refreshMiniBtn}>
             <Ionicons name="refresh" size={12} color={theme.primary} />
-            <Text style={[styles.refreshMiniText, { color: theme.primary }]}>Refresh</Text>
+            <Text style={[styles.refreshMiniText, { color: theme.primary }]}>{t('general.refresh')}</Text>
           </TouchableOpacity>
         </View>
       )}
@@ -386,10 +499,15 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       {loading ? (
         <View style={styles.loadingWrap}>
           <ActivityIndicator size="large" color={theme.primary} />
-          <Text style={[styles.loadingText, { color: theme.textMuted }]}>{lang === 'en' ? 'Loading reports...' : 'Memuat laporan...'}</Text>
+          <Text style={[styles.loadingText, { color: theme.textMuted }]}>
+            {lang === 'en' ? 'Loading reports...' : 'Memuat laporan...'}
+          </Text>
         </View>
       ) : (
-        <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}>
+        <ScrollView
+          contentContainerStyle={styles.content}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+        >
           {filteredLaporan.length === 0 ? (
             <View style={styles.emptyWrap}>
               <Ionicons name="document-outline" size={48} color={theme.textMuted} />
@@ -398,10 +516,21 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
               </Text>
               <Text style={[styles.emptyDesc, { color: theme.textMuted }]}>
                 {tab === 'Pending'
-                  ? (lang === 'en' ? 'Reports submitted by members will appear here for your validation.' : 'Laporan yang dikirim oleh anggota akan muncul di sini untuk divalidasi.')
-                  : (lang === 'en' ? 'Reports with this status will appear here.' : 'Laporan dengan status ini akan muncul di sini.')}
+                  ? lang === 'en'
+                    ? 'Reports submitted by members will appear here for your validation.'
+                    : 'Laporan yang dikirim oleh anggota akan muncul di sini untuk divalidasi.'
+                  : lang === 'en'
+                  ? 'Reports with this status will appear here.'
+                  : 'Laporan dengan status ini akan muncul di sini.'}
               </Text>
-              <Button title="Refresh Data" variant="outline" size="small" icon="refresh-outline" onPress={onRefresh} style={{ marginTop: 12 }} />
+              <Button
+                title={lang === 'en' ? 'Refresh Data' : 'Segarkan Data'}
+                variant="outline"
+                size="small"
+                icon="refresh-outline"
+                onPress={onRefresh}
+                style={{ marginTop: 12 }}
+              />
             </View>
           ) : (
             filteredLaporan.map((item) => {
@@ -411,28 +540,46 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
               const itemNrp = getField(item, 'nrp') || '-';
               const itemWaktu = getField(item, 'waktuSubmit') || '-';
               const itemPrioritas = getField(item, 'prioritas');
-              const itemAktivitas = getField(item, 'aktivitas') || getField(item, 'kronologi') || '-';
+              const itemNarrative = getNarrativeText(item);
               const itemTanggal = getField(item, 'tanggal') || '-';
               const itemShift = getField(item, 'shift');
               const itemCatatan = getField(item, 'catatan_komandan', 'catatanKomandan') || '';
 
               return (
-                <TouchableOpacity key={`${item.source}-${item.id}`} activeOpacity={0.7} onPress={() => setShowDetail(item)}>
-                  <Card style={[styles.card, { backgroundColor: theme.bgCard }]} variant="bordered" borderColor={itemTipe === 'Kejadian' ? Colors.danger : Colors.primary}>
+                <TouchableOpacity
+                  key={`${item.source}-${item.id}`}
+                  activeOpacity={0.7}
+                  onPress={() => setShowDetail(item)}
+                >
+                  <Card
+                    style={[styles.card, { backgroundColor: theme.bgCard }]}
+                    variant="bordered"
+                    borderColor={itemTipe === 'Kejadian' ? Colors.danger : Colors.primary}
+                  >
                     <View style={styles.cardTop}>
                       <Badge text={itemTipe} variant={itemTipe === 'Kejadian' ? 'danger' : 'info'} />
                       {itemTipe === 'Kejadian' && itemPrioritas && (
-                        <Badge text={itemPrioritas} variant={itemPrioritas === 'kritis' ? 'danger' : itemPrioritas === 'tinggi' ? 'warning' : 'info'} />
+                        <Badge
+                          text={String(itemPrioritas)}
+                          variant={itemPrioritas === 'kritis' ? 'danger' : itemPrioritas === 'tinggi' ? 'warning' : 'info'}
+                        />
                       )}
-                      <Badge text={getStatusLabel(itemStatus)} variant={itemStatus === 'approved' ? 'success' : itemStatus === 'revision' ? 'warning' : 'default'} />
+                      <Badge
+                        text={getStatusLabel(itemStatus)}
+                        variant={itemStatus === 'approved' ? 'success' : itemStatus === 'revision' ? 'warning' : 'default'}
+                      />
                       <Text style={[styles.timeText, { color: theme.textMuted }]}>{itemWaktu}</Text>
                     </View>
 
-                    <Text style={[styles.cardName, { color: theme.text }]}>{itemNama} ({itemNrp})</Text>
+                    <Text style={[styles.cardName, { color: theme.text }]}>
+                      {itemNama} ({itemNrp})
+                    </Text>
                     <Text style={[styles.cardKondisi, { color: itemTipe === 'Kejadian' ? Colors.danger : Colors.primary }]}>
                       {getKondisiLabel(item)}
                     </Text>
-                    <Text style={[styles.cardAktivitas, { color: theme.textSecondary }]} numberOfLines={3}>{itemAktivitas}</Text>
+                    <Text style={[styles.cardAktivitas, { color: theme.textSecondary }]} numberOfLines={3}>
+                      {itemNarrative}
+                    </Text>
                     <Text style={[styles.cardDate, { color: theme.textMuted }]}>
                       {itemTanggal} • {getLokasiDisplay(item)} {itemShift ? `• ${itemShift}` : ''}
                     </Text>
@@ -448,8 +595,25 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
                     {itemStatus === 'pending' && (
                       <View style={styles.actionRow}>
-                        <Button title={lang === 'en' ? 'Revision' : 'Revisi'} variant="outline" size="small" icon="create-outline" onPress={() => handleRequestRevision(item)} style={{ flex: 1 }} textStyle={{ color: Colors.warning }} />
-                        <Button title={lang === 'en' ? 'Approve' : 'Setujui'} variant="success" size="small" icon="checkmark-outline" onPress={() => handleApprove(item)} style={{ flex: 1 }} />
+                        <Button
+                          title={lang === 'en' ? 'Revision' : 'Revisi'}
+                          variant="outline"
+                          size="small"
+                          icon="create-outline"
+                          onPress={() => handleRequestRevision(item)}
+                          style={{ flex: 1 }}
+                          textStyle={{ color: Colors.warning }}
+                          disabled={submitting}
+                        />
+                        <Button
+                          title={lang === 'en' ? 'Approve' : 'Setujui'}
+                          variant="success"
+                          size="small"
+                          icon="checkmark-outline"
+                          onPress={() => handleApprove(item)}
+                          style={{ flex: 1 }}
+                          disabled={submitting}
+                        />
                       </View>
                     )}
                   </Card>
@@ -462,11 +626,13 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       )}
 
       {/* Detail Modal */}
-      <Modal visible={!!showDetail && !showRevisionModal} transparent animationType="slide">
+      <Modal visible={!!showDetail && !showRevisionModal} transparent animationType="slide" onRequestClose={() => setShowDetail(null)}>
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.bgCard }]}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: theme.text }]}>{lang === 'en' ? 'Report Detail' : 'Detail Laporan'}</Text>
+              <Text style={[styles.modalTitle, { color: theme.text }]}>
+                {lang === 'en' ? 'Report Detail' : 'Detail Laporan'}
+              </Text>
               <TouchableOpacity onPress={() => setShowDetail(null)}>
                 <Ionicons name="close" size={24} color={theme.textMuted} />
               </TouchableOpacity>
@@ -475,15 +641,43 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
             {showDetail && (
               <ScrollView style={{ maxHeight: 400 }} showsVerticalScrollIndicator={false}>
                 <View style={styles.detailRow}>
-                  <Badge text={getField(showDetail, 'tipe')} variant={getField(showDetail, 'tipe') === 'Kejadian' ? 'danger' : 'info'} />
-                  <Badge text={getStatusLabel(getField(showDetail, 'status'))} variant={getField(showDetail, 'status') === 'approved' ? 'success' : getField(showDetail, 'status') === 'revision' ? 'warning' : 'default'} />
+                  <Badge
+                    text={getField(showDetail, 'tipe') || '-'}
+                    variant={getField(showDetail, 'tipe') === 'Kejadian' ? 'danger' : 'info'}
+                  />
+                  <Badge
+                    text={getStatusLabel(getField(showDetail, 'status'))}
+                    variant={
+                      getField(showDetail, 'status') === 'approved'
+                        ? 'success'
+                        : getField(showDetail, 'status') === 'revision'
+                        ? 'warning'
+                        : 'default'
+                    }
+                  />
                 </View>
 
                 {[
-                  { label: lang === 'en' ? 'Reporter' : 'Pelapor', value: `${getField(showDetail, 'nama')} (NRP: ${getField(showDetail, 'nrp')})` },
-                  { label: lang === 'en' ? 'Date / Time' : 'Tanggal / Waktu', value: `${getField(showDetail, 'tanggal')} • ${getField(showDetail, 'waktuSubmit') || '-'}` },
                   {
-                    label: getField(showDetail, 'tipe') === 'Kejadian' ? (lang === 'en' ? 'Incident Type' : 'Jenis Kejadian') : (lang === 'en' ? 'Condition' : 'Kondisi'),
+                    label: lang === 'en' ? 'Reporter' : 'Pelapor',
+                    value: `${getField(showDetail, 'nama') || '-'} (NRP: ${getField(showDetail, 'nrp') || '-'})`,
+                  },
+                  {
+                    label: lang === 'en' ? 'Date / Time' : 'Tanggal / Waktu',
+                    value:
+                      getField(showDetail, 'tipe') === 'Kejadian'
+                        ? `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktu_kejadian', 'waktuKejadian') || getField(showDetail, 'waktuSubmit') || '-'}`
+                        : `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktuSubmit') || '-'}`,
+                  },
+                  {
+                    label:
+                      getField(showDetail, 'tipe') === 'Kejadian'
+                        ? lang === 'en'
+                          ? 'Incident Type'
+                          : 'Jenis Kejadian'
+                        : lang === 'en'
+                        ? 'Condition'
+                        : 'Kondisi',
                     value: getKondisiLabel(showDetail),
                   },
                   { label: lang === 'en' ? 'Location' : 'Lokasi', value: getLokasiDisplay(showDetail) },
@@ -496,18 +690,33 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
                 {getField(showDetail, 'tipe') === 'Kejadian' && getField(showDetail, 'prioritas') && (
                   <View style={styles.detailField}>
-                    <Text style={[styles.detailLabel, { color: theme.textMuted }]}>{lang === 'en' ? 'Priority' : 'Prioritas'}</Text>
-                    <Badge text={getField(showDetail, 'prioritas')} variant={getField(showDetail, 'prioritas') === 'kritis' ? 'danger' : getField(showDetail, 'prioritas') === 'tinggi' ? 'warning' : 'info'} />
+                    <Text style={[styles.detailLabel, { color: theme.textMuted }]}>
+                      {lang === 'en' ? 'Priority' : 'Prioritas'}
+                    </Text>
+                    <Badge
+                      text={String(getField(showDetail, 'prioritas'))}
+                      variant={
+                        getField(showDetail, 'prioritas') === 'kritis'
+                          ? 'danger'
+                          : getField(showDetail, 'prioritas') === 'tinggi'
+                          ? 'warning'
+                          : 'info'
+                      }
+                    />
                   </View>
                 )}
 
                 <View style={styles.detailField}>
                   <Text style={[styles.detailLabel, { color: theme.textMuted }]}>
-                    {getField(showDetail, 'tipe') === 'Kejadian' ? (lang === 'en' ? 'Chronology' : 'Kronologi') : (lang === 'en' ? 'Activity' : 'Aktivitas')}
+                    {getField(showDetail, 'tipe') === 'Kejadian'
+                      ? lang === 'en'
+                        ? 'Chronology'
+                        : 'Kronologi'
+                      : lang === 'en'
+                      ? 'Activity'
+                      : 'Aktivitas'}
                   </Text>
-                  <Text style={[styles.detailContent, { color: theme.text }]}>
-                    {getField(showDetail, 'aktivitas') || getField(showDetail, 'kronologi') || '-'}
-                  </Text>
+                  <Text style={[styles.detailContent, { color: theme.text }]}>{getNarrativeText(showDetail)}</Text>
                 </View>
 
                 {getField(showDetail, 'catatan_komandan', 'catatanKomandan') ? (
@@ -515,7 +724,9 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                     <Text style={[styles.catatanLabel, { color: isDark ? '#ffd54f' : Colors.warningDark }]}>
                       {lang === 'en' ? 'Commander Note:' : 'Catatan Komandan:'}
                     </Text>
-                    <Text style={[styles.catatanText, { color: theme.text }]}>{getField(showDetail, 'catatan_komandan', 'catatanKomandan')}</Text>
+                    <Text style={[styles.catatanText, { color: theme.text }]}>
+                      {getField(showDetail, 'catatan_komandan', 'catatanKomandan')}
+                    </Text>
                   </View>
                 ) : null}
               </ScrollView>
@@ -523,34 +734,103 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
             {getField(showDetail, 'status') === 'pending' ? (
               <View style={[styles.modalActionsBottom, { borderTopColor: theme.border }]}>
-                <Button title={lang === 'en' ? 'Request Revision' : 'Minta Revisi'} variant="outline" size="medium" icon="create-outline" onPress={() => handleRequestRevision(showDetail)} style={{ flex: 1 }} textStyle={{ color: Colors.warning }} />
-                <Button title={lang === 'en' ? 'Approve' : 'Setujui'} variant="success" size="medium" icon="checkmark-outline" onPress={() => handleApprove(showDetail)} style={{ flex: 1 }} />
+                <Button
+                  title={lang === 'en' ? 'Request Revision' : 'Minta Revisi'}
+                  variant="outline"
+                  size="medium"
+                  icon="create-outline"
+                  onPress={() => handleRequestRevision(showDetail)}
+                  style={{ flex: 1 }}
+                  textStyle={{ color: Colors.warning }}
+                  disabled={submitting}
+                />
+                <Button
+                  title={lang === 'en' ? 'Approve' : 'Setujui'}
+                  variant="success"
+                  size="medium"
+                  icon="checkmark-outline"
+                  onPress={() => handleApprove(showDetail)}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                />
               </View>
             ) : (
-              <Button title={lang === 'en' ? 'Close' : 'Tutup'} variant="outline" size="medium" fullWidth onPress={() => setShowDetail(null)} style={{ marginTop: 12 }} />
+              <Button
+                title={lang === 'en' ? 'Close' : 'Tutup'}
+                variant="outline"
+                size="medium"
+                fullWidth
+                onPress={() => setShowDetail(null)}
+                style={{ marginTop: 12 }}
+              />
             )}
           </View>
         </View>
       </Modal>
 
       {/* Revision Modal */}
-      <Modal visible={showRevisionModal} transparent animationType="slide">
+      <Modal
+        visible={showRevisionModal}
+        transparent
+        animationType="slide"
+        onRequestClose={() => {
+          if (!submitting) {
+            setShowRevisionModal(false);
+            setRevisionTarget(null);
+          }
+        }}
+      >
         <View style={styles.modalOverlay}>
           <View style={[styles.modalCard, { backgroundColor: theme.bgCard }]}>
-            <Text style={[styles.modalTitle, { color: theme.text }]}>{lang === 'en' ? 'Request Revision' : 'Minta Revisi'}</Text>
+            <Text style={[styles.modalTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Request Revision' : 'Minta Revisi'}
+            </Text>
             <Text style={[styles.modalDesc, { color: theme.textMuted }]}>
               {lang === 'en' ? 'Report from' : 'Laporan dari'}: {getField(revisionTarget, 'nama') || '-'}
             </Text>
             <TextInput
               style={[styles.modalInput, { backgroundColor: theme.bgInput, color: theme.text, borderColor: theme.border }]}
-              multiline numberOfLines={4} textAlignVertical="top"
-              placeholder={lang === 'en' ? 'Write revision notes for the member...' : 'Tuliskan catatan revisi untuk anggota...'}
+              multiline
+              numberOfLines={4}
+              textAlignVertical="top"
+              placeholder={
+                lang === 'en'
+                  ? 'Write revision notes for the member...'
+                  : 'Tuliskan catatan revisi untuk anggota...'
+              }
               placeholderTextColor={theme.textMuted}
-              value={catatan} onChangeText={setCatatan}
+              value={catatan}
+              onChangeText={setCatatan}
+              editable={!submitting}
             />
             <View style={styles.modalActionsRow}>
-              <Button title={lang === 'en' ? 'Cancel' : 'Batal'} variant="outline" size="medium" onPress={() => { setShowRevisionModal(false); setRevisionTarget(null); }} style={{ flex: 1 }} />
-              <Button title={lang === 'en' ? 'Send Revision' : 'Kirim Revisi'} variant="warning" size="medium" onPress={submitRevision} style={{ flex: 1 }} />
+              <Button
+                title={lang === 'en' ? 'Cancel' : 'Batal'}
+                variant="outline"
+                size="medium"
+                onPress={() => {
+                  setShowRevisionModal(false);
+                  setRevisionTarget(null);
+                }}
+                style={{ flex: 1 }}
+                disabled={submitting}
+              />
+              <Button
+                title={
+                  submitting
+                    ? lang === 'en'
+                      ? 'Sending...'
+                      : 'Mengirim...'
+                    : lang === 'en'
+                    ? 'Send Revision'
+                    : 'Kirim Revisi'
+                }
+                variant="warning"
+                size="medium"
+                onPress={submitRevision}
+                style={{ flex: 1 }}
+                disabled={submitting}
+              />
             </View>
           </View>
         </View>
@@ -561,7 +841,14 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, borderBottomWidth: 1 },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 50,
+    paddingBottom: 12,
+    paddingHorizontal: Spacing.base,
+    borderBottomWidth: 1,
+  },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, flex: 1, textAlign: 'center' },
   refreshHeaderBtn: { width: 40, height: 40, alignItems: 'center', justifyContent: 'center' },
