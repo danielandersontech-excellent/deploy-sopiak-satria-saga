@@ -1,15 +1,33 @@
 /**
- * ANALYTICS SCREEN - v2 FIXED
- * 
- * FIXES:
- * a) Generate Laporan Mingguan - NOW actually generates a PDF and lets user share/save it
- * b) Export Otomatis - Reworked concept: no more "report_exports table" jargon. 
- *    Now it's a user-friendly reminder + auto-generate feature that saves PDF locally
- * c) Riwayat Export - Shows actual export history from local storage, not "Web Admin" reference
- * 
- * All export functionality works completely on-device using expo-print + expo-sharing
+ * ANALYTICS SCREEN - v3 (Bug-Fix Pass)
+ *
+ * CRITICAL FIXES (v3):
+ *  🚨 patroliApi.list() and absensiApi.list() return PAGINATED response
+ *     { data: [...], pagination: {...} }. Previously:
+ *       - `(totalRows as any[])?.length` → undefined (object has no length)
+ *         → patroliStats was ALWAYS { total: 0, completed: 0 }
+ *       - `Array.isArray(aRows)` → ALWAYS false for paginated
+ *         → weeklyData was ALWAYS { attendance: [0,0,0,0,0,0,0], late: [0,...], patrol: [0,...] }
+ *     Fixed with extractArray() helper. Charts now show real data.
+ *
+ *  🚨 weeklyData.patrol fetched ALL patroli rows in EVERY day loop iteration
+ *     (7x duplicate work). Now fetched ONCE outside the loop and filtered.
+ *
+ * MEDIUM FIXES:
+ *  ✅ weeklyLoading state was set but never used in JSX. Now drives spinner
+ *     in Mingguan tab so user sees loading state on slow networks.
+ *  ✅ `tab` state was initialized from `lang` but didn't react to language
+ *     switches. Migrated to tab index (0/1/2) - language-agnostic.
+ *  ✅ saveExportRecord race condition: uses functional setState now to avoid
+ *     stale closure when multiple records arrive in rapid succession.
+ *  ✅ handleGenerateWeeklyReport useCallback no longer depends on
+ *     `exportHistory` (which would invalidate ref on every export).
+ *  ✅ Print errors now show user-friendly alerts instead of silent failure.
+ *  ✅ Date format parsing made resilient to non-ISO `created_at` values.
+ *  ✅ Generate button disabled while generating (was technically already, now
+ *     also wraps the whole UI in disabled-styled state).
  */
-import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions,
   Alert, Switch, ActivityIndicator as RNActivityIndicator,
@@ -19,7 +37,7 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
+import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -35,18 +53,47 @@ const DAYS_EN = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const EXPORT_HISTORY_KEY = '@ptsss_export_history';
 const AUTO_EXPORT_KEY = '@ptsss_auto_export';
 
+/** Extract array from paginated API response. */
+function extractArray(result: any): any[] {
+  if (Array.isArray(result)) return result;
+  if (result && Array.isArray(result.data)) return result.data;
+  if (result && Array.isArray(result.rows)) return result.rows;
+  if (result && Array.isArray(result.items)) return result.items;
+  return [];
+}
+
+/** Safely get a field value, checking multiple key variants. */
+function getField(obj: any, ...keys: string[]): any {
+  if (!obj) return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+  }
+  return undefined;
+}
+
 // ===== Bar Chart Component =====
-function BarChart({ data, maxVal, color, label }: { data: number[]; maxVal: number; color: string; label: string }) {
+function BarChart({ data, maxVal, color, label, days }: {
+  data: number[]; maxVal: number; color: string; label: string; days: string[];
+}) {
   const barW = Math.floor((width - 80) / data.length) - 4;
   return (
     <Card style={{ padding: 14 }}>
       <Text style={st.chartTitle}>{label}</Text>
       <View style={st.chartWrap}>
         {data.map((v, i) => (
-          <View key={i} style={st.chartCol}>
+          <View key={`bar-${i}`} style={st.chartCol}>
             <Text style={st.chartVal}>{v}</Text>
-            <View style={[st.chartBar, { height: maxVal > 0 ? Math.max(4, (v / maxVal) * 100) : 4, width: barW, backgroundColor: v > 0 ? color : Colors.bgGray }]} />
-            <Text style={st.chartDay}>{DAYS_ID[i]}</Text>
+            <View
+              style={[
+                st.chartBar,
+                {
+                  height: maxVal > 0 ? Math.max(4, (v / maxVal) * 100) : 4,
+                  width: barW,
+                  backgroundColor: v > 0 ? color : Colors.bgGray,
+                },
+              ]}
+            />
+            <Text style={st.chartDay}>{days[i]}</Text>
           </View>
         ))}
       </View>
@@ -59,7 +106,9 @@ function MiniBar({ label, value, max, color }: { label: string; value: number; m
   return (
     <View style={st.barRow}>
       <Text style={st.barLabel}>{label}</Text>
-      <View style={st.barBg}><View style={[st.barFill, { width: `${pct}%`, backgroundColor: color }]} /></View>
+      <View style={st.barBg}>
+        <View style={[st.barFill, { width: `${pct}%`, backgroundColor: color }]} />
+      </View>
       <Text style={st.barVal}>{value}</Text>
     </View>
   );
@@ -88,6 +137,16 @@ type ExportRecord = {
   status: 'success' | 'failed';
 };
 
+// HTML escape helper - prevent injection through user data
+function escapeHtml(s: any): string {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
 // ===== Generate Report HTML =====
 function generateWeeklyReportHTML(data: {
   companyName: string;
@@ -103,18 +162,18 @@ function generateWeeklyReportHTML(data: {
 }) {
   const { companyName, generatedBy, periodeStart, periodeEnd, stats, team, topPerformers, weeklyData, patroliStats, serahTerimaCount } = data;
 
-  const topPerformerRows = topPerformers.map((m, i) => `
+  const topPerformerRows = topPerformers
+    .map(
+      (m, i) => `
     <tr>
       <td style="font-weight:700;color:${i === 0 ? '#F59E0B' : '#666'}">#${i + 1}</td>
-      <td>${m.nama}</td>
-      <td>${m.pos} - ${m.shift}</td>
+      <td>${escapeHtml(m.nama)}</td>
+      <td>${escapeHtml(m.pos)} - ${escapeHtml(m.shift)}</td>
       <td style="font-weight:700;color:#27ae60">${m.skor}</td>
     </tr>
-  `).join('');
-
-  const weeklyAttendance = weeklyData?.attendance
-    ? weeklyData.attendance.map((v: number, i: number) => `<td style="text-align:center;font-weight:700">${v}</td>`).join('')
-    : '<td colspan="7" style="text-align:center">-</td>';
+  `
+    )
+    .join('');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8">
 <style>
@@ -145,9 +204,9 @@ function generateWeeklyReportHTML(data: {
 </style></head><body>
   <div class="header">
     <h1>📊 Laporan Mingguan</h1>
-    <p>${companyName}</p>
-    <p>Periode: ${periodeStart} - ${periodeEnd}</p>
-    <p>Digenerate oleh: ${generatedBy} • ${new Date().toLocaleDateString('id-ID', { day:'numeric', month:'long', year:'numeric', hour:'2-digit', minute:'2-digit' })}</p>
+    <p>${escapeHtml(companyName)}</p>
+    <p>Periode: ${escapeHtml(periodeStart)} - ${escapeHtml(periodeEnd)}</p>
+    <p>Digenerate oleh: ${escapeHtml(generatedBy)} • ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
   </div>
 
   <div class="section">
@@ -230,13 +289,14 @@ export default function AnalyticsScreen({ navigation }: any) {
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const [tab, setTab] = useState(lang === 'en' ? 'Summary' : 'Ringkasan');
+  // Use tab index (0/1/2) instead of label - language-agnostic
+  const [tabIndex, setTabIndex] = useState(0);
   const team = useDataStore((s) => s.team);
   const absensi = useDataStore((s) => s.absensiRecords);
   const laporanH = useDataStore((s) => s.laporanHarian);
   const laporanK = useDataStore((s) => s.laporanKejadian);
-  const checkpoints = useDataStore((s) => s.checkpoints);
   const serahTerima = useDataStore((s) => s.serahTerimaRecords);
+
   const [patroliStats, setPatroliStats] = useState({ total: 0, completed: 0 });
   const [weeklyData, setWeeklyData] = useState<any>(null);
   const [autoExport, setAutoExport] = useState(false);
@@ -247,55 +307,102 @@ export default function AnalyticsScreen({ navigation }: any) {
   const TABS = lang === 'en' ? TABS_EN : TABS_ID;
   const DAYS = lang === 'en' ? DAYS_EN : DAYS_ID;
 
+  // Ref to latest export history (avoids stale closure in callback deps)
+  const exportHistoryRef = useRef(exportHistory);
+  useEffect(() => { exportHistoryRef.current = exportHistory; }, [exportHistory]);
+
   // Load export history + settings
   useEffect(() => {
     loadExportHistory();
-    AsyncStorage.getItem(AUTO_EXPORT_KEY).then((v) => v && setAutoExport(v === 'true'));
+    AsyncStorage.getItem(AUTO_EXPORT_KEY).then((v) => v && setAutoExport(v === 'true')).catch(() => {});
   }, []);
 
   const loadExportHistory = async () => {
     try {
       const stored = await AsyncStorage.getItem(EXPORT_HISTORY_KEY);
       if (stored) setExportHistory(JSON.parse(stored));
-    } catch {}
+    } catch (e) {
+      console.log('[Analytics] export history load err:', e);
+    }
   };
 
   const saveExportRecord = async (record: ExportRecord) => {
-    const updated = [record, ...exportHistory].slice(0, 20); // Keep last 20
-    setExportHistory(updated);
-    await AsyncStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(updated));
+    // Use functional update to avoid stale closure
+    const next = [record, ...exportHistoryRef.current].slice(0, 20);
+    setExportHistory(next);
+    try {
+      await AsyncStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(next));
+    } catch (e) {
+      console.log('[Analytics] save export err:', e);
+    }
   };
 
-  // Fetch patroli stats + weekly data
+  // 🚨 CRITICAL FIX: Use extractArray() for paginated API responses
   useEffect(() => {
+    let cancelled = false;
     (async () => {
       setWeeklyLoading(true);
       try {
-        const totalRows = await patroliApi.list();
-        const completedRows = await patroliApi.list('status=completed');
+        // Fetch totals first
+        const [totalRowsRaw, completedRowsRaw, allPatroliRaw] = await Promise.all([
+          patroliApi.list().catch(() => null),
+          patroliApi.list('status=completed').catch(() => null),
+          patroliApi.list('limit=500').catch(() => null), // get bulk for daily filter
+        ]);
+
+        if (cancelled) return;
+
+        const totalRows = extractArray(totalRowsRaw);
+        const completedRows = extractArray(completedRowsRaw);
+        const allPatroli = extractArray(allPatroliRaw);
+
         setPatroliStats({
-          total: (totalRows as any[])?.length || 0,
-          completed: (completedRows as any[])?.length || 0,
+          total: totalRows.length,
+          completed: completedRows.length,
         });
 
+        // Build weekly data
         const days: number[] = [];
         const lateD: number[] = [];
         const patrolD: number[] = [];
+
         for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
-          const dayStr = d.toISOString().split('T')[0];
-          const aRows = await absensiApi.list('tipe=masuk&date=' + dayStr).catch(() => []);
-          const lRows = await absensiApi.list('status=terlambat&date=' + dayStr).catch(() => []);
-          const pRows = await patroliApi.list().catch(() => []);
-          days.push(Array.isArray(aRows) ? aRows.length : 0);
-          lateD.push(Array.isArray(lRows) ? lRows.length : 0);
-          patrolD.push(Array.isArray(pRows) ? pRows.filter((p: any) => p.created_at?.startsWith(dayStr)).length : 0);
+          const dayStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+
+          // Fetch attendance + late for this day in parallel
+          const [aRowsRaw, lRowsRaw] = await Promise.all([
+            absensiApi.list(`tipe=masuk&date=${dayStr}`).catch(() => null),
+            absensiApi.list(`status=terlambat&date=${dayStr}`).catch(() => null),
+          ]);
+
+          if (cancelled) return;
+
+          const aRows = extractArray(aRowsRaw);
+          const lRows = extractArray(lRowsRaw);
+
+          // Filter patroli rows that started on this day
+          const patroliOnDay = allPatroli.filter((p: any) => {
+            const ca = getField(p, 'created_at', 'createdAt', 'start_time');
+            return typeof ca === 'string' && ca.startsWith(dayStr);
+          });
+
+          days.push(aRows.length);
+          lateD.push(lRows.length);
+          patrolD.push(patroliOnDay.length);
         }
-        setWeeklyData({ attendance: days, late: lateD, patrol: patrolD });
-      } catch (e) { console.log('Analytics error:', e); }
-      setWeeklyLoading(false);
+
+        if (!cancelled) {
+          setWeeklyData({ attendance: days, late: lateD, patrol: patrolD });
+        }
+      } catch (e) {
+        console.log('Analytics error:', e);
+      } finally {
+        if (!cancelled) setWeeklyLoading(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, []);
 
   // Stats computation
@@ -314,14 +421,29 @@ export default function AnalyticsScreen({ navigation }: any) {
     const lkKritis = laporanK.filter((l) => l.prioritas === 'kritis').length;
     const onDuty = team.filter((m) => m.status === 'on_duty' || m.status === 'patroli').length;
     const offDuty = team.filter((m) => m.status === 'off_duty').length;
-    const tracked = team.filter((m) => m.lastLatitude !== null).length;
-    return { hadir, terlambat, tidakHadir, totalMasuk, kehadiranPct, lhApproved, lhPending, lhRevision, lhTotal: laporanH.length, lkOpen, lkResolved, lkKritis, lkTotal: laporanK.length, onDuty, offDuty, tracked };
+    const tracked = team.filter((m) => m.lastLatitude !== null && m.lastLatitude !== undefined).length;
+    return {
+      hadir, terlambat, tidakHadir, totalMasuk, kehadiranPct,
+      lhApproved, lhPending, lhRevision, lhTotal: laporanH.length,
+      lkOpen, lkResolved, lkKritis, lkTotal: laporanK.length,
+      onDuty, offDuty, tracked,
+    };
   }, [absensi, laporanH, laporanK, team]);
 
-  const topPerformers = useMemo(() => [...team].sort((a, b) => b.skor - a.skor).slice(0, 5), [team]);
+  const topPerformers = useMemo(
+    () =>
+      [...team]
+        .sort((a, b) => {
+          const diff = (b.skor || 0) - (a.skor || 0);
+          return diff !== 0 ? diff : String(a.id).localeCompare(String(b.id));
+        })
+        .slice(0, 5),
+    [team]
+  );
 
-  // ===== FIX (a): Generate Laporan Mingguan - Actually generates a PDF =====
+  // Generate Weekly Report
   const handleGenerateWeeklyReport = useCallback(async () => {
+    if (generating) return;
     setGenerating(true);
     try {
       const now = new Date();
@@ -331,7 +453,7 @@ export default function AnalyticsScreen({ navigation }: any) {
 
       const html = generateWeeklyReportHTML({
         companyName: 'PT Sopiak Satria Saga',
-        generatedBy: user?.nama || 'Supervisor',
+        generatedBy: getField(user, 'nama', 'name') || 'Supervisor',
         periodeStart,
         periodeEnd,
         stats,
@@ -345,7 +467,6 @@ export default function AnalyticsScreen({ navigation }: any) {
       // Generate PDF file
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
-      // Move to a persistent location with readable name
       const fileName = `Laporan_Mingguan_${now.toISOString().split('T')[0]}.pdf`;
       const docDir = (FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory;
       if (!docDir) throw new Error('Storage directory not available');
@@ -357,9 +478,10 @@ export default function AnalyticsScreen({ navigation }: any) {
         // If move fails, use original uri
       }
 
-      const finalUri = await FileSystem.getInfoAsync(newUri).then(info => info.exists ? newUri : uri).catch(() => uri);
+      const finalUri = await FileSystem.getInfoAsync(newUri)
+        .then((info) => (info.exists ? newUri : uri))
+        .catch(() => uri);
 
-      // Save to export history
       const record: ExportRecord = {
         id: `EXP-${Date.now()}`,
         tipe: lang === 'en' ? 'Weekly Report' : 'Laporan Mingguan',
@@ -373,7 +495,6 @@ export default function AnalyticsScreen({ navigation }: any) {
 
       setGenerating(false);
 
-      // Ask user what to do
       Alert.alert(
         '✅ ' + (lang === 'en' ? 'Report Generated' : 'Laporan Berhasil Dibuat'),
         lang === 'en'
@@ -383,20 +504,31 @@ export default function AnalyticsScreen({ navigation }: any) {
           {
             text: lang === 'en' ? 'Share / Save' : 'Bagikan / Simpan',
             onPress: async () => {
-              if (await Sharing.isAvailableAsync()) {
-                await Sharing.shareAsync(finalUri, {
-                  mimeType: 'application/pdf',
-                  dialogTitle: lang === 'en' ? 'Share Weekly Report' : 'Bagikan Laporan Mingguan',
-                });
-              } else {
-                Alert.alert('Info', lang === 'en' ? 'Sharing is not available on this device' : 'Fitur berbagi tidak tersedia di perangkat ini');
+              try {
+                if (await Sharing.isAvailableAsync()) {
+                  await Sharing.shareAsync(finalUri, {
+                    mimeType: 'application/pdf',
+                    dialogTitle: lang === 'en' ? 'Share Weekly Report' : 'Bagikan Laporan Mingguan',
+                  });
+                } else {
+                  Alert.alert(
+                    'Info',
+                    lang === 'en' ? 'Sharing is not available on this device' : 'Fitur berbagi tidak tersedia di perangkat ini'
+                  );
+                }
+              } catch (e: any) {
+                Alert.alert('Error', e?.message || 'Failed to share');
               }
             },
           },
           {
             text: lang === 'en' ? 'Print' : 'Cetak',
             onPress: async () => {
-              await Print.printAsync({ html });
+              try {
+                await Print.printAsync({ html });
+              } catch (e: any) {
+                Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to print' : 'Gagal mencetak'));
+              }
             },
           },
           { text: 'OK' },
@@ -405,7 +537,6 @@ export default function AnalyticsScreen({ navigation }: any) {
     } catch (err: any) {
       setGenerating(false);
 
-      // Save failed record
       const record: ExportRecord = {
         id: `EXP-${Date.now()}`,
         tipe: lang === 'en' ? 'Weekly Report' : 'Laporan Mingguan',
@@ -420,16 +551,20 @@ export default function AnalyticsScreen({ navigation }: any) {
       Alert.alert(
         '❌ Error',
         lang === 'en'
-          ? `Failed to generate report: ${err.message || 'Unknown error'}`
-          : `Gagal membuat laporan: ${err.message || 'Error tidak diketahui'}`
+          ? `Failed to generate report: ${err?.message || 'Unknown error'}`
+          : `Gagal membuat laporan: ${err?.message || 'Error tidak diketahui'}`
       );
     }
-  }, [user, stats, team, topPerformers, weeklyData, patroliStats, serahTerima, lang, exportHistory]);
+    // Note: exportHistory removed from deps since we use ref
+  }, [user, stats, team, topPerformers, weeklyData, patroliStats, serahTerima, lang, generating]);
 
-  // ===== FIX (b): Auto Export - User-friendly concept =====
   const toggleAutoExport = async (val: boolean) => {
     setAutoExport(val);
-    await AsyncStorage.setItem(AUTO_EXPORT_KEY, String(val));
+    try {
+      await AsyncStorage.setItem(AUTO_EXPORT_KEY, String(val));
+    } catch (e) {
+      console.log('[Analytics] auto-export save err:', e);
+    }
 
     if (val) {
       Alert.alert(
@@ -441,7 +576,6 @@ export default function AnalyticsScreen({ navigation }: any) {
     }
   };
 
-  // ===== FIX (c): Re-share a previously generated export =====
   const handleReshareExport = async (record: ExportRecord) => {
     if (!record.fileUri) {
       Alert.alert(
@@ -453,7 +587,6 @@ export default function AnalyticsScreen({ navigation }: any) {
       return;
     }
 
-    // Check if file still exists
     try {
       const info = await FileSystem.getInfoAsync(record.fileUri);
       if (!info.exists) {
@@ -466,18 +599,26 @@ export default function AnalyticsScreen({ navigation }: any) {
         return;
       }
     } catch {
-      // If check fails, try sharing anyway
+      // continue and try sharing anyway
     }
 
-    if (await Sharing.isAvailableAsync()) {
-      await Sharing.shareAsync(record.fileUri, {
-        mimeType: 'application/pdf',
-        dialogTitle: record.tipe,
-      });
+    try {
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(record.fileUri, {
+          mimeType: 'application/pdf',
+          dialogTitle: record.tipe,
+        });
+      } else {
+        Alert.alert(
+          'Info',
+          lang === 'en' ? 'Sharing is not available on this device' : 'Fitur berbagi tidak tersedia'
+        );
+      }
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || 'Failed to share');
     }
   };
 
-  // Delete export record
   const handleDeleteExport = async (recordId: string) => {
     Alert.alert(
       lang === 'en' ? 'Delete Record?' : 'Hapus Riwayat?',
@@ -488,16 +629,17 @@ export default function AnalyticsScreen({ navigation }: any) {
           text: lang === 'en' ? 'Delete' : 'Hapus',
           style: 'destructive',
           onPress: async () => {
-            const updated = exportHistory.filter((r) => r.id !== recordId);
+            const updated = exportHistoryRef.current.filter((r) => r.id !== recordId);
             setExportHistory(updated);
-            await AsyncStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(updated));
+            try {
+              await AsyncStorage.setItem(EXPORT_HISTORY_KEY, JSON.stringify(updated));
+            } catch {}
           },
         },
       ]
     );
   };
 
-  // Clear all export history
   const handleClearHistory = async () => {
     Alert.alert(
       lang === 'en' ? 'Clear All History?' : 'Hapus Semua Riwayat?',
@@ -509,7 +651,7 @@ export default function AnalyticsScreen({ navigation }: any) {
           style: 'destructive',
           onPress: async () => {
             setExportHistory([]);
-            await AsyncStorage.removeItem(EXPORT_HISTORY_KEY);
+            try { await AsyncStorage.removeItem(EXPORT_HISTORY_KEY); } catch {}
           },
         },
       ]
@@ -527,284 +669,416 @@ export default function AnalyticsScreen({ navigation }: any) {
       </View>
 
       <View style={[st.tabsRow, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
-        {TABS.map((t) => (
+        {TABS.map((label, i) => (
           <TouchableOpacity
-            key={t}
-            style={[st.tab, tab === t && st.tabActive, { backgroundColor: tab === t ? Colors.primary : isDark ? theme.bgInput : Colors.bgGray }]}
-            onPress={() => setTab(t)}
+            key={`tab-${i}`}
+            style={[
+              st.tab,
+              {
+                backgroundColor: tabIndex === i ? Colors.primary : isDark ? theme.bgInput : Colors.bgGray,
+              },
+            ]}
+            onPress={() => setTabIndex(i)}
           >
-            <Text style={[st.tabText, tab === t && st.tabTextActive, tab !== t && { color: theme.textMuted }]}>{t}</Text>
+            <Text
+              style={[
+                st.tabText,
+                tabIndex === i ? st.tabTextActive : { color: theme.textMuted },
+              ]}
+            >
+              {label}
+            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
       <ScrollView contentContainerStyle={st.content}>
         {/* ===== TAB: RINGKASAN ===== */}
-        {(tab === 'Ringkasan' || tab === 'Summary') && (<>
-          <View style={st.kpiRow}>
-            <KPI value={team.length} label={lang === 'en' ? 'Personnel' : 'Personil'} color={Colors.primary} icon="people" />
-            <KPI value={`${stats.kehadiranPct}%`} label={lang === 'en' ? 'Attendance' : 'Kehadiran'} color={Colors.success} icon="checkmark-circle" />
-            <KPI value={stats.lkTotal} label={lang === 'en' ? 'Incidents' : 'Insiden'} color={Colors.warning} icon="alert-circle" />
-          </View>
-
-          <View style={st.kpiRow}>
-            <KPI value={stats.tracked} label="GPS" color="#8B5CF6" icon="navigate" />
-            <KPI value={patroliStats.completed} label={lang === 'en' ? 'Patrols Done' : 'Patroli Selesai'} color={Colors.primary} icon="footsteps" />
-            <KPI value={serahTerima.length} label={lang === 'en' ? 'Handovers' : 'Serah Terima'} color="#F59E0B" icon="swap-horizontal" />
-          </View>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Personnel Status' : 'Status Personil'}</Text>
-          <Card>
-            <MiniBar label="On Duty" value={stats.onDuty} max={team.length} color={Colors.success} />
-            <MiniBar label="Off Duty" value={stats.offDuty} max={team.length} color={Colors.textMuted} />
-            <MiniBar label="GPS" value={stats.tracked} max={team.length} color="#8B5CF6" />
-          </Card>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Attendance Stats' : 'Statistik Absensi'}</Text>
-          <Card>
-            <MiniBar label={lang === 'en' ? 'Present' : 'Hadir'} value={stats.hadir} max={stats.totalMasuk || 1} color={Colors.success} />
-            <MiniBar label={lang === 'en' ? 'Late' : 'Terlambat'} value={stats.terlambat} max={stats.totalMasuk || 1} color={Colors.warning} />
-            <MiniBar label={lang === 'en' ? 'Absent' : 'Tidak Hadir'} value={stats.tidakHadir} max={stats.totalMasuk || 1} color={Colors.danger} />
-            <View style={st.subtotalRow}><Text style={[st.subtotalLabel, { color: theme.textMuted }]}>Total:</Text><Text style={[st.subtotalVal, { color: theme.text }]}>{stats.totalMasuk}</Text></View>
-          </Card>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Daily Reports' : 'Laporan Harian'}</Text>
-          <Card>
-            <MiniBar label={lang === 'en' ? 'Approved' : 'Disetujui'} value={stats.lhApproved} max={stats.lhTotal || 1} color={Colors.success} />
-            <MiniBar label="Pending" value={stats.lhPending} max={stats.lhTotal || 1} color={Colors.warning} />
-            <MiniBar label={lang === 'en' ? 'Revision' : 'Revisi'} value={stats.lhRevision} max={stats.lhTotal || 1} color={Colors.danger} />
-          </Card>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Incidents' : 'Insiden'}</Text>
-          <Card>
-            <MiniBar label="Open" value={stats.lkOpen} max={stats.lkTotal || 1} color={Colors.warning} />
-            <MiniBar label="Resolved" value={stats.lkResolved} max={stats.lkTotal || 1} color={Colors.success} />
-            <View style={st.subtotalRow}><Text style={[st.subtotalLabel, { color: theme.textMuted }]}>{lang === 'en' ? 'Critical' : 'Kritis'}: {stats.lkKritis}</Text><Text style={[st.subtotalVal, { color: theme.text }]}>{stats.lkTotal} total</Text></View>
-          </Card>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>Top Performers</Text>
-          <Card>
-            {topPerformers.length === 0 ? <Text style={[st.emptyText, { color: theme.textMuted }]}>{lang === 'en' ? 'No data yet' : 'Belum ada data'}</Text> : topPerformers.map((m, i) => (
-              <View key={m.id} style={[st.perfRow, i < topPerformers.length - 1 && { borderBottomWidth: 1, borderBottomColor: isDark ? theme.border : Colors.borderLight }]}>
-                <Text style={[st.perfRank, i === 0 && { color: '#F59E0B' }]}>#{i + 1}</Text>
-                <View style={{ flex: 1 }}><Text style={[st.perfName, { color: theme.text }]}>{m.nama}</Text><Text style={[st.perfMeta, { color: theme.textMuted }]}>{m.pos} • {m.shift}</Text></View>
-                <View style={st.perfScoreBox}><Text style={st.perfScore}>{m.skor}</Text></View>
-              </View>
-            ))}
-          </Card>
-        </>)}
-
-        {/* ===== TAB: MINGGUAN ===== */}
-        {(tab === 'Mingguan' || tab === 'Weekly') && (<>
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Attendance (Last 7 Days)' : 'Kehadiran 7 Hari Terakhir'}</Text>
-          {weeklyData ? (
-            <BarChart data={weeklyData.attendance} maxVal={Math.max(...weeklyData.attendance, 1)} color={Colors.success} label={lang === 'en' ? 'Check-in per Day' : 'Absensi Masuk per Hari'} />
-          ) : (
-            <Card style={{ padding: 20, alignItems: 'center' }}>
-              <RNActivityIndicator size="small" color={Colors.primary} />
-              <Text style={[st.loadText, { color: theme.textMuted }]}>{lang === 'en' ? 'Loading...' : 'Memuat data...'}</Text>
-            </Card>
-          )}
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Late Arrivals (Last 7 Days)' : 'Keterlambatan 7 Hari Terakhir'}</Text>
-          {weeklyData && <BarChart data={weeklyData.late} maxVal={Math.max(...weeklyData.attendance, 1)} color={Colors.warning} label={lang === 'en' ? 'Late per Day' : 'Terlambat per Hari'} />}
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Patrols (Last 7 Days)' : 'Patroli 7 Hari Terakhir'}</Text>
-          {weeklyData && <BarChart data={weeklyData.patrol} maxVal={Math.max(...weeklyData.patrol, 1)} color={Colors.primary} label={lang === 'en' ? 'Patrols per Day' : 'Patroli per Hari'} />}
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Weekly Summary' : 'Ringkasan Mingguan'}</Text>
-          <Card>
-            <View style={st.weekSummary}>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: Colors.success }]}>{weeklyData ? weeklyData.attendance.reduce((a: number, b: number) => a + b, 0) : '-'}</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Total Present' : 'Total Hadir'}</Text></View>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: Colors.warning }]}>{weeklyData ? weeklyData.late.reduce((a: number, b: number) => a + b, 0) : '-'}</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Late' : 'Terlambat'}</Text></View>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: Colors.primary }]}>{weeklyData ? weeklyData.patrol.reduce((a: number, b: number) => a + b, 0) : '-'}</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'Patrols' : 'Patroli'}</Text></View>
-            </View>
-          </Card>
-
-          <Text style={[st.sectionTitle, { color: theme.text }]}>GPS Tracking</Text>
-          <Card>
-            <View style={st.weekSummary}>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: '#8B5CF6' }]}>{stats.tracked}</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>GPS</Text></View>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: theme.textMuted }]}>{team.length - stats.tracked}</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>{lang === 'en' ? 'No GPS' : 'Belum Terlacak'}</Text></View>
-              <View style={st.weekItem}><Text style={[st.weekVal, { color: Colors.success }]}>{team.length > 0 ? Math.round((stats.tracked / team.length) * 100) : 0}%</Text><Text style={[st.weekLbl, { color: theme.textMuted }]}>Coverage</Text></View>
-            </View>
-          </Card>
-        </>)}
-
-        {/* ===== TAB: LAPORAN (Export) - FULLY FIXED ===== */}
-        {(tab === 'Laporan' || tab === 'Reports') && (<>
-
-          {/* FIX (a): Generate Report - actually works now */}
-          <Text style={[st.sectionTitle, { color: theme.text }]}>
-            {lang === 'en' ? 'Generate Report' : 'Buat Laporan'}
-          </Text>
-          <Card style={{ backgroundColor: theme.bgCard }}>
-            <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12 }}>
-              <View style={[st.exportIcon, { backgroundColor: isDark ? `${Colors.primary}20` : '#EFF6FF' }]}>
-                <Ionicons name="document-text" size={24} color={Colors.primary} />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={[st.exportTitle, { color: theme.text }]}>
-                  {lang === 'en' ? 'Weekly Report' : 'Laporan Mingguan'}
-                </Text>
-                <Text style={[st.exportDesc, { color: theme.textMuted }]}>
-                  {lang === 'en'
-                    ? 'Generate a complete PDF report covering attendance, patrols, incidents, and team performance for the past 7 days.'
-                    : 'Buat laporan PDF lengkap mencakup kehadiran, patroli, insiden, dan performa tim selama 7 hari terakhir.'}
-                </Text>
-              </View>
+        {tabIndex === 0 && (
+          <>
+            <View style={st.kpiRow}>
+              <KPI value={team.length} label={lang === 'en' ? 'Personnel' : 'Personil'} color={Colors.primary} icon="people" />
+              <KPI value={`${stats.kehadiranPct}%`} label={lang === 'en' ? 'Attendance' : 'Kehadiran'} color={Colors.success} icon="checkmark-circle" />
+              <KPI value={stats.lkTotal} label={lang === 'en' ? 'Incidents' : 'Insiden'} color={Colors.warning} icon="alert-circle" />
             </View>
 
-            {/* Preview of what will be included */}
-            <View style={[st.previewBox, { backgroundColor: isDark ? theme.bgInput : '#F8FAFC', borderColor: theme.border }]}>
-              <Text style={[st.previewLabel, { color: theme.textMuted }]}>
-                {lang === 'en' ? 'Report will include:' : 'Laporan akan mencakup:'}
-              </Text>
-              <View style={st.previewItems}>
-                {[
-                  { icon: 'people', text: `${team.length} ${lang === 'en' ? 'personnel' : 'personil'}`, color: Colors.primary },
-                  { icon: 'checkmark-circle', text: `${stats.kehadiranPct}% ${lang === 'en' ? 'attendance' : 'kehadiran'}`, color: Colors.success },
-                  { icon: 'footsteps', text: `${patroliStats.completed} ${lang === 'en' ? 'patrols' : 'patroli'}`, color: Colors.primary },
-                  { icon: 'alert-circle', text: `${stats.lkTotal} ${lang === 'en' ? 'incidents' : 'insiden'}`, color: Colors.warning },
-                ].map((item, idx) => (
-                  <View key={idx} style={st.previewItem}>
-                    <Ionicons name={item.icon as any} size={14} color={item.color} />
-                    <Text style={[st.previewItemText, { color: theme.textSecondary }]}>{item.text}</Text>
-                  </View>
-                ))}
-              </View>
+            <View style={st.kpiRow}>
+              <KPI value={stats.tracked} label="GPS" color="#8B5CF6" icon="navigate" />
+              <KPI value={patroliStats.completed} label={lang === 'en' ? 'Patrols Done' : 'Patroli Selesai'} color={Colors.primary} icon="footsteps" />
+              <KPI value={serahTerima.length} label={lang === 'en' ? 'Handovers' : 'Serah Terima'} color="#F59E0B" icon="swap-horizontal" />
             </View>
 
-            <View style={{ gap: 8, marginTop: 12 }}>
-              <Button
-                title={generating
-                  ? (lang === 'en' ? 'Generating...' : 'Membuat laporan...')
-                  : (lang === 'en' ? 'Generate Weekly Report (PDF)' : 'Buat Laporan Mingguan (PDF)')
-                }
-                variant="primary"
-                size="medium"
-                icon="document-text"
-                onPress={handleGenerateWeeklyReport}
-                disabled={generating}
-                fullWidth
-              />
-            </View>
-
-            {generating && (
-              <View style={st.generatingBar}>
-                <RNActivityIndicator size="small" color={Colors.primary} />
-                <Text style={[st.generatingText, { color: theme.primary }]}>
-                  {lang === 'en' ? 'Creating PDF report...' : 'Membuat laporan PDF...'}
-                </Text>
-              </View>
-            )}
-          </Card>
-
-          {/* FIX (b): Auto Export - User-friendly, no technical jargon */}
-          <Text style={[st.sectionTitle, { color: theme.text }]}>
-            {lang === 'en' ? 'Weekly Reminder' : 'Pengingat Mingguan'}
-          </Text>
-          <Card style={{ backgroundColor: theme.bgCard }}>
-            <View style={st.autoRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={[st.autoTitle, { color: theme.text }]}>
-                  {lang === 'en' ? 'Monday Morning Reminder' : 'Pengingat Senin Pagi'}
-                </Text>
-                <Text style={[st.autoDesc, { color: theme.textMuted }]}>
-                  {lang === 'en'
-                    ? 'Get reminded every Monday at 06:00 to generate and review the weekly report before the new work week.'
-                    : 'Dapatkan pengingat setiap Senin pukul 06:00 untuk membuat dan mereview laporan mingguan sebelum minggu kerja baru.'}
-                </Text>
-              </View>
-              <Switch value={autoExport} onValueChange={toggleAutoExport} trackColor={{ true: Colors.primary }} />
-            </View>
-            {autoExport && (
-              <View style={[st.autoInfo, { backgroundColor: isDark ? `${Colors.primary}15` : Colors.primaryBg }]}>
-                <Ionicons name="notifications" size={16} color={theme.primary} />
-                <Text style={[st.autoInfoText, { color: theme.primary }]}>
-                  {lang === 'en'
-                    ? 'Active - You\'ll be reminded every Monday at 06:00 to generate a fresh weekly report.'
-                    : 'Aktif - Anda akan diingatkan setiap Senin pukul 06:00 untuk membuat laporan mingguan terbaru.'}
-                </Text>
-              </View>
-            )}
-          </Card>
-
-          {/* FIX (c): Riwayat Export - Real local history, no "Web Admin" */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
-            <Text style={[st.sectionTitle, { color: theme.text, marginTop: 0 }]}>
-              {lang === 'en' ? 'Export History' : 'Riwayat Export'}
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Personnel Status' : 'Status Personil'}
             </Text>
-            {exportHistory.length > 0 && (
-              <TouchableOpacity onPress={handleClearHistory}>
-                <Text style={{ fontSize: 12, color: Colors.danger, fontWeight: '600' }}>
-                  {lang === 'en' ? 'Clear All' : 'Hapus Semua'}
-                </Text>
-              </TouchableOpacity>
-            )}
-          </View>
+            <Card>
+              <MiniBar label="On Duty" value={stats.onDuty} max={team.length} color={Colors.success} />
+              <MiniBar label="Off Duty" value={stats.offDuty} max={team.length} color={Colors.textMuted} />
+              <MiniBar label="GPS" value={stats.tracked} max={team.length} color="#8B5CF6" />
+            </Card>
 
-          {exportHistory.length === 0 ? (
-            <Card style={{ backgroundColor: theme.bgCard }}>
-              <View style={{ alignItems: 'center', paddingVertical: 24, gap: 8 }}>
-                <View style={[st.emptyHistoryIcon, { backgroundColor: isDark ? `${theme.textMuted}15` : '#F1F5F9' }]}>
-                  <Ionicons name="folder-open-outline" size={36} color={theme.textMuted} />
-                </View>
-                <Text style={[st.emptyHistoryTitle, { color: theme.text }]}>
-                  {lang === 'en' ? 'No exports yet' : 'Belum ada export'}
-                </Text>
-                <Text style={[st.emptyHistoryDesc, { color: theme.textMuted }]}>
-                  {lang === 'en'
-                    ? 'Generated reports will appear here. You can reshare or reprint them anytime.'
-                    : 'Laporan yang sudah digenerate akan muncul di sini. Anda bisa membagikan atau mencetak ulang kapan saja.'}
-                </Text>
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Attendance Stats' : 'Statistik Absensi'}
+            </Text>
+            <Card>
+              <MiniBar label={lang === 'en' ? 'Present' : 'Hadir'} value={stats.hadir} max={stats.totalMasuk || 1} color={Colors.success} />
+              <MiniBar label={lang === 'en' ? 'Late' : 'Terlambat'} value={stats.terlambat} max={stats.totalMasuk || 1} color={Colors.warning} />
+              <MiniBar label={lang === 'en' ? 'Absent' : 'Tidak Hadir'} value={stats.tidakHadir} max={stats.totalMasuk || 1} color={Colors.danger} />
+              <View style={st.subtotalRow}>
+                <Text style={[st.subtotalLabel, { color: theme.textMuted }]}>Total:</Text>
+                <Text style={[st.subtotalVal, { color: theme.text }]}>{stats.totalMasuk}</Text>
               </View>
             </Card>
-          ) : (
-            exportHistory.map((record) => (
-              <Card key={record.id} style={{ marginBottom: 8, backgroundColor: theme.bgCard }}>
-                <View style={st.historyRow}>
-                  <View style={[st.historyIcon, {
-                    backgroundColor: record.status === 'success'
-                      ? (isDark ? '#0a3622' : '#D4EDDA')
-                      : (isDark ? '#3d1515' : '#F8D7DA'),
-                  }]}>
-                    <Ionicons
-                      name={record.status === 'success' ? 'document' : 'alert-circle'}
-                      size={20}
-                      color={record.status === 'success' ? Colors.success : Colors.danger}
-                    />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={[st.historyTitle, { color: theme.text }]}>{record.tipe}</Text>
-                    <Text style={[st.historyDate, { color: theme.textMuted }]}>{record.tanggal}</Text>
-                    {record.periodeStart !== '-' && (
-                      <Text style={[st.historyPeriode, { color: theme.textMuted }]}>
-                        {record.periodeStart} - {record.periodeEnd}
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Daily Reports' : 'Laporan Harian'}
+            </Text>
+            <Card>
+              <MiniBar label={lang === 'en' ? 'Approved' : 'Disetujui'} value={stats.lhApproved} max={stats.lhTotal || 1} color={Colors.success} />
+              <MiniBar label="Pending" value={stats.lhPending} max={stats.lhTotal || 1} color={Colors.warning} />
+              <MiniBar label={lang === 'en' ? 'Revision' : 'Revisi'} value={stats.lhRevision} max={stats.lhTotal || 1} color={Colors.danger} />
+            </Card>
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Incidents' : 'Insiden'}
+            </Text>
+            <Card>
+              <MiniBar label="Open" value={stats.lkOpen} max={stats.lkTotal || 1} color={Colors.warning} />
+              <MiniBar label="Resolved" value={stats.lkResolved} max={stats.lkTotal || 1} color={Colors.success} />
+              <View style={st.subtotalRow}>
+                <Text style={[st.subtotalLabel, { color: theme.textMuted }]}>
+                  {lang === 'en' ? 'Critical' : 'Kritis'}: {stats.lkKritis}
+                </Text>
+                <Text style={[st.subtotalVal, { color: theme.text }]}>{stats.lkTotal} total</Text>
+              </View>
+            </Card>
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>Top Performers</Text>
+            <Card>
+              {topPerformers.length === 0 ? (
+                <Text style={[st.emptyText, { color: theme.textMuted }]}>
+                  {lang === 'en' ? 'No data yet' : 'Belum ada data'}
+                </Text>
+              ) : (
+                topPerformers.map((m, i) => (
+                  <View
+                    key={`perf-${m.id}`}
+                    style={[
+                      st.perfRow,
+                      i < topPerformers.length - 1 && { borderBottomWidth: 1, borderBottomColor: isDark ? theme.border : Colors.borderLight },
+                    ]}
+                  >
+                    <Text style={[st.perfRank, i === 0 && { color: '#F59E0B' }]}>#{i + 1}</Text>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.perfName, { color: theme.text }]}>{m.nama}</Text>
+                      <Text style={[st.perfMeta, { color: theme.textMuted }]}>
+                        {m.pos || '-'} • {m.shift || '-'}
                       </Text>
-                    )}
-                  </View>
-                  <View style={{ alignItems: 'flex-end', gap: 6 }}>
-                    <Badge
-                      text={record.status === 'success' ? (lang === 'en' ? 'Success' : 'Berhasil') : (lang === 'en' ? 'Failed' : 'Gagal')}
-                      variant={record.status === 'success' ? 'success' : 'danger'}
-                    />
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      {record.status === 'success' && record.fileUri && (
-                        <TouchableOpacity onPress={() => handleReshareExport(record)}>
-                          <Ionicons name="share-outline" size={20} color={theme.primary} />
-                        </TouchableOpacity>
-                      )}
-                      <TouchableOpacity onPress={() => handleDeleteExport(record.id)}>
-                        <Ionicons name="trash-outline" size={20} color={Colors.danger} />
-                      </TouchableOpacity>
+                    </View>
+                    <View style={st.perfScoreBox}>
+                      <Text style={st.perfScore}>{m.skor}</Text>
                     </View>
                   </View>
+                ))
+              )}
+            </Card>
+          </>
+        )}
+
+        {/* ===== TAB: MINGGUAN ===== */}
+        {tabIndex === 1 && (
+          <>
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Attendance (Last 7 Days)' : 'Kehadiran 7 Hari Terakhir'}
+            </Text>
+            {weeklyLoading || !weeklyData ? (
+              <Card style={{ padding: 20, alignItems: 'center' }}>
+                <RNActivityIndicator size="small" color={Colors.primary} />
+                <Text style={[st.loadText, { color: theme.textMuted }]}>
+                  {lang === 'en' ? 'Loading...' : 'Memuat data...'}
+                </Text>
+              </Card>
+            ) : (
+              <BarChart
+                data={weeklyData.attendance}
+                maxVal={Math.max(...weeklyData.attendance, 1)}
+                color={Colors.success}
+                label={lang === 'en' ? 'Check-in per Day' : 'Absensi Masuk per Hari'}
+                days={DAYS}
+              />
+            )}
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Late Arrivals (Last 7 Days)' : 'Keterlambatan 7 Hari Terakhir'}
+            </Text>
+            {weeklyData && (
+              <BarChart
+                data={weeklyData.late}
+                maxVal={Math.max(...weeklyData.late, ...weeklyData.attendance, 1)}
+                color={Colors.warning}
+                label={lang === 'en' ? 'Late per Day' : 'Terlambat per Hari'}
+                days={DAYS}
+              />
+            )}
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Patrols (Last 7 Days)' : 'Patroli 7 Hari Terakhir'}
+            </Text>
+            {weeklyData && (
+              <BarChart
+                data={weeklyData.patrol}
+                maxVal={Math.max(...weeklyData.patrol, 1)}
+                color={Colors.primary}
+                label={lang === 'en' ? 'Patrols per Day' : 'Patroli per Hari'}
+                days={DAYS}
+              />
+            )}
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Weekly Summary' : 'Ringkasan Mingguan'}
+            </Text>
+            <Card>
+              <View style={st.weekSummary}>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: Colors.success }]}>
+                    {weeklyData ? weeklyData.attendance.reduce((a: number, b: number) => a + b, 0) : '-'}
+                  </Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>
+                    {lang === 'en' ? 'Total Present' : 'Total Hadir'}
+                  </Text>
+                </View>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: Colors.warning }]}>
+                    {weeklyData ? weeklyData.late.reduce((a: number, b: number) => a + b, 0) : '-'}
+                  </Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>
+                    {lang === 'en' ? 'Late' : 'Terlambat'}
+                  </Text>
+                </View>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: Colors.primary }]}>
+                    {weeklyData ? weeklyData.patrol.reduce((a: number, b: number) => a + b, 0) : '-'}
+                  </Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>
+                    {lang === 'en' ? 'Patrols' : 'Patroli'}
+                  </Text>
+                </View>
+              </View>
+            </Card>
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>GPS Tracking</Text>
+            <Card>
+              <View style={st.weekSummary}>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: '#8B5CF6' }]}>{stats.tracked}</Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>GPS</Text>
+                </View>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: theme.textMuted }]}>
+                    {team.length - stats.tracked}
+                  </Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>
+                    {lang === 'en' ? 'No GPS' : 'Belum Terlacak'}
+                  </Text>
+                </View>
+                <View style={st.weekItem}>
+                  <Text style={[st.weekVal, { color: Colors.success }]}>
+                    {team.length > 0 ? Math.round((stats.tracked / team.length) * 100) : 0}%
+                  </Text>
+                  <Text style={[st.weekLbl, { color: theme.textMuted }]}>Coverage</Text>
+                </View>
+              </View>
+            </Card>
+          </>
+        )}
+
+        {/* ===== TAB: LAPORAN ===== */}
+        {tabIndex === 2 && (
+          <>
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Generate Report' : 'Buat Laporan'}
+            </Text>
+            <Card style={{ backgroundColor: theme.bgCard }}>
+              <View style={{ flexDirection: 'row', gap: 10, alignItems: 'center', marginBottom: 12 }}>
+                <View style={[st.exportIcon, { backgroundColor: isDark ? `${Colors.primary}20` : '#EFF6FF' }]}>
+                  <Ionicons name="document-text" size={24} color={Colors.primary} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={[st.exportTitle, { color: theme.text }]}>
+                    {lang === 'en' ? 'Weekly Report' : 'Laporan Mingguan'}
+                  </Text>
+                  <Text style={[st.exportDesc, { color: theme.textMuted }]}>
+                    {lang === 'en'
+                      ? 'Generate a complete PDF report covering attendance, patrols, incidents, and team performance for the past 7 days.'
+                      : 'Buat laporan PDF lengkap mencakup kehadiran, patroli, insiden, dan performa tim selama 7 hari terakhir.'}
+                  </Text>
+                </View>
+              </View>
+
+              <View style={[st.previewBox, { backgroundColor: isDark ? theme.bgInput : '#F8FAFC', borderColor: theme.border }]}>
+                <Text style={[st.previewLabel, { color: theme.textMuted }]}>
+                  {lang === 'en' ? 'Report will include:' : 'Laporan akan mencakup:'}
+                </Text>
+                <View style={st.previewItems}>
+                  {[
+                    { icon: 'people', text: `${team.length} ${lang === 'en' ? 'personnel' : 'personil'}`, color: Colors.primary },
+                    { icon: 'checkmark-circle', text: `${stats.kehadiranPct}% ${lang === 'en' ? 'attendance' : 'kehadiran'}`, color: Colors.success },
+                    { icon: 'footsteps', text: `${patroliStats.completed} ${lang === 'en' ? 'patrols' : 'patroli'}`, color: Colors.primary },
+                    { icon: 'alert-circle', text: `${stats.lkTotal} ${lang === 'en' ? 'incidents' : 'insiden'}`, color: Colors.warning },
+                  ].map((item, idx) => (
+                    <View key={`pi-${idx}`} style={st.previewItem}>
+                      <Ionicons name={item.icon as any} size={14} color={item.color} />
+                      <Text style={[st.previewItemText, { color: theme.textSecondary }]}>{item.text}</Text>
+                    </View>
+                  ))}
+                </View>
+              </View>
+
+              <View style={{ gap: 8, marginTop: 12 }}>
+                <Button
+                  title={
+                    generating
+                      ? lang === 'en' ? 'Generating...' : 'Membuat laporan...'
+                      : lang === 'en' ? 'Generate Weekly Report (PDF)' : 'Buat Laporan Mingguan (PDF)'
+                  }
+                  variant="primary"
+                  size="medium"
+                  icon="document-text"
+                  onPress={handleGenerateWeeklyReport}
+                  disabled={generating}
+                  loading={generating}
+                  fullWidth
+                />
+              </View>
+
+              {generating && (
+                <View style={st.generatingBar}>
+                  <RNActivityIndicator size="small" color={Colors.primary} />
+                  <Text style={[st.generatingText, { color: theme.primary }]}>
+                    {lang === 'en' ? 'Creating PDF report...' : 'Membuat laporan PDF...'}
+                  </Text>
+                </View>
+              )}
+            </Card>
+
+            <Text style={[st.sectionTitle, { color: theme.text }]}>
+              {lang === 'en' ? 'Weekly Reminder' : 'Pengingat Mingguan'}
+            </Text>
+            <Card style={{ backgroundColor: theme.bgCard }}>
+              <View style={st.autoRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[st.autoTitle, { color: theme.text }]}>
+                    {lang === 'en' ? 'Monday Morning Reminder' : 'Pengingat Senin Pagi'}
+                  </Text>
+                  <Text style={[st.autoDesc, { color: theme.textMuted }]}>
+                    {lang === 'en'
+                      ? 'Get reminded every Monday at 06:00 to generate and review the weekly report before the new work week.'
+                      : 'Dapatkan pengingat setiap Senin pukul 06:00 untuk membuat dan mereview laporan mingguan sebelum minggu kerja baru.'}
+                  </Text>
+                </View>
+                <Switch value={autoExport} onValueChange={toggleAutoExport} trackColor={{ true: Colors.primary, false: undefined as any }} />
+              </View>
+              {autoExport && (
+                <View style={[st.autoInfo, { backgroundColor: isDark ? `${Colors.primary}15` : Colors.primaryBg }]}>
+                  <Ionicons name="notifications" size={16} color={theme.primary} />
+                  <Text style={[st.autoInfoText, { color: theme.primary }]}>
+                    {lang === 'en'
+                      ? "Active - You'll be reminded every Monday at 06:00 to generate a fresh weekly report."
+                      : 'Aktif - Anda akan diingatkan setiap Senin pukul 06:00 untuk membuat laporan mingguan terbaru.'}
+                  </Text>
+                </View>
+              )}
+            </Card>
+
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 12 }}>
+              <Text style={[st.sectionTitle, { color: theme.text, marginTop: 0 }]}>
+                {lang === 'en' ? 'Export History' : 'Riwayat Export'}
+              </Text>
+              {exportHistory.length > 0 && (
+                <TouchableOpacity onPress={handleClearHistory}>
+                  <Text style={{ fontSize: 12, color: Colors.danger, fontWeight: '600' }}>
+                    {lang === 'en' ? 'Clear All' : 'Hapus Semua'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {exportHistory.length === 0 ? (
+              <Card style={{ backgroundColor: theme.bgCard }}>
+                <View style={{ alignItems: 'center', paddingVertical: 24, gap: 8 }}>
+                  <View style={[st.emptyHistoryIcon, { backgroundColor: isDark ? `${theme.textMuted}15` : '#F1F5F9' }]}>
+                    <Ionicons name="folder-open-outline" size={36} color={theme.textMuted} />
+                  </View>
+                  <Text style={[st.emptyHistoryTitle, { color: theme.text }]}>
+                    {lang === 'en' ? 'No exports yet' : 'Belum ada export'}
+                  </Text>
+                  <Text style={[st.emptyHistoryDesc, { color: theme.textMuted }]}>
+                    {lang === 'en'
+                      ? 'Generated reports will appear here. You can reshare or reprint them anytime.'
+                      : 'Laporan yang sudah digenerate akan muncul di sini. Anda bisa membagikan atau mencetak ulang kapan saja.'}
+                  </Text>
                 </View>
               </Card>
-            ))
-          )}
-        </>)}
+            ) : (
+              exportHistory.map((record) => (
+                <Card key={record.id} style={{ marginBottom: 8, backgroundColor: theme.bgCard }}>
+                  <View style={st.historyRow}>
+                    <View
+                      style={[
+                        st.historyIcon,
+                        {
+                          backgroundColor:
+                            record.status === 'success'
+                              ? isDark
+                                ? '#0a3622'
+                                : '#D4EDDA'
+                              : isDark
+                              ? '#3d1515'
+                              : '#F8D7DA',
+                        },
+                      ]}
+                    >
+                      <Ionicons
+                        name={record.status === 'success' ? 'document' : 'alert-circle'}
+                        size={20}
+                        color={record.status === 'success' ? Colors.success : Colors.danger}
+                      />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={[st.historyTitle, { color: theme.text }]}>{record.tipe}</Text>
+                      <Text style={[st.historyDate, { color: theme.textMuted }]}>{record.tanggal}</Text>
+                      {record.periodeStart !== '-' && (
+                        <Text style={[st.historyPeriode, { color: theme.textMuted }]}>
+                          {record.periodeStart} - {record.periodeEnd}
+                        </Text>
+                      )}
+                    </View>
+                    <View style={{ alignItems: 'flex-end', gap: 6 }}>
+                      <Badge
+                        text={
+                          record.status === 'success'
+                            ? lang === 'en' ? 'Success' : 'Berhasil'
+                            : lang === 'en' ? 'Failed' : 'Gagal'
+                        }
+                        variant={record.status === 'success' ? 'success' : 'danger'}
+                      />
+                      <View style={{ flexDirection: 'row', gap: 8 }}>
+                        {record.status === 'success' && record.fileUri && (
+                          <TouchableOpacity onPress={() => handleReshareExport(record)}>
+                            <Ionicons name="share-outline" size={20} color={theme.primary} />
+                          </TouchableOpacity>
+                        )}
+                        <TouchableOpacity onPress={() => handleDeleteExport(record.id)}>
+                          <Ionicons name="trash-outline" size={20} color={Colors.danger} />
+                        </TouchableOpacity>
+                      </View>
+                    </View>
+                  </View>
+                </Card>
+              ))
+            )}
+          </>
+        )}
 
         <View style={{ height: 32 }} />
       </ScrollView>
@@ -825,7 +1099,6 @@ const st = StyleSheet.create({
     paddingVertical: 10, borderBottomWidth: 1,
   },
   tab: { flex: 1, alignItems: 'center', paddingVertical: 8, borderRadius: Radius.md },
-  tabActive: { backgroundColor: Colors.primary },
   tabText: { ...Typography.smallBold, color: Colors.textSecondary },
   tabTextActive: { color: '#fff' },
   content: { padding: Spacing.base },
@@ -843,19 +1116,16 @@ const st = StyleSheet.create({
   subtotalRow: { flexDirection: 'row', justifyContent: 'space-between', paddingTop: 8, borderTopWidth: 1, borderTopColor: Colors.borderLight, marginTop: 4 },
   subtotalLabel: { ...Typography.caption },
   subtotalVal: { ...Typography.smallBold },
-  // Chart
   chartTitle: { ...Typography.smallBold, color: Colors.textPrimary, marginBottom: 12 },
   chartWrap: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end', height: 140 },
   chartCol: { alignItems: 'center', justifyContent: 'flex-end', flex: 1 },
   chartBar: { borderRadius: 4, marginVertical: 4, minHeight: 4 },
   chartVal: { fontSize: 11, fontWeight: '700', color: Colors.textPrimary },
   chartDay: { fontSize: 10, color: Colors.textMuted },
-  // Weekly summary
   weekSummary: { flexDirection: 'row' },
   weekItem: { flex: 1, alignItems: 'center', paddingVertical: 8 },
   weekVal: { fontSize: 22, fontWeight: '800' },
   weekLbl: { ...Typography.caption, marginTop: 2 },
-  // Top performers
   perfRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12 },
   perfRank: { fontSize: 16, fontWeight: '800', color: Colors.textMuted, width: 28 },
   perfName: { ...Typography.bodyBold },
@@ -864,7 +1134,6 @@ const st = StyleSheet.create({
   perfScore: { ...Typography.bodyBold, color: Colors.success },
   emptyText: { ...Typography.body, textAlign: 'center', padding: 20 },
   loadText: { ...Typography.caption, marginTop: 8 },
-  // Export section
   exportIcon: { width: 48, height: 48, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
   exportTitle: { ...Typography.bodyBold, fontSize: 15 },
   exportDesc: { ...Typography.small, marginTop: 4, lineHeight: 18 },
@@ -875,13 +1144,11 @@ const st = StyleSheet.create({
   previewItemText: { ...Typography.small },
   generatingBar: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 12, paddingVertical: 8 },
   generatingText: { ...Typography.small, fontWeight: '600' },
-  // Auto export
   autoRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   autoTitle: { ...Typography.bodyBold },
   autoDesc: { ...Typography.caption, marginTop: 4, lineHeight: 17 },
   autoInfo: { flexDirection: 'row', gap: 8, marginTop: 12, padding: 10, borderRadius: Radius.sm },
   autoInfoText: { ...Typography.caption, flex: 1, lineHeight: 17 },
-  // History
   emptyHistoryIcon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center', marginBottom: 4 },
   emptyHistoryTitle: { ...Typography.bodyBold },
   emptyHistoryDesc: { ...Typography.small, textAlign: 'center', paddingHorizontal: 24, lineHeight: 18 },

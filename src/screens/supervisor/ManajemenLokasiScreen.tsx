@@ -1,27 +1,60 @@
 /**
- * MANAJEMEN LOKASI - FIXED v2
- * 
- * FIXES:
- * a) Removed "Tambah Lokasi" - Supervisor cannot add locations (admin-only)
- * b) "Tambah Pos" now opens a proper form modal (name, radius, coordinates)
- * c) "Edit Lokasi" now opens a real edit form instead of just showing alert
+ * MANAJEMEN LOKASI - v3 (Bug-Fix Pass)
+ *
+ * CRITICAL FIXES (v3):
+ *  🚨 Pos Jaga add/edit/delete were SILENTLY LOST on refresh!
+ *     The store's `updateLokasi(id, { posList })` only updates LOCAL state and
+ *     calls `dataApi.lokasi.update()` which does NOT accept posList field.
+ *     Backend has separate /api/data/pos-jaga endpoints. Pos changes vanished
+ *     once data reloads from server.
+ *
+ *     Fix: Call `dataApi.posJaga.create/update/delete()` DIRECTLY here, then
+ *     update Zustand state via setState to keep UI in sync. After refresh
+ *     posList is rebuilt by store mapping pos_jaga + lokasi tables.
+ *
+ *  ✅ Add Pos: include lokasi_id in payload (was missing - pos created without lokasi).
+ *  ✅ Edit Pos: full update with all fields (was only updating name+radius+status locally).
+ *  ✅ Delete Pos: backend delete + local state sync.
+ *  ✅ Submitting state on all mutations to prevent double-tap.
+ *  ✅ Error messages localized; backend errors shown to user instead of silently failing.
+ *  ✅ Pull-to-refresh added.
+ *  ✅ Modal `onRequestClose` for Android back button.
+ *  ✅ Lat/Lng validation: range checks (-90..90, -180..180).
+ *  ✅ Radius validation: integer, 10-500m range.
  */
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, KeyboardAvoidingView, Platform } from 'react-native';
+import React, { useState, useCallback } from 'react';
+import {
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
+  Modal, KeyboardAvoidingView, Platform, RefreshControl, ActivityIndicator,
+} from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
+import { dataApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
+
+/** Safely get a field value, checking multiple key variants (snake_case first). */
+function getField(obj: any, ...keys: string[]): any {
+  if (!obj) return undefined;
+  for (const key of keys) {
+    if (obj[key] !== undefined && obj[key] !== null) return obj[key];
+  }
+  return undefined;
+}
 
 export default function ManajemenLokasiScreen({ navigation }: any) {
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const lokasi = useDataStore((s) => s.lokasi);
   const updateLokasi = useDataStore((s) => s.updateLokasi);
+  const loadAllData = useDataStore((s) => s.loadAllData);
+
   const [expanded, setExpanded] = useState<string | null>(null);
   const [search, setSearch] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   // === Add Pos Modal State ===
   const [showAddPos, setShowAddPos] = useState(false);
@@ -44,13 +77,28 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
   const [editPosId, setEditPosId] = useState('');
   const [editPosNama, setEditPosNama] = useState('');
   const [editPosRadius, setEditPosRadius] = useState('');
+  const [editPosLat, setEditPosLat] = useState('');
+  const [editPosLng, setEditPosLng] = useState('');
   const [editPosStatus, setEditPosStatus] = useState<'active' | 'inactive'>('active');
 
-  const filtered = search ? lokasi.filter((l) => l.nama.toLowerCase().includes(search.toLowerCase())) : lokasi;
+  const filtered = search
+    ? lokasi.filter((l) => l.nama.toLowerCase().includes(search.toLowerCase()))
+    : lokasi;
   const totalPos = lokasi.reduce((a, l) => a + l.posList.length, 0);
   const totalAnggota = lokasi.reduce((a, l) => a + l.totalAnggota, 0);
 
-  // === FIX (b): Open Add Pos Form ===
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await loadAllData?.(); } catch (e) { console.log('[Lokasi] refresh err:', e); }
+    finally { setRefreshing(false); }
+  }, [loadAllData]);
+
+  // Latitude/Longitude bounds validation
+  const isValidLatLng = (lat: number, lng: number): boolean => {
+    return !isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  };
+
+  // === Open Add Pos Form ===
   const openAddPosModal = (lokId: string) => {
     const lok = lokasi.find((l) => l.id === lokId);
     if (!lok) return;
@@ -63,56 +111,87 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setShowAddPos(true);
   };
 
-  const handleAddPos = () => {
+  // 🚨 CRITICAL FIX: Call posJaga API directly + sync local state
+  const handleAddPos = async () => {
+    if (submitting) return;
     if (!newPosNama.trim()) {
       return Alert.alert('Error', lang === 'en' ? 'Post name is required' : 'Nama pos jaga wajib diisi');
     }
-    const radius = parseInt(newPosRadius) || 50;
-    if (radius < 10 || radius > 500) {
+    const radius = parseInt(newPosRadius, 10);
+    if (isNaN(radius) || radius < 10 || radius > 500) {
       return Alert.alert('Error', lang === 'en' ? 'Radius must be between 10-500 meters' : 'Radius harus antara 10-500 meter');
     }
-    const lat = parseFloat(newPosLatitude) || 0;
-    const lng = parseFloat(newPosLongitude) || 0;
+    const lat = parseFloat(newPosLatitude);
+    const lng = parseFloat(newPosLongitude);
+    if (!isValidLatLng(lat, lng)) {
+      return Alert.alert('Error', lang === 'en' ? 'Invalid GPS coordinates (lat: -90..90, lng: -180..180)' : 'Koordinat GPS tidak valid (lat: -90..90, lng: -180..180)');
+    }
 
     const lok = lokasi.find((l) => l.id === addPosLokasiId);
     if (!lok) return;
 
-    const duplicate = lok.posList.find((p) => p.nama.toLowerCase() === newPosNama.trim().toLowerCase());
+    const duplicate = lok.posList.find((p) => p.nama.trim().toLowerCase() === newPosNama.trim().toLowerCase());
     if (duplicate) {
       return Alert.alert('Error', lang === 'en' ? 'A post with this name already exists' : 'Nama pos sudah ada di lokasi ini');
     }
 
-    const newPos = {
-      id: `POS-${Date.now()}`,
-      nama: newPosNama.trim(),
-      radius: radius,
-      latitude: lat,
-      longitude: lng,
-      status: 'active' as const,
-    };
+    setSubmitting(true);
+    try {
+      const created: any = await dataApi.posJaga.create({
+        nama: newPosNama.trim(),
+        lokasi_id: addPosLokasiId,
+        radius,
+        latitude: lat,
+        longitude: lng,
+        status: 'active',
+      });
 
-    updateLokasi(addPosLokasiId, { posList: [...lok.posList, newPos] });
-    setShowAddPos(false);
-    Alert.alert(
-      '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
-      lang === 'en'
-        ? `Post "${newPosNama.trim()}" has been added to ${lok.nama}`
-        : `Pos "${newPosNama.trim()}" berhasil ditambahkan ke ${lok.nama}`
-    );
+      // Sync local state via setState (avoids store API call duplicating work)
+      const newPos = {
+        id: getField(created, 'id', '_id') || `tmp-pos-${Date.now()}`,
+        nama: newPosNama.trim(),
+        radius,
+        latitude: lat,
+        longitude: lng,
+        status: 'active' as const,
+      };
+      useDataStore.setState((s) => ({
+        lokasi: s.lokasi.map((l) =>
+          l.id === addPosLokasiId ? { ...l, posList: [...l.posList, newPos] } : l
+        ),
+      }));
+
+      setShowAddPos(false);
+      Alert.alert(
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        lang === 'en'
+          ? `Post "${newPosNama.trim()}" has been added to ${lok.nama}`
+          : `Pos "${newPosNama.trim()}" berhasil ditambahkan ke ${lok.nama}`
+      );
+    } catch (e: any) {
+      console.log('[Lokasi] add pos err:', e);
+      Alert.alert(
+        'Error',
+        e?.message || (lang === 'en' ? 'Failed to add post. Try again.' : 'Gagal menambah pos. Coba lagi.')
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  // === FIX (c): Open Edit Lokasi Form ===
+  // === Open Edit Lokasi Form ===
   const openEditLokasiModal = (lokId: string) => {
     const lok = lokasi.find((l) => l.id === lokId);
     if (!lok) return;
     setEditLokasiId(lokId);
     setEditNama(lok.nama);
     setEditAlamat(lok.alamat);
-    setEditStatus(lok.status as 'active' | 'inactive');
+    setEditStatus((lok.status as 'active' | 'inactive') || 'active');
     setShowEditLokasi(true);
   };
 
-  const handleEditLokasi = () => {
+  const handleEditLokasi = async () => {
+    if (submitting) return;
     if (!editNama.trim()) {
       return Alert.alert('Error', lang === 'en' ? 'Location name is required' : 'Nama lokasi wajib diisi');
     }
@@ -120,19 +199,27 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       return Alert.alert('Error', lang === 'en' ? 'Address is required' : 'Alamat wajib diisi');
     }
 
-    updateLokasi(editLokasiId, {
-      nama: editNama.trim(),
-      alamat: editAlamat.trim(),
-      status: editStatus,
-    });
-    setShowEditLokasi(false);
-    Alert.alert(
-      '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
-      lang === 'en' ? 'Location updated successfully' : 'Lokasi berhasil diperbarui'
-    );
+    setSubmitting(true);
+    try {
+      // updateLokasi already calls dataApi.lokasi.update for nama/alamat/status
+      updateLokasi(editLokasiId, {
+        nama: editNama.trim(),
+        alamat: editAlamat.trim(),
+        status: editStatus,
+      });
+      setShowEditLokasi(false);
+      Alert.alert(
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        lang === 'en' ? 'Location updated successfully' : 'Lokasi berhasil diperbarui'
+      );
+    } catch (e: any) {
+      Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to update' : 'Gagal memperbarui'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  // === Edit Pos ===
+  // === Open Edit Pos ===
   const openEditPosModal = (lokId: string, posId: string) => {
     const lok = lokasi.find((l) => l.id === lokId);
     if (!lok) return;
@@ -142,28 +229,67 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setEditPosId(posId);
     setEditPosNama(pos.nama);
     setEditPosRadius(pos.radius?.toString() || '50');
-    setEditPosStatus(pos.status as 'active' | 'inactive');
+    setEditPosLat(pos.latitude != null ? String(pos.latitude) : '');
+    setEditPosLng(pos.longitude != null ? String(pos.longitude) : '');
+    setEditPosStatus((pos.status as 'active' | 'inactive') || 'active');
     setShowEditPos(true);
   };
 
-  const handleEditPos = () => {
+  // 🚨 CRITICAL FIX: Edit Pos persists to backend via posJaga API
+  const handleEditPos = async () => {
+    if (submitting) return;
     if (!editPosNama.trim()) {
       return Alert.alert('Error', lang === 'en' ? 'Post name is required' : 'Nama pos wajib diisi');
     }
-    const lok = lokasi.find((l) => l.id === editPosLokasiId);
-    if (!lok) return;
+    const radius = parseInt(editPosRadius, 10);
+    if (isNaN(radius) || radius < 10 || radius > 500) {
+      return Alert.alert('Error', lang === 'en' ? 'Radius must be between 10-500 meters' : 'Radius harus antara 10-500 meter');
+    }
+    const lat = editPosLat ? parseFloat(editPosLat) : 0;
+    const lng = editPosLng ? parseFloat(editPosLng) : 0;
+    if (editPosLat || editPosLng) {
+      if (!isValidLatLng(lat, lng)) {
+        return Alert.alert('Error', lang === 'en' ? 'Invalid GPS coordinates' : 'Koordinat GPS tidak valid');
+      }
+    }
 
-    const updatedPosList = lok.posList.map((p) =>
-      p.id === editPosId
-        ? { ...p, nama: editPosNama.trim(), radius: parseInt(editPosRadius) || 50, status: editPosStatus }
-        : p
-    );
-    updateLokasi(editPosLokasiId, { posList: updatedPosList });
-    setShowEditPos(false);
-    Alert.alert('✅', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
+    setSubmitting(true);
+    try {
+      await dataApi.posJaga.update(editPosId, {
+        nama: editPosNama.trim(),
+        radius,
+        latitude: lat,
+        longitude: lng,
+        status: editPosStatus,
+      });
+
+      // Sync local state
+      useDataStore.setState((s) => ({
+        lokasi: s.lokasi.map((l) =>
+          l.id === editPosLokasiId
+            ? {
+                ...l,
+                posList: l.posList.map((p) =>
+                  p.id === editPosId
+                    ? { ...p, nama: editPosNama.trim(), radius, latitude: lat, longitude: lng, status: editPosStatus }
+                    : p
+                ),
+              }
+            : l
+        ),
+      }));
+
+      setShowEditPos(false);
+      Alert.alert('✅', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
+    } catch (e: any) {
+      console.log('[Lokasi] edit pos err:', e);
+      Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to update post' : 'Gagal memperbarui pos'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  // === Delete Pos ===
+  // 🚨 CRITICAL FIX: Delete Pos persists to backend
   const handleDeletePos = (lokId: string, posId: string, posName: string) => {
     Alert.alert(
       lang === 'en' ? 'Delete Post?' : 'Hapus Pos?',
@@ -173,11 +299,22 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
         {
           text: lang === 'en' ? 'Delete' : 'Hapus',
           style: 'destructive',
-          onPress: () => {
-            const lok = lokasi.find((l) => l.id === lokId);
-            if (!lok) return;
-            const updatedPosList = lok.posList.filter((p) => p.id !== posId);
-            updateLokasi(lokId, { posList: updatedPosList });
+          onPress: async () => {
+            if (submitting) return;
+            setSubmitting(true);
+            try {
+              await dataApi.posJaga.delete(posId);
+              useDataStore.setState((s) => ({
+                lokasi: s.lokasi.map((l) =>
+                  l.id === lokId ? { ...l, posList: l.posList.filter((p) => p.id !== posId) } : l
+                ),
+              }));
+            } catch (e: any) {
+              console.log('[Lokasi] delete pos err:', e);
+              Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to delete' : 'Gagal menghapus'));
+            } finally {
+              setSubmitting(false);
+            }
           },
         },
       ]
@@ -185,8 +322,8 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
   };
 
   return (
-    <View style={st.container}>
-      {/* Header - FIX (a): No add button for supervisor */}
+    <View style={[st.container, { backgroundColor: theme.bg }]}>
+      {/* Header */}
       <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
@@ -233,7 +370,10 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
         </Text>
       </View>
 
-      <ScrollView contentContainerStyle={st.content}>
+      <ScrollView
+        contentContainerStyle={st.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
         {filtered.map((l) => (
           <Card key={l.id} style={[st.locCard, { backgroundColor: theme.bgCard }]}>
             <TouchableOpacity onPress={() => setExpanded(expanded === l.id ? null : l.id)}>
@@ -243,13 +383,20 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[st.locName, { color: theme.text }]}>{l.nama}</Text>
-                  <Text style={[st.locAddr, { color: theme.textMuted }]}>{l.alamat}</Text>
+                  <Text style={[st.locAddr, { color: theme.textMuted }]}>{l.alamat || '-'}</Text>
                   <Text style={[st.locMeta, { color: theme.textMuted }]}>
                     {l.posList.length} pos • {l.totalAnggota} {lang === 'en' ? 'members' : 'anggota'}
                   </Text>
                 </View>
-                <Badge text={l.status === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : (lang === 'en' ? 'Inactive' : 'Nonaktif')} variant={l.status === 'active' ? 'success' : 'default'} />
-                <Ionicons name={expanded === l.id ? 'chevron-up' : 'chevron-down'} size={20} color={theme.textMuted} />
+                <Badge
+                  text={l.status === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : (lang === 'en' ? 'Inactive' : 'Nonaktif')}
+                  variant={l.status === 'active' ? 'success' : 'default'}
+                />
+                <Ionicons
+                  name={expanded === l.id ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={theme.textMuted}
+                />
               </View>
             </TouchableOpacity>
 
@@ -266,15 +413,20 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                       <Text style={[st.posName, { color: theme.text }]}>{p.nama}</Text>
                       <Text style={[st.posDetail, { color: theme.textMuted }]}>
                         Radius: {p.radius}m
-                        {p.latitude ? ` • ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}` : ''}
+                        {p.latitude != null && p.longitude != null
+                          ? ` • ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}`
+                          : ''}
                       </Text>
                     </View>
-                    <Badge text={p.status === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'} variant={p.status === 'active' ? 'success' : 'default'} />
+                    <Badge
+                      text={p.status === 'active' ? (lang === 'en' ? 'Active' : 'Aktif') : 'Off'}
+                      variant={p.status === 'active' ? 'success' : 'default'}
+                    />
                     <View style={{ flexDirection: 'row', gap: 8, marginLeft: 8 }}>
-                      <TouchableOpacity onPress={() => openEditPosModal(l.id, p.id)}>
+                      <TouchableOpacity onPress={() => openEditPosModal(l.id, p.id)} disabled={submitting}>
                         <Ionicons name="create-outline" size={18} color={Colors.primary} />
                       </TouchableOpacity>
-                      <TouchableOpacity onPress={() => handleDeletePos(l.id, p.id, p.nama)}>
+                      <TouchableOpacity onPress={() => handleDeletePos(l.id, p.id, p.nama)} disabled={submitting}>
                         <Ionicons name="trash-outline" size={18} color={Colors.danger} />
                       </TouchableOpacity>
                     </View>
@@ -295,6 +447,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                     icon="add-outline"
                     onPress={() => openAddPosModal(l.id)}
                     style={{ flex: 1 }}
+                    disabled={submitting}
                   />
                   <Button
                     title={lang === 'en' ? 'Edit Location' : 'Edit Lokasi'}
@@ -303,6 +456,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                     icon="create-outline"
                     onPress={() => openEditLokasiModal(l.id)}
                     style={{ flex: 1 }}
+                    disabled={submitting}
                   />
                 </View>
               </View>
@@ -322,16 +476,21 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
         <View style={{ height: 32 }} />
       </ScrollView>
 
-      {/* ===== MODAL: Add Pos - FIX (b) ===== */}
-      <Modal visible={showAddPos} transparent animationType="slide">
+      {/* ===== MODAL: Add Pos ===== */}
+      <Modal
+        visible={showAddPos}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !submitting && setShowAddPos(false)}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={st.modalOverlay}>
-            <View style={[st.modalCard, { backgroundColor: isDark ? theme.bgCard : '#fff' }]}>
+            <View style={[st.modalCard, { backgroundColor: theme.bgCard }]}>
               <View style={st.modalHeader}>
                 <Text style={[st.modalTitle, { color: theme.text }]}>
                   {lang === 'en' ? 'Add Guard Post' : 'Tambah Pos Jaga'}
                 </Text>
-                <TouchableOpacity onPress={() => setShowAddPos(false)}>
+                <TouchableOpacity onPress={() => !submitting && setShowAddPos(false)} disabled={submitting}>
                   <Ionicons name="close" size={24} color={theme.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -352,6 +511,8 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                   onChangeText={setNewPosNama}
                   placeholder={lang === 'en' ? 'e.g. Main Gate Post' : 'Contoh: Pos Gerbang Utama'}
                   placeholderTextColor={theme.textMuted}
+                  editable={!submitting}
+                  maxLength={64}
                 />
 
                 <Text style={[st.fLabel, { color: theme.textSecondary }]}>
@@ -364,6 +525,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                   placeholder="50"
                   placeholderTextColor={theme.textMuted}
                   keyboardType="numeric"
+                  editable={!submitting}
                 />
                 <Text style={[st.fHint, { color: theme.textMuted }]}>
                   {lang === 'en' ? 'Geofence radius for attendance check-in (10-500m)' : 'Radius geofence untuk absensi (10-500m)'}
@@ -371,25 +533,27 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 
                 <View style={{ flexDirection: 'row', gap: 10 }}>
                   <View style={{ flex: 1 }}>
-                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Latitude</Text>
+                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Latitude *</Text>
                     <TextInput
                       style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
                       value={newPosLatitude}
                       onChangeText={setNewPosLatitude}
-                      placeholder="0.0000"
+                      placeholder="-6.2088"
                       placeholderTextColor={theme.textMuted}
                       keyboardType="numeric"
+                      editable={!submitting}
                     />
                   </View>
                   <View style={{ flex: 1 }}>
-                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Longitude</Text>
+                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Longitude *</Text>
                     <TextInput
                       style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
                       value={newPosLongitude}
                       onChangeText={setNewPosLongitude}
-                      placeholder="0.0000"
+                      placeholder="106.8456"
                       placeholderTextColor={theme.textMuted}
                       keyboardType="numeric"
+                      editable={!submitting}
                     />
                   </View>
                 </View>
@@ -399,24 +563,45 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
               </ScrollView>
 
               <View style={st.modalActions}>
-                <Button title={lang === 'en' ? 'Cancel' : 'Batal'} variant="outline" size="medium" onPress={() => setShowAddPos(false)} style={{ flex: 1 }} />
-                <Button title={lang === 'en' ? 'Add Post' : 'Tambah Pos'} variant="primary" size="medium" icon="add-outline" onPress={handleAddPos} style={{ flex: 1 }} />
+                <Button
+                  title={lang === 'en' ? 'Cancel' : 'Batal'}
+                  variant="outline"
+                  size="medium"
+                  onPress={() => setShowAddPos(false)}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                />
+                <Button
+                  title={submitting ? (lang === 'en' ? 'Saving...' : 'Menyimpan...') : (lang === 'en' ? 'Add Post' : 'Tambah Pos')}
+                  variant="primary"
+                  size="medium"
+                  icon="add-outline"
+                  onPress={handleAddPos}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                  loading={submitting}
+                />
               </View>
             </View>
           </View>
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* ===== MODAL: Edit Lokasi - FIX (c) ===== */}
-      <Modal visible={showEditLokasi} transparent animationType="slide">
+      {/* ===== MODAL: Edit Lokasi ===== */}
+      <Modal
+        visible={showEditLokasi}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !submitting && setShowEditLokasi(false)}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={st.modalOverlay}>
-            <View style={[st.modalCard, { backgroundColor: isDark ? theme.bgCard : '#fff' }]}>
+            <View style={[st.modalCard, { backgroundColor: theme.bgCard }]}>
               <View style={st.modalHeader}>
                 <Text style={[st.modalTitle, { color: theme.text }]}>
                   {lang === 'en' ? 'Edit Location' : 'Edit Lokasi'}
                 </Text>
-                <TouchableOpacity onPress={() => setShowEditLokasi(false)}>
+                <TouchableOpacity onPress={() => !submitting && setShowEditLokasi(false)} disabled={submitting}>
                   <Ionicons name="close" size={24} color={theme.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -430,6 +615,8 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                 onChangeText={setEditNama}
                 placeholder={lang === 'en' ? 'Location name' : 'Nama lokasi'}
                 placeholderTextColor={theme.textMuted}
+                editable={!submitting}
+                maxLength={128}
               />
 
               <Text style={[st.fLabel, { color: theme.textSecondary }]}>
@@ -444,33 +631,52 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
+                editable={!submitting}
               />
 
               <Text style={[st.fLabel, { color: theme.textSecondary }]}>Status</Text>
               <View style={{ flexDirection: 'row', gap: 8 }}>
                 <TouchableOpacity
-                  style={[st.statusChip, editStatus === 'active' && st.statusChipActive]}
-                  onPress={() => setEditStatus('active')}
+                  style={[st.statusChip, { borderColor: theme.border }, editStatus === 'active' && st.statusChipActive]}
+                  onPress={() => !submitting && setEditStatus('active')}
+                  disabled={submitting}
                 >
                   <Ionicons name="checkmark-circle" size={16} color={editStatus === 'active' ? '#fff' : Colors.success} />
-                  <Text style={[st.statusChipText, editStatus === 'active' && { color: '#fff' }]}>
+                  <Text style={[st.statusChipText, { color: theme.textSecondary }, editStatus === 'active' && { color: '#fff' }]}>
                     {lang === 'en' ? 'Active' : 'Aktif'}
                   </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
-                  style={[st.statusChip, editStatus === 'inactive' && st.statusChipInactive]}
-                  onPress={() => setEditStatus('inactive')}
+                  style={[st.statusChip, { borderColor: theme.border }, editStatus === 'inactive' && st.statusChipInactive]}
+                  onPress={() => !submitting && setEditStatus('inactive')}
+                  disabled={submitting}
                 >
                   <Ionicons name="close-circle" size={16} color={editStatus === 'inactive' ? '#fff' : Colors.textMuted} />
-                  <Text style={[st.statusChipText, editStatus === 'inactive' && { color: '#fff' }]}>
+                  <Text style={[st.statusChipText, { color: theme.textSecondary }, editStatus === 'inactive' && { color: '#fff' }]}>
                     {lang === 'en' ? 'Inactive' : 'Nonaktif'}
                   </Text>
                 </TouchableOpacity>
               </View>
 
               <View style={st.modalActions}>
-                <Button title={lang === 'en' ? 'Cancel' : 'Batal'} variant="outline" size="medium" onPress={() => setShowEditLokasi(false)} style={{ flex: 1 }} />
-                <Button title={lang === 'en' ? 'Save Changes' : 'Simpan Perubahan'} variant="primary" size="medium" icon="save-outline" onPress={handleEditLokasi} style={{ flex: 1 }} />
+                <Button
+                  title={lang === 'en' ? 'Cancel' : 'Batal'}
+                  variant="outline"
+                  size="medium"
+                  onPress={() => setShowEditLokasi(false)}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                />
+                <Button
+                  title={submitting ? (lang === 'en' ? 'Saving...' : 'Menyimpan...') : (lang === 'en' ? 'Save Changes' : 'Simpan Perubahan')}
+                  variant="primary"
+                  size="medium"
+                  icon="save-outline"
+                  onPress={handleEditLokasi}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                  loading={submitting}
+                />
               </View>
             </View>
           </View>
@@ -478,61 +684,115 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       </Modal>
 
       {/* ===== MODAL: Edit Pos ===== */}
-      <Modal visible={showEditPos} transparent animationType="slide">
+      <Modal
+        visible={showEditPos}
+        transparent
+        animationType="slide"
+        onRequestClose={() => !submitting && setShowEditPos(false)}
+      >
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={st.modalOverlay}>
-            <View style={[st.modalCard, { backgroundColor: isDark ? theme.bgCard : '#fff' }]}>
+            <View style={[st.modalCard, { backgroundColor: theme.bgCard }]}>
               <View style={st.modalHeader}>
                 <Text style={[st.modalTitle, { color: theme.text }]}>
                   {lang === 'en' ? 'Edit Post' : 'Edit Pos'}
                 </Text>
-                <TouchableOpacity onPress={() => setShowEditPos(false)}>
+                <TouchableOpacity onPress={() => !submitting && setShowEditPos(false)} disabled={submitting}>
                   <Ionicons name="close" size={24} color={theme.textMuted} />
                 </TouchableOpacity>
               </View>
 
-              <Text style={[st.fLabel, { color: theme.textSecondary }]}>
-                {lang === 'en' ? 'Post Name' : 'Nama Pos'} *
-              </Text>
-              <TextInput
-                style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
-                value={editPosNama}
-                onChangeText={setEditPosNama}
-                placeholderTextColor={theme.textMuted}
-              />
+              <ScrollView showsVerticalScrollIndicator={false}>
+                <Text style={[st.fLabel, { color: theme.textSecondary }]}>
+                  {lang === 'en' ? 'Post Name' : 'Nama Pos'} *
+                </Text>
+                <TextInput
+                  style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
+                  value={editPosNama}
+                  onChangeText={setEditPosNama}
+                  placeholderTextColor={theme.textMuted}
+                  editable={!submitting}
+                  maxLength={64}
+                />
 
-              <Text style={[st.fLabel, { color: theme.textSecondary }]}>Radius (meter)</Text>
-              <TextInput
-                style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
-                value={editPosRadius}
-                onChangeText={setEditPosRadius}
-                keyboardType="numeric"
-                placeholderTextColor={theme.textMuted}
-              />
+                <Text style={[st.fLabel, { color: theme.textSecondary }]}>Radius (meter) *</Text>
+                <TextInput
+                  style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
+                  value={editPosRadius}
+                  onChangeText={setEditPosRadius}
+                  keyboardType="numeric"
+                  placeholderTextColor={theme.textMuted}
+                  editable={!submitting}
+                />
 
-              <Text style={[st.fLabel, { color: theme.textSecondary }]}>Status</Text>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
-                <TouchableOpacity
-                  style={[st.statusChip, editPosStatus === 'active' && st.statusChipActive]}
-                  onPress={() => setEditPosStatus('active')}
-                >
-                  <Text style={[st.statusChipText, editPosStatus === 'active' && { color: '#fff' }]}>
-                    {lang === 'en' ? 'Active' : 'Aktif'}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[st.statusChip, editPosStatus === 'inactive' && st.statusChipInactive]}
-                  onPress={() => setEditPosStatus('inactive')}
-                >
-                  <Text style={[st.statusChipText, editPosStatus === 'inactive' && { color: '#fff' }]}>
-                    {lang === 'en' ? 'Inactive' : 'Nonaktif'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Latitude</Text>
+                    <TextInput
+                      style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
+                      value={editPosLat}
+                      onChangeText={setEditPosLat}
+                      placeholder="-6.2088"
+                      placeholderTextColor={theme.textMuted}
+                      keyboardType="numeric"
+                      editable={!submitting}
+                    />
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text style={[st.fLabel, { color: theme.textSecondary }]}>Longitude</Text>
+                    <TextInput
+                      style={[st.fInput, { borderColor: theme.border, color: theme.text, backgroundColor: isDark ? theme.bgInput : Colors.bgWhite }]}
+                      value={editPosLng}
+                      onChangeText={setEditPosLng}
+                      placeholder="106.8456"
+                      placeholderTextColor={theme.textMuted}
+                      keyboardType="numeric"
+                      editable={!submitting}
+                    />
+                  </View>
+                </View>
+
+                <Text style={[st.fLabel, { color: theme.textSecondary }]}>Status</Text>
+                <View style={{ flexDirection: 'row', gap: 8 }}>
+                  <TouchableOpacity
+                    style={[st.statusChip, { borderColor: theme.border }, editPosStatus === 'active' && st.statusChipActive]}
+                    onPress={() => !submitting && setEditPosStatus('active')}
+                    disabled={submitting}
+                  >
+                    <Text style={[st.statusChipText, { color: theme.textSecondary }, editPosStatus === 'active' && { color: '#fff' }]}>
+                      {lang === 'en' ? 'Active' : 'Aktif'}
+                    </Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[st.statusChip, { borderColor: theme.border }, editPosStatus === 'inactive' && st.statusChipInactive]}
+                    onPress={() => !submitting && setEditPosStatus('inactive')}
+                    disabled={submitting}
+                  >
+                    <Text style={[st.statusChipText, { color: theme.textSecondary }, editPosStatus === 'inactive' && { color: '#fff' }]}>
+                      {lang === 'en' ? 'Inactive' : 'Nonaktif'}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </ScrollView>
 
               <View style={st.modalActions}>
-                <Button title={lang === 'en' ? 'Cancel' : 'Batal'} variant="outline" size="medium" onPress={() => setShowEditPos(false)} style={{ flex: 1 }} />
-                <Button title={lang === 'en' ? 'Save' : 'Simpan'} variant="primary" size="medium" onPress={handleEditPos} style={{ flex: 1 }} />
+                <Button
+                  title={lang === 'en' ? 'Cancel' : 'Batal'}
+                  variant="outline"
+                  size="medium"
+                  onPress={() => setShowEditPos(false)}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                />
+                <Button
+                  title={submitting ? (lang === 'en' ? 'Saving...' : 'Menyimpan...') : (lang === 'en' ? 'Save' : 'Simpan')}
+                  variant="primary"
+                  size="medium"
+                  onPress={handleEditPos}
+                  style={{ flex: 1 }}
+                  disabled={submitting}
+                  loading={submitting}
+                />
               </View>
             </View>
           </View>
@@ -543,25 +803,25 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 }
 
 const st = StyleSheet.create({
-  container: { flex: 1, backgroundColor: Colors.bgLight },
+  container: { flex: 1 },
   header: {
     flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12,
-    paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+    paddingHorizontal: Spacing.base, borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
-  headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
+  headerTitle: { ...Typography.h3, flex: 1, textAlign: 'center' },
   searchRow: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: Spacing.base,
-    marginVertical: 8, backgroundColor: Colors.bgGray, borderRadius: Radius.md, paddingHorizontal: 12, height: 42,
+    marginVertical: 8, borderRadius: Radius.md, paddingHorizontal: 12, height: 42,
   },
-  searchInput: { flex: 1, ...Typography.body, color: Colors.textPrimary },
+  searchInput: { flex: 1, ...Typography.body },
   statsBar: {
     flexDirection: 'row', paddingHorizontal: Spacing.base, paddingVertical: 10,
-    backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
+    borderBottomWidth: 1,
   },
   statItem: { flex: 1, alignItems: 'center' },
-  statVal: { fontSize: 18, fontWeight: '800', color: Colors.primary },
-  statLbl: { ...Typography.caption, color: Colors.textMuted },
+  statVal: { fontSize: 18, fontWeight: '800' },
+  statLbl: { ...Typography.caption },
   infoBanner: {
     flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: Spacing.base,
     marginTop: 8, padding: 10, borderRadius: Radius.md, borderWidth: 1,
@@ -571,35 +831,35 @@ const st = StyleSheet.create({
   locCard: { marginBottom: 10 },
   locRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   locIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
-  locName: { ...Typography.bodyBold, color: Colors.textPrimary },
-  locAddr: { ...Typography.caption, color: Colors.textMuted },
-  locMeta: { ...Typography.caption, color: Colors.textMuted, marginTop: 2 },
-  posWrap: { marginTop: 12, paddingTop: 12, borderTopWidth: 1, borderTopColor: Colors.borderLight },
-  posTitle: { ...Typography.smallBold, color: Colors.textSecondary, marginBottom: 8 },
-  posRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  locName: { ...Typography.bodyBold },
+  locAddr: { ...Typography.caption },
+  locMeta: { ...Typography.caption, marginTop: 2 },
+  posWrap: { marginTop: 12, paddingTop: 12, borderTopWidth: 1 },
+  posTitle: { ...Typography.smallBold, marginBottom: 8 },
+  posRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, borderBottomWidth: 1 },
   posDot: { width: 8, height: 8, borderRadius: 4 },
-  posName: { ...Typography.body, color: Colors.textPrimary },
-  posDetail: { ...Typography.caption, color: Colors.textMuted, marginTop: 1 },
+  posName: { ...Typography.body },
+  posDetail: { ...Typography.caption, marginTop: 1 },
   emptyPos: { ...Typography.caption, textAlign: 'center', paddingVertical: 12 },
   locActions: { flexDirection: 'row', gap: 8, marginTop: 12 },
   empty: { alignItems: 'center', paddingVertical: 40, gap: 8 },
-  emptyText: { ...Typography.body, color: Colors.textMuted },
+  emptyText: { ...Typography.body },
   // Modal
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  modalCard: { backgroundColor: '#fff', borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, maxHeight: '85%' },
+  modalCard: { borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: 24, maxHeight: '85%' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
-  modalTitle: { ...Typography.h3, color: Colors.textPrimary },
+  modalTitle: { ...Typography.h3 },
   modalSubtitle: { ...Typography.caption, marginBottom: 8 },
-  fLabel: { ...Typography.smallBold, color: Colors.textSecondary, marginBottom: 4, marginTop: 12 },
-  fInput: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, paddingHorizontal: 14, height: 48, ...Typography.body, color: Colors.textPrimary },
+  fLabel: { ...Typography.smallBold, marginBottom: 4, marginTop: 12 },
+  fInput: { borderWidth: 1.5, borderRadius: Radius.md, paddingHorizontal: 14, height: 48, ...Typography.body },
   fInputMulti: { height: 80, paddingTop: 12 },
-  fHint: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
+  fHint: { ...Typography.caption, marginTop: 4 },
   statusChip: {
     flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 16, paddingVertical: 10,
-    borderRadius: Radius.full, borderWidth: 1.5, borderColor: Colors.border, backgroundColor: Colors.bgWhite,
+    borderRadius: Radius.full, borderWidth: 1.5,
   },
   statusChipActive: { backgroundColor: Colors.success, borderColor: Colors.success },
   statusChipInactive: { backgroundColor: Colors.textMuted, borderColor: Colors.textMuted },
-  statusChipText: { ...Typography.smallBold, color: Colors.textSecondary },
+  statusChipText: { ...Typography.smallBold },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
 });
