@@ -37,6 +37,14 @@
  *   'join:role'          - Bergabung ke room sesuai role
  *   'join:lokasi'        - Bergabung ke room lokasi tertentu
  *   'location:ping'      - Update lokasi GPS
+ *
+ * v2 - SECURITY (P0-10): the auth middleware no longer accepts anonymous
+ *      connections. The previous behavior of silently downgrading any
+ *      missing/invalid token to an "anonymous" pseudo-user meant attackers
+ *      could connect to the realtime channel without credentials and listen
+ *      for events broadcast to all sockets (including panic alerts and live
+ *      location pings). Connections without a valid JWT are now rejected
+ *      at the io.use() handshake stage with "Authentication required".
  */
 
 const jwt = require('jsonwebtoken');
@@ -46,7 +54,7 @@ let io = null;
 
 function initSocketIO(server) {
   const { Server } = require('socket.io');
-  
+
   io = new Server(server, {
     cors: {
       origin: (process.env.CORS_ORIGIN || 'http://localhost:3001').split(',').map(s => s.trim()),
@@ -58,41 +66,43 @@ function initSocketIO(server) {
   });
 
   // ===== AUTH MIDDLEWARE =====
-  // Verify JWT token on connection
+  // Verify JWT token on connection. SECURITY (P0-10): missing or invalid
+  // tokens MUST reject the handshake — no "anonymous" fallback.
   io.use((socket, next) => {
     const token = socket.handshake.auth?.token || socket.handshake.query?.token;
     if (!token) {
-      // Allow anonymous connections (web admin might connect differently)
-      socket.user = { id: 'anon', role: 'anon', nama: 'Anonymous' };
-      return next();
+      return next(new Error('Authentication required'));
     }
     try {
       const decoded = jwt.verify(token, JWT_SECRET);
+      // Minimum viable claim set – without an id and role the socket can't
+      // even be placed in its rooms, so treat that case as invalid.
+      if (!decoded || !decoded.id || !decoded.role) {
+        return next(new Error('Authentication required'));
+      }
       socket.user = decoded;
-      next();
+      return next();
     } catch (err) {
-      // Still allow connection but mark as unauthenticated
-      socket.user = { id: 'anon', role: 'anon', nama: 'Anonymous' };
-      next();
+      // Don't leak whether the token was expired vs malformed – just reject.
+      return next(new Error('Authentication required'));
     }
   });
 
   // ===== CONNECTION HANDLER =====
   io.on('connection', (socket) => {
     const user = socket.user;
-    console.log(`[Socket.io] ✅ Connected: ${user.nama || 'Anonymous'} (${user.role}) - ${socket.id}`);
+    console.log(`[Socket.io] ✅ Connected: ${user.nama || user.nrp || user.id} (${user.role}) - ${socket.id}`);
 
-    // Auto-join role room
-    if (user.role && user.role !== 'anon') {
-      socket.join(`role:${user.role}`);
-      socket.join(`user:${user.id}`);
-    }
+    // Auto-join role + per-user rooms (we're guaranteed an authenticated
+    // user at this point, so no anon guard is needed).
+    socket.join(`role:${user.role}`);
+    socket.join(`user:${user.id}`);
 
     // Join specific location room
     socket.on('join:lokasi', (lokasiId) => {
       if (lokasiId) {
         socket.join(`lokasi:${lokasiId}`);
-        console.log(`[Socket.io] ${user.nama} joined lokasi:${lokasiId}`);
+        console.log(`[Socket.io] ${user.nama || user.id} joined lokasi:${lokasiId}`);
       }
     });
 
@@ -115,7 +125,7 @@ function initSocketIO(server) {
 
     // Disconnect
     socket.on('disconnect', (reason) => {
-      console.log(`[Socket.io] ❌ Disconnected: ${user.nama || 'Anonymous'} - ${reason}`);
+      console.log(`[Socket.io] ❌ Disconnected: ${user.nama || user.id} - ${reason}`);
     });
   });
 

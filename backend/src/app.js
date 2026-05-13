@@ -30,7 +30,19 @@ const PORT = process.env.PORT || 3000;
 // X-Forwarded-* headers. Without this, rate limiting throttles ALL users
 // together (everyone shares one internal Docker IP), and req.secure is always
 // false even behind HTTPS.
-app.set('trust proxy', 'loopback, linklocal, uniquelocal');
+//
+// SECURITY (P0-13): The previous value 'loopback, linklocal, uniquelocal'
+// only trusted private/internal IPs as proxies. Behind Coolify's Traefik
+// (and any further reverse proxy in front of it) every request enters the
+// container from the same Docker bridge IP, so req.ip resolved to that
+// single internal address for ALL users — completely defeating per-IP rate
+// limiting (one abusive client could exhaust the bucket for everyone).
+// Setting trust proxy to the integer 1 tells Express to trust exactly one
+// hop of X-Forwarded-For (the Traefik in front of us) and use the
+// client-side IP it forwards. If you ever add another proxy layer
+// (e.g. Cloudflare in front of Traefik), increase this to match the
+// number of trusted hops — never set it to true or 0.0.0.0/0.
+app.set('trust proxy', 1);
 
 // ===== MIDDLEWARE =====
 app.use(helmet({ crossOriginResourcePolicy: false }));

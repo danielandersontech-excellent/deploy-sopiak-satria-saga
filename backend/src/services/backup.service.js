@@ -151,19 +151,67 @@ async function createSQLBackup(filename, filepath) {
 }
 
 /**
- * Restore database from backup file
- * @param {string} filename - Name of backup file in backups/
+ * Restore database from backup file.
+ *
+ * SECURITY (P0-18): the previous implementation built `filepath` from the raw
+ * `filename` argument and called `fs.existsSync(filepath)` BEFORE sanitizing.
+ * That ordering plus the lax check (only rejecting `..`, `/`, `\`) was
+ * defeatable in two ways:
+ *   1. Existence was probed against arbitrary attacker-supplied paths, which
+ *      is itself a small information leak.
+ *   2. URL-encoded traversal, NUL bytes, drive prefixes on Windows, and
+ *      symlinks inside BACKUP_DIR could still escape the intended directory.
+ *
+ * The hardened version:
+ *   (a) strips any path component with `path.basename()` so only the leaf
+ *       filename survives, no matter what the caller sent;
+ *   (b) resolves the absolute path and verifies it begins with
+ *       `BACKUP_DIR + path.sep` so a symlink or odd Unicode trick cannot
+ *       point outside the backups directory;
+ *   (c) requires the `.sql` extension — we never restore from anything else.
+ * Only AFTER all three checks pass do we touch the filesystem.
  */
 async function restoreBackup(filename) {
-  const filepath = path.join(BACKUP_DIR, filename);
-  
-  if (!fs.existsSync(filepath)) {
-    throw new Error(`Backup file not found: ${filename}`);
+  // (a) Reduce to leaf filename. path.basename strips any directory part
+  // ('foo/../bar.sql' -> 'bar.sql', '/etc/passwd' -> 'passwd').
+  if (typeof filename !== 'string' || !filename) {
+    throw new Error('Invalid filename');
+  }
+  const safeName = path.basename(filename);
+
+  // Defense-in-depth: reject names that still contain separators after
+  // basename (shouldn't happen, but cheap to check) and reject NUL bytes
+  // which some filesystems treat as string terminators.
+  if (
+    !safeName ||
+    safeName !== filename.split(/[\\/]/).pop() ||
+    safeName.includes('\0') ||
+    safeName === '.' ||
+    safeName === '..'
+  ) {
+    throw new Error('Invalid filename');
   }
 
-  // Sanitize filename
-  if (filename.includes('..') || filename.includes('/') || filename.includes('\\')) {
+  // (c) Only .sql backups are restorable. .dump/.gz files would need
+  // different tooling and have no legitimate caller here.
+  if (!safeName.toLowerCase().endsWith('.sql')) {
+    throw new Error('Only .sql backup files can be restored');
+  }
+
+  // (b) Resolve and confirm the final path is still inside BACKUP_DIR.
+  // path.resolve normalizes any residual `..` segments; the prefix check
+  // (with the trailing separator) prevents partial-prefix attacks like a
+  // sibling directory named `backupsEVIL`.
+  const backupRoot = path.resolve(BACKUP_DIR);
+  const filepath = path.resolve(backupRoot, safeName);
+  if (filepath !== path.join(backupRoot, safeName) ||
+      !filepath.startsWith(backupRoot + path.sep)) {
     throw new Error('Invalid filename');
+  }
+
+  // Only NOW that we know the path is safe do we hit the filesystem.
+  if (!fs.existsSync(filepath)) {
+    throw new Error(`Backup file not found: ${safeName}`);
   }
 
   const dbHost = process.env.DB_HOST || 'localhost';
@@ -179,9 +227,9 @@ async function restoreBackup(filename) {
 
   try {
     const { stdout, stderr } = await execAsync(cmd, { env, timeout: 300000 });
-    console.log(`[Backup] ✅ Restored: ${filename}`);
+    console.log(`[Backup] ✅ Restored: ${safeName}`);
     if (stderr && !stderr.includes('NOTICE')) console.log('[Backup] Warnings:', stderr);
-    return { success: true, message: `Database restored from ${filename}` };
+    return { success: true, message: `Database restored from ${safeName}` };
   } catch (err) {
     // Fallback: read SQL and execute via pg
     try {
@@ -189,8 +237,8 @@ async function restoreBackup(filename) {
       const { pool } = require('../config/database');
       const sql = fs.readFileSync(filepath, 'utf8');
       await pool.query(sql);
-      console.log(`[Backup] ✅ Restored via pg: ${filename}`);
-      return { success: true, message: `Database restored from ${filename} (pg fallback)` };
+      console.log(`[Backup] ✅ Restored via pg: ${safeName}`);
+      return { success: true, message: `Database restored from ${safeName} (pg fallback)` };
     } catch (pgErr) {
       throw new Error(`Restore failed: ${err.message}. PG fallback: ${pgErr.message}`);
     }

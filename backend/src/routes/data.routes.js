@@ -4,6 +4,27 @@ const opCtrl = require('../controllers/operasional.controller');
 const dashCtrl = require('../controllers/dashboard.controller');
 const { auth, requireRole } = require('../middleware/auth');
 const { upload, setFolder, getFileUrl } = require('../middleware/upload');
+
+// =============================================================================
+// SECURITY (P0-16): Whitelist for upload subfolders.
+// Previously `req.query.folder` was forwarded straight to multer's
+// destination resolver, which joined it onto the uploads root. An attacker
+// could pass `folder=../../etc` or any other traversal sequence and steer
+// the write outside the uploads directory. We now refuse anything that
+// is not on this short, explicit list. The default ('general') is also a
+// member, so legitimate callers that omit the param keep working.
+// =============================================================================
+const SAFE_FOLDERS = ['general', 'absensi', 'laporan', 'kejadian', 'patroli', 'kontrak', 'personil', 'profile'];
+
+function pickUploadFolder(req, res, next) {
+  const requested = typeof req.query.folder === 'string' ? req.query.folder : 'general';
+  if (!SAFE_FOLDERS.includes(requested)) {
+    return res.status(400).json({ error: `Folder upload tidak valid. Pilih salah satu: ${SAFE_FOLDERS.join(', ')}` });
+  }
+  req.uploadFolder = requested;
+  next();
+}
+
 function crudRoutes(ctrl, adminOnly = false) {
   const r = require('express').Router();
   const wg = adminOnly ? [auth, requireRole('admin','supervisor','komandan')] : [auth];
@@ -34,13 +55,15 @@ noR.put('/read-all', auth, opCtrl.markAllRead); noR.put('/:id/read', auth, opCtr
 router.use('/notifikasi', noR);
 router.get('/dashboard/stats', auth, dashCtrl.getStats);
 // File upload with watermark
-router.post('/upload', auth, (req,res,next)=>{req.uploadFolder=req.query.folder||'general';next();}, upload.single('file'), async(req,res)=>{
+// SECURITY (P0-16): pickUploadFolder runs BEFORE multer parses the body, so
+// invalid folder values are rejected before any bytes hit the disk.
+router.post('/upload', auth, pickUploadFolder, upload.single('file'), async(req,res)=>{
   if(!req.file) return res.status(400).json({error:'No file'});
   try{let fp=req.file.path;const wm=req.headers['x-watermark-info']||req.body.watermark;
   if(wm&&req.file.mimetype&&req.file.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');const info=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);fp=await applyWatermark(fp,info);}catch(e){console.log('[Upload] WM skip:',e.message);}}
   res.json({url:getFileUrl(fp)});}catch(e){res.json({url:getFileUrl(req.file.path)});}
 });
-router.post('/upload/multiple', auth, (req,res,next)=>{req.uploadFolder=req.query.folder||'general';next();}, upload.array('files',10), async(req,res)=>{
+router.post('/upload/multiple', auth, pickUploadFolder, upload.array('files',10), async(req,res)=>{
   if(!req.files||!req.files.length)return res.status(400).json({error:'No files'});
   try{const wm=req.headers['x-watermark-info']||req.body.watermark;let wi=null;if(wm)try{wi=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);}catch{}
   const urls=await Promise.all(req.files.map(async f=>{if(wi&&f.mimetype&&f.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');await applyWatermark(f.path,wi);}catch{}}return getFileUrl(f.path);}));

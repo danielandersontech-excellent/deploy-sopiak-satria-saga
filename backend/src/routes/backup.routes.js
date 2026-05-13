@@ -10,6 +10,11 @@ const fs = require('fs');
 
 const guard = [auth, requireRole('admin', 'supervisor')];
 
+// SECURITY (P0-18d): Restore is a destructive, full-database operation —
+// supervisors should be able to create / list / download / delete backups,
+// but only admins may overwrite the live database from a file on disk.
+const adminGuard = [auth, requireRole('admin')];
+
 // Create backup
 router.post('/create', ...guard, async (req, res) => {
   try {
@@ -49,8 +54,8 @@ router.get('/download/:filename', ...guard, async (req, res) => {
   }
 });
 
-// Restore from backup
-router.post('/restore', ...guard, async (req, res) => {
+// Restore from backup (admin-only — see adminGuard above)
+router.post('/restore', ...adminGuard, async (req, res) => {
   try {
     const { filename } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename is required' });

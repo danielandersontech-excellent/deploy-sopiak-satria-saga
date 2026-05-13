@@ -2,8 +2,25 @@
  * BASE REPOSITORY - Reusable CRUD operations for any table
  * v23 - Fixed update to allow null/empty/0/false values
  * v24 - Added sanitizeOrderBy as defense-in-depth
+ * v25 - SECURITY (P0-3): Whitelist column identifiers in create()/update()
+ *       and apply the same validator in findAll() so all three code-paths use
+ *       a single, consistent identifier rule. Untrusted strings can never be
+ *       interpolated into the SQL query as a column name.
  */
 const { queryOne, queryAll, query } = require('../config/database');
+
+// ---------------------------------------------------------------------------
+// SECURITY: Strict identifier validator.
+// A valid SQL identifier must start with a letter or underscore and contain
+// only letters, digits, and underscores. Anything else (spaces, quotes,
+// semicolons, dashes, dots, parentheses, comment markers, etc.) is rejected.
+// This is the ONLY function allowed to decide whether a string can be
+// interpolated into SQL as a column name.
+// ---------------------------------------------------------------------------
+const COLUMN_NAME_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+function isValidColumn(col) {
+  return typeof col === 'string' && COLUMN_NAME_RE.test(col);
+}
 
 function sanitizeOrderBy(orderBy) {
   if (typeof orderBy !== 'string' || !orderBy) return 'created_at DESC';
@@ -38,32 +55,35 @@ class BaseRepository {
       regularFilters[col] = val;
     }
 
+    // SECURITY: silently drop any filter whose column name is not a valid
+    // SQL identifier. The query-string is attacker-controlled, so we prefer
+    // skipping bad keys over throwing (avoids handing the attacker an oracle
+    // and avoids breaking legitimate requests that include odd extra params).
     for (const [col, val] of Object.entries(regularFilters)) {
-      const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
+      if (!isValidColumn(col)) continue;
       params.push(val);
-      conditions.push(`${this.table}.${safeCol} = $${params.length}`);
+      conditions.push(`${this.table}.${col} = $${params.length}`);
     }
     for (const [col, val] of Object.entries(gteFilters)) {
-      const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
+      if (!isValidColumn(col)) continue;
       params.push(val);
-      conditions.push(`${this.table}.${safeCol} >= $${params.length}`);
+      conditions.push(`${this.table}.${col} >= $${params.length}`);
     }
     for (const [col, val] of Object.entries(lteFilters)) {
-      const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
+      if (!isValidColumn(col)) continue;
       params.push(val);
-      conditions.push(`${this.table}.${safeCol} <= $${params.length}`);
+      conditions.push(`${this.table}.${col} <= $${params.length}`);
     }
     for (const [col, vals] of Object.entries(inFilters)) {
-      const safeCol = col.replace(/[^a-zA-Z0-9_]/g, '');
+      if (!isValidColumn(col)) continue;
       params.push(vals);
-      conditions.push(`${this.table}.${safeCol} = ANY($${params.length})`);
+      conditions.push(`${this.table}.${col} = ANY($${params.length})`);
     }
 
     let finalOrder = sanitizeOrderBy(orderBy);
-    if (customOrder) {
-      const safeOrder = customOrder.replace(/[^a-zA-Z0-9_]/g, '');
+    if (customOrder && isValidColumn(customOrder)) {
       const direction = customAsc === 'true' ? 'ASC' : 'DESC';
-      finalOrder = `${safeOrder} ${direction}`;
+      finalOrder = `${customOrder} ${direction}`;
     }
 
     let sql = `SELECT ${this.table}.* ${joins ? `, ${joins.select || ''}` : ''} FROM ${this.table}`;
@@ -78,7 +98,17 @@ class BaseRepository {
   }
 
   async create(data) {
-    const keys = Object.keys(data).filter(k => k !== 'id' && data[k] !== undefined);
+    // SECURITY (P0-3): reject any column name that is not a strict identifier
+    // BEFORE building the SQL. Throwing here is the right behavior: any caller
+    // passing a non-identifier key is either a bug or an injection attempt,
+    // and we never want to silently drop legitimate fields from a write.
+    const keys = Object.keys(data)
+      .filter(k => k !== 'id' && data[k] !== undefined);
+    for (const k of keys) {
+      if (!isValidColumn(k)) {
+        throw new Error(`Invalid column name in create(): ${JSON.stringify(k)}`);
+      }
+    }
     const vals = keys.map(k => data[k]);
     const placeholders = keys.map((_, i) => `$${i + 1}`);
     return queryOne(
@@ -96,16 +126,24 @@ class BaseRepository {
       if (computedFields.includes(k)) return false;
       return true;
     });
-    
+
     if (!keys.length) return this.findById(id);
-    
+
+    // SECURITY (P0-3): same strict identifier check as create(). Any key that
+    // would be interpolated into the SET clause must match the validator.
+    for (const k of keys) {
+      if (!isValidColumn(k)) {
+        throw new Error(`Invalid column name in update(): ${JSON.stringify(k)}`);
+      }
+    }
+
     const vals = keys.map(k => data[k]);
     const sets = keys.map((k, i) => `${k} = $${i + 1}`);
-    
+
     if (!keys.includes('updated_at')) {
       sets.push('updated_at = NOW()');
     }
-    
+
     vals.push(id);
     try {
       return await queryOne(
@@ -134,10 +172,11 @@ class BaseRepository {
     const conditions = ['1=1'];
     const params = [];
     for (const [col, val] of Object.entries(where)) {
-      if (val !== undefined && val !== null) {
-        params.push(val);
-        conditions.push(`${col} = $${params.length}`);
-      }
+      if (val === undefined || val === null) continue;
+      // SECURITY: same identifier rule applies to COUNT WHERE filters.
+      if (!isValidColumn(col)) continue;
+      params.push(val);
+      conditions.push(`${col} = $${params.length}`);
     }
     const row = await queryOne(
       `SELECT COUNT(*)::int as count FROM ${this.table} WHERE ${conditions.join(' AND ')}`,
