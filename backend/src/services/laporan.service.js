@@ -1,26 +1,34 @@
 /**
  * LAPORAN SERVICE
- * 
- * FIX v3.2:
- * - Tambah filter lokasi_id untuk role 'komandan'
- *   Sebelumnya komandan tidak difilter → menerima semua laporan dari semua lokasi
- *   Sekarang komandan hanya melihat laporan dari lokasi yang sama (user.lokasi_id)
+ *
+ * P0-6 (Tahap 4): centralized lokasi scoping. The previous hand-rolled
+ * "komandan -> filters.lokasi_id = user.lokasi_id" worked for komandan
+ * but left klien with cross-tenant access (a klien JWT had no scope
+ * applied at all). Now uses utils/scope.getScopeFilter +
+ * applyLokasiScope, which:
+ *   - applies the right scope per role (admin/supervisor: none;
+ *     komandan/anggota: own lokasi; klien: every lokasi linked to
+ *     their client_id);
+ *   - intersects the scope with any caller-supplied lokasi_id, so
+ *     a komandan can't escape their lokasi by passing ?lokasi_id=X
+ *     for a different lokasi.
  */
 const laporanRepo = require('../repositories/laporan.repository');
 const { logEvent } = require('../middleware/auditlog');
 const { emitToAll, emitToRole } = require('../realtime/socketio');
+const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
 class LaporanService {
   // ====== HARIAN ======
   async getHarian(filters, user) {
-    // Anggota hanya melihat laporan sendiri
-    if (['anggota'].includes(user.role)) filters.user_id = user.id;
-
-    // FIX: Komandan hanya melihat laporan dari lokasi yang sama
-    if (user.role === 'komandan' && user.lokasi_id) {
-      filters.lokasi_id = user.lokasi_id;
+    // Anggota only see their own reports — this is a stricter cut
+    // than lokasi scoping, so we keep it.
+    if (user && user.role === 'anggota') {
+      filters.user_id = user.id;
     }
-
+    // Apply lokasi scope on top (klien / komandan / etc).
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
     return laporanRepo.findHarian(filters);
   }
 
@@ -42,14 +50,11 @@ class LaporanService {
 
   // ====== KEJADIAN ======
   async getKejadian(filters, user) {
-    // Anggota hanya melihat laporan sendiri
-    if (['anggota'].includes(user.role)) filters.user_id = user.id;
-
-    // FIX: Komandan hanya melihat laporan dari lokasi yang sama
-    if (user.role === 'komandan' && user.lokasi_id) {
-      filters.lokasi_id = user.lokasi_id;
+    if (user && user.role === 'anggota') {
+      filters.user_id = user.id;
     }
-
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
     return laporanRepo.findKejadian(filters);
   }
 

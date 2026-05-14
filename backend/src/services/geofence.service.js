@@ -142,10 +142,23 @@ class GeofenceService {
     return v;
   }
 
-  async getLiveMapData(lokasiId) {
+  async getLiveMapData(lokasiIds) {
+    // P0-6: `lokasiIds` is either null (unrestricted — admin/supervisor
+    // without a query param) or an array (possibly empty = deny-all
+    // sentinel, see utils/scope.js).
+    if (Array.isArray(lokasiIds) && lokasiIds.length === 0) {
+      // Restricted viewer with no permitted lokasi — return an empty
+      // but well-shaped payload so the UI doesn't crash on missing
+      // arrays.
+      return {
+        personnel: [], lokasi: [], pos_jaga: [],
+        violations: [], izin_aktif: [],
+        total_online: 0, total_outside: 0,
+      };
+    }
     const [users, lokasi, pos_jaga, violations, izin_aktif] = await Promise.all([
-      geoRepo.getPersonnelPositions(lokasiId), geoRepo.getActiveLokasi(lokasiId),
-      geoRepo.getActivePosJaga(lokasiId), geoRepo.getUnacknowledgedViolations(), geoRepo.getActiveIzinList(),
+      geoRepo.getPersonnelPositions(lokasiIds), geoRepo.getActiveLokasi(lokasiIds),
+      geoRepo.getActivePosJaga(lokasiIds), geoRepo.getUnacknowledgedViolations(lokasiIds), geoRepo.getActiveIzinList(lokasiIds),
     ]);
     const personnel = users.map(u => {
       let jarak = null, dalam_radius = true;

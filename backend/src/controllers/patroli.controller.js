@@ -5,7 +5,8 @@ const patroliService = require('../services/patroli.service');
 const { getFileUrl } = require('../middleware/upload');
 
 exports.getAll = async (req, res) => {
-  try { res.json(await patroliService.getAll(req.query)); }
+  // P0-6: pass req.user so the service can apply lokasi scope.
+  try { res.json(await patroliService.getAll(req.query, req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 

@@ -1,25 +1,43 @@
 /**
  * OPERASIONAL SERVICE - Broadcasts, Serah Terima, Panic, Notifikasi
  * v15 - Filtering support, catatan_resolver
+ * v16 - P0-6: scope-filter every read method (broadcasts, serah terima,
+ *       panic). Previously these accepted whatever `filters.lokasi_id`
+ *       the controller passed (which was just `req.query.lokasi_id`,
+ *       i.e. attacker-controlled). A klien JWT could read every
+ *       panic alert across every contract.
  */
 const opRepo = require('../repositories/operasional.repository');
 const { emitToAll, emitToRole } = require('../realtime/socketio');
+const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
 class OperasionalService {
-  // Broadcasts - pass filters (lokasi_id)
-  async getBroadcasts(filters = {}) { return opRepo.findBroadcasts(filters); }
+  // Broadcasts
+  async getBroadcasts(filters = {}, user) {
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
+    return opRepo.findBroadcasts(filters);
+  }
   async createBroadcast(user, data) {
     return opRepo.createBroadcast({ pengirim_id: user.id, ...data });
   }
 
-  // Serah Terima - pass filters (lokasi_id)
-  async getSerahTerima(filters = {}) { return opRepo.findSerahTerima(filters); }
+  // Serah Terima
+  async getSerahTerima(filters = {}, user) {
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
+    return opRepo.findSerahTerima(filters);
+  }
   async createSerahTerima(user, data) {
     return opRepo.createSerahTerima({ user_id: user.id, ...data });
   }
 
   // Panic
-  async getPanics(filters = {}) { return opRepo.findPanics(filters); }
+  async getPanics(filters = {}, user) {
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
+    return opRepo.findPanics(filters);
+  }
   async createPanic(user, data) {
     const row = await opRepo.createPanic({
       user_id: user.id,

@@ -1,7 +1,26 @@
 /**
  * PATROLI REPOSITORY
+ *
+ * P0-6 (Tahap 4): findAll now accepts filters.lokasi_id (single uuid)
+ * and filters.lokasi_ids (uuid[]); both filter through the joined
+ * users table (`u.lokasi_id`) since the patroli table itself has no
+ * lokasi_id column. An empty lokasi_ids array is the deny-all
+ * sentinel from utils/scope.
  */
 const { queryOne, queryAll, query } = require('../config/database');
+
+function buildLokasiClause(filters, colRef, params) {
+  if (filters.lokasi_id) {
+    params.push(filters.lokasi_id);
+    return ` AND ${colRef} = $${params.length}`;
+  }
+  if (Array.isArray(filters.lokasi_ids)) {
+    if (filters.lokasi_ids.length === 0) return ' AND FALSE';
+    params.push(filters.lokasi_ids);
+    return ` AND ${colRef} = ANY($${params.length}::uuid[])`;
+  }
+  return '';
+}
 
 class PatroliRepository {
   async findAll(filters = {}) {
@@ -10,6 +29,7 @@ class PatroliRepository {
     const params = [];
     if (filters.status) { params.push(filters.status); sql += ` AND p.status = $${params.length}`; }
     if (filters.user_id) { params.push(filters.user_id); sql += ` AND p.user_id = $${params.length}`; }
+    sql += buildLokasiClause(filters, 'u.lokasi_id', params);
     sql += ' ORDER BY p.created_at DESC';
     if (filters.limit) { params.push(parseInt(filters.limit)); sql += ` LIMIT $${params.length}`; }
     return queryAll(sql, params);

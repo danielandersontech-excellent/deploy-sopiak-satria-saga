@@ -1,8 +1,33 @@
 /**
  * LAPORAN REPOSITORY - Laporan Harian & Kejadian
+ *
+ * P0-6 (Tahap 4): now accepts filters.lokasi_ids (uuid[]) in addition
+ * to filters.lokasi_id (single uuid). An empty array is the deny-all
+ * sentinel and is rendered as `AND FALSE`. See utils/scope.js for
+ * how the service layer populates these.
  */
 const { queryOne, queryAll } = require('../config/database');
 const { parsePagination, paginatedResponse } = require('../utils/pagination');
+
+// Append the scope predicate to a SQL fragment given a colRef (the
+// fully-qualified column to filter on, e.g. 'u.lokasi_id'). Mutates
+// `params`. Returns the SQL fragment to append.
+function buildLokasiClause(filters, colRef, params) {
+  if (filters.lokasi_id) {
+    params.push(filters.lokasi_id);
+    return ` AND ${colRef} = $${params.length}`;
+  }
+  if (Array.isArray(filters.lokasi_ids)) {
+    if (filters.lokasi_ids.length === 0) {
+      // Deny-all sentinel from utils/scope: caller explicitly has
+      // no permitted lokasi, so produce zero rows safely.
+      return ' AND FALSE';
+    }
+    params.push(filters.lokasi_ids);
+    return ` AND ${colRef} = ANY($${params.length}::uuid[])`;
+  }
+  return '';
+}
 
 class LaporanRepository {
   // ====== HARIAN ======
@@ -12,7 +37,7 @@ class LaporanRepository {
     const params = [];
     if (filters.user_id) { params.push(filters.user_id); where += ` AND lh.user_id = $${params.length}`; }
     if (filters.status) { params.push(filters.status); where += ` AND lh.status = $${params.length}`; }
-    if (filters.lokasi_id) { params.push(filters.lokasi_id); where += ` AND u.lokasi_id = $${params.length}`; }
+    where += buildLokasiClause(filters, 'u.lokasi_id', params);
 
     const countResult = await queryOne(`SELECT COUNT(*)::int as total FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id ${where}`, params);
     const dataParams = [...params, limit, offset];
@@ -47,7 +72,7 @@ class LaporanRepository {
     if (filters.user_id) { params.push(filters.user_id); where += ` AND lk.user_id = $${params.length}`; }
     if (filters.status) { params.push(filters.status); where += ` AND lk.status = $${params.length}`; }
     if (filters.prioritas) { params.push(filters.prioritas); where += ` AND lk.prioritas = $${params.length}`; }
-    if (filters.lokasi_id) { params.push(filters.lokasi_id); where += ` AND u.lokasi_id = $${params.length}`; }
+    where += buildLokasiClause(filters, 'u.lokasi_id', params);
 
     const countResult = await queryOne(`SELECT COUNT(*)::int as total FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id ${where}`, params);
     const dataParams = [...params, limit, offset];

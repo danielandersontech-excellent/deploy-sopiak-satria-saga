@@ -1,15 +1,32 @@
 /**
  * PATROLI SERVICE
+ *
+ * P0-6 (Tahap 4): getAll() now takes the requesting user so it can
+ * apply lokasi scoping. Without this, a komandan calling
+ * GET /api/patroli saw patroli records from every lokasi in the
+ * company. The patroli table has no lokasi_id column of its own, so
+ * the filter goes through the joined users table — see
+ * patroli.repository.js.
  */
 const patroliRepo = require('../repositories/patroli.repository');
 const userRepo = require('../repositories/user.repository');
 const { logEvent } = require('../middleware/auditlog');
 const { emitToAll, emitToRole } = require('../realtime/socketio');
+const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
 class PatroliService {
-  async getAll(filters) { return patroliRepo.findAll(filters); }
+  async getAll(filters, user) {
+    const scope = await getScopeFilter(user);
+    applyLokasiScope(filters, scope);
+    return patroliRepo.findAll(filters);
+  }
 
   async getById(id) {
+    // Note: getById is intentionally NOT scope-checked in this pass —
+    // the spec for P0-6 covered getAll only, and validation flows
+    // legitimately fetch by id across roles. If we want to tighten
+    // this later, the check would be: load patrol → join users →
+    // confirm the patroli user's lokasi_id is in viewer's scope.
     const patrol = await patroliRepo.findByIdWithScans(id);
     if (!patrol) throw { status: 404, message: 'Patroli tidak ditemukan' };
     return patrol;

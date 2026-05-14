@@ -1,8 +1,23 @@
 /**
  * OPERASIONAL REPOSITORY - Broadcasts, Serah Terima, Panic, Notifikasi
  * v15 - Enhanced panic with full JOINs, broadcast filtering, serah terima filtering
+ * v16 - P0-6: accept filters.lokasi_ids (uuid[]) alongside filters.lokasi_id.
+ *       Empty array is the deny-all sentinel. See utils/scope.js.
  */
 const { queryOne, queryAll, query } = require('../config/database');
+
+function buildLokasiClause(filters, colRef, params) {
+  if (filters.lokasi_id) {
+    params.push(filters.lokasi_id);
+    return ` AND ${colRef} = $${params.length}`;
+  }
+  if (Array.isArray(filters.lokasi_ids)) {
+    if (filters.lokasi_ids.length === 0) return ' AND FALSE';
+    params.push(filters.lokasi_ids);
+    return ` AND ${colRef} = ANY($${params.length}::uuid[])`;
+  }
+  return '';
+}
 
 class OperasionalRepository {
   // ===== BROADCASTS =====
@@ -13,9 +28,23 @@ class OperasionalRepository {
                LEFT JOIN lokasi l ON b.lokasi_id = l.id
                WHERE 1=1`;
     const params = [];
+    // P0-6: broadcasts have their own b.lokasi_id column (a broadcast
+    // is targeted at a lokasi). The original single-id branch kept
+    // its OR-NULL semantics (NULL = company-wide broadcast visible
+    // to everyone) — we preserve that for the single-id case and the
+    // multi-id case alike.
     if (filters.lokasi_id) {
       params.push(filters.lokasi_id);
       sql += ` AND (b.lokasi_id = $${params.length} OR b.lokasi_id IS NULL)`;
+    } else if (Array.isArray(filters.lokasi_ids)) {
+      if (filters.lokasi_ids.length === 0) {
+        // Restricted-but-no-lokasi user: still let them see
+        // company-wide broadcasts (lokasi_id IS NULL), nothing else.
+        sql += ` AND b.lokasi_id IS NULL`;
+      } else {
+        params.push(filters.lokasi_ids);
+        sql += ` AND (b.lokasi_id = ANY($${params.length}::uuid[]) OR b.lokasi_id IS NULL)`;
+      }
     }
     sql += ` ORDER BY b.created_at DESC LIMIT 50`;
     return queryAll(sql, params);
@@ -34,10 +63,7 @@ class OperasionalRepository {
                LEFT JOIN users u ON s.user_id = u.id
                LEFT JOIN users p ON s.penerima_id = p.id WHERE 1=1`;
     const params = [];
-    if (filters.lokasi_id) {
-      params.push(filters.lokasi_id);
-      sql += ` AND u.lokasi_id = $${params.length}`;
-    }
+    sql += buildLokasiClause(filters, 'u.lokasi_id', params);
     sql += ` ORDER BY s.created_at DESC LIMIT 50`;
     return queryAll(sql, params);
   }
@@ -61,7 +87,7 @@ class OperasionalRepository {
                WHERE 1=1`;
     const params = [];
     if (filters.status) { params.push(filters.status); sql += ` AND pa.status = $${params.length}`; }
-    if (filters.lokasi_id) { params.push(filters.lokasi_id); sql += ` AND u.lokasi_id = $${params.length}`; }
+    sql += buildLokasiClause(filters, 'u.lokasi_id', params);
     sql += ' ORDER BY pa.created_at DESC';
     if (filters.limit) { params.push(parseInt(filters.limit)); sql += ` LIMIT $${params.length}`; }
     return queryAll(sql, params);

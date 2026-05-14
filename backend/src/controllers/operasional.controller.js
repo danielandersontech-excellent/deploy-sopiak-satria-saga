@@ -7,7 +7,8 @@ const fcm = require('../services/fcm.service');
 
 // Broadcasts
 exports.getBroadcasts = async (req, res) => {
-  try { res.json(await opService.getBroadcasts(req.query)); }
+  // P0-6: pass req.user so service applies lokasi scope.
+  try { res.json(await opService.getBroadcasts(req.query, req.user)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 };
 exports.createBroadcast = async (req, res) => {
@@ -22,7 +23,8 @@ exports.createBroadcast = async (req, res) => {
 
 // Serah Terima
 exports.getSerahTerima = async (req, res) => {
-  try { res.json(await opService.getSerahTerima(req.query)); }
+  // P0-6: pass req.user so service applies lokasi scope.
+  try { res.json(await opService.getSerahTerima(req.query, req.user)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 };
 exports.createSerahTerima = async (req, res) => {
@@ -32,7 +34,8 @@ exports.createSerahTerima = async (req, res) => {
 
 // Panic
 exports.getPanics = async (req, res) => {
-  try { res.json(await opService.getPanics(req.query)); }
+  // P0-6: pass req.user so service applies lokasi scope.
+  try { res.json(await opService.getPanics(req.query, req.user)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 };
 exports.createPanic = async (req, res) => {

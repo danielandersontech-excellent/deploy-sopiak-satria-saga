@@ -108,13 +108,29 @@ app.use('/api/', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // Coba extract user ID dari JWT token untuk rate limit per-user
+    // P0-11: this used to call jwt.verify() on every request, which is
+    // a double-verification with the actual `auth` middleware that
+    // runs later in the chain. Two problems with that:
+    //   1. Cost — bcrypt-grade HMAC over every request, before any
+    //      meaningful work, including for malformed/expired tokens
+    //      that would have been rejected by `auth` anyway.
+    //   2. Boot-time side effect — `require('jsonwebtoken')` ran
+    //      inside the hot path. Cheap once cached but pointless.
+    // The keyGenerator only needs a stable identity to bucket
+    // rate-limit counts. We don't authorize anything here; the
+    // `auth` middleware that runs AFTER this is what gates access.
+    // So `jwt.decode` (no signature check) is sufficient — even a
+    // forged token can't get you past `auth`, the worst an attacker
+    // can do is share rate-limit bucket #id-of-someone-else, which
+    // doesn't grant them anything. Same security profile, lower cost.
     try {
-      const auth = req.headers.authorization;
-      if (auth && auth.startsWith('Bearer ')) {
+      const authHeader = req.headers.authorization;
+      if (authHeader && authHeader.startsWith('Bearer ')) {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.verify(auth.split(' ')[1], process.env.JWT_SECRET);
-        return `user:${decoded.id}`; // Rate limit by user ID
+        const decoded = jwt.decode(authHeader.split(' ')[1]);
+        if (decoded && decoded.id) {
+          return `user:${decoded.id}`;
+        }
       }
     } catch (e) { /* ignore - fallback to IP */ }
     return `ip:${req.ip}`; // Fallback: rate limit by IP
