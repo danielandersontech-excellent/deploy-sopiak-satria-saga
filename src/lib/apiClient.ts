@@ -10,6 +10,7 @@
  * FLOW: HP → Metro:8081/api/* → proxy → localhost:3000/api/* → Backend
  */
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as SecureStore from 'expo-secure-store';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 
@@ -52,25 +53,94 @@ export const API_URL = __DEV__ ? _devUrl : _prodUrl;
 console.log('[API] Base URL:', API_URL);
 
 // ===== TOKEN STORAGE =====
-const TOKEN_KEY = '@ptsss_token';
-const REFRESH_KEY = '@ptsss_refresh';
+// P0-12: Auth tokens (access + refresh) now live in expo-secure-store,
+// which is backed by Android Keystore / iOS Keychain. AsyncStorage is an
+// unencrypted SQLite file — anyone with file-system access on a rooted
+// device (or anyone who can dump an unencrypted backup) could read tokens
+// straight off disk. SecureStore key names cannot start with '@' and may
+// only contain [A-Za-z0-9._-], so the in-store names differ from the
+// legacy AsyncStorage names. We migrate any existing AsyncStorage token
+// the first time getToken()/getRefreshToken() runs so users don't have
+// to re-login after the upgrade.
+//
+// User data (nama, role, ...) stays in AsyncStorage — it is not
+// security-sensitive, is read on every screen, and SecureStore would be
+// a poor fit for a JSON blob (slow + size-limited on some platforms).
+const SECURE_TOKEN_KEY = 'ptsss_token';
+const SECURE_REFRESH_KEY = 'ptsss_refresh';
+const LEGACY_TOKEN_KEY = '@ptsss_token';
+const LEGACY_REFRESH_KEY = '@ptsss_refresh';
 const USER_KEY = '@ptsss_user';
 let _token: string | null = null;
 let _refreshToken: string | null = null;
 
+// Helper: read from SecureStore, falling back to (and migrating from)
+// the legacy AsyncStorage entry the first time.
+async function readSecure(secureKey: string, legacyKey: string): Promise<string | null> {
+  try {
+    const v = await SecureStore.getItemAsync(secureKey);
+    if (v) return v;
+  } catch (e) {
+    console.warn(`[Auth] SecureStore read failed for ${secureKey}:`, e);
+  }
+  // Migration path: pull from AsyncStorage if present, move to SecureStore.
+  try {
+    const legacy = await AsyncStorage.getItem(legacyKey);
+    if (legacy) {
+      try { await SecureStore.setItemAsync(secureKey, legacy); } catch (e) {
+        console.warn(`[Auth] SecureStore migration write failed for ${secureKey}:`, e);
+      }
+      try { await AsyncStorage.removeItem(legacyKey); } catch {}
+      console.log(`[Auth] Migrated ${legacyKey} -> SecureStore`);
+      return legacy;
+    }
+  } catch {}
+  return null;
+}
+
+async function writeSecure(secureKey: string, legacyKey: string, value: string): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(secureKey, value);
+  } catch (e) {
+    // We deliberately don't fall back to AsyncStorage here — silently
+    // downgrading the store would defeat the purpose of the fix.
+    console.error(`[Auth] SecureStore write failed for ${secureKey}:`, e);
+    throw e;
+  }
+  // Make sure no stale plaintext copy lingers in AsyncStorage.
+  try { await AsyncStorage.removeItem(legacyKey); } catch {}
+}
+
+async function deleteSecure(secureKey: string, legacyKey: string): Promise<void> {
+  try { await SecureStore.deleteItemAsync(secureKey); } catch {}
+  try { await AsyncStorage.removeItem(legacyKey); } catch {}
+}
+
 export async function getToken(): Promise<string | null> {
   if (_token) return _token;
-  _token = await AsyncStorage.getItem(TOKEN_KEY);
+  _token = await readSecure(SECURE_TOKEN_KEY, LEGACY_TOKEN_KEY);
   return _token;
 }
-export async function setToken(token: string) { _token = token; await AsyncStorage.setItem(TOKEN_KEY, token); }
+export async function setToken(token: string) {
+  _token = token;
+  await writeSecure(SECURE_TOKEN_KEY, LEGACY_TOKEN_KEY, token);
+}
 export async function getRefreshToken(): Promise<string | null> {
   if (_refreshToken) return _refreshToken;
-  _refreshToken = await AsyncStorage.getItem(REFRESH_KEY);
+  _refreshToken = await readSecure(SECURE_REFRESH_KEY, LEGACY_REFRESH_KEY);
   return _refreshToken;
 }
-export async function setRefreshToken(token: string) { _refreshToken = token; await AsyncStorage.setItem(REFRESH_KEY, token); }
-export async function clearToken() { _token = null; _refreshToken = null; await AsyncStorage.multiRemove([TOKEN_KEY, REFRESH_KEY, USER_KEY]); }
+export async function setRefreshToken(token: string) {
+  _refreshToken = token;
+  await writeSecure(SECURE_REFRESH_KEY, LEGACY_REFRESH_KEY, token);
+}
+export async function clearToken() {
+  _token = null;
+  _refreshToken = null;
+  await deleteSecure(SECURE_TOKEN_KEY, LEGACY_TOKEN_KEY);
+  await deleteSecure(SECURE_REFRESH_KEY, LEGACY_REFRESH_KEY);
+  await AsyncStorage.removeItem(USER_KEY);
+}
 export async function saveUser(user: any) { await AsyncStorage.setItem(USER_KEY, JSON.stringify(user)); }
 export async function getSavedUser(): Promise<any | null> { const r = await AsyncStorage.getItem(USER_KEY); return r ? JSON.parse(r) : null; }
 

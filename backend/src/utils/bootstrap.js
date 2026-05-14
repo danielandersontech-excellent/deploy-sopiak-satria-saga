@@ -13,13 +13,37 @@
  * 3. Optionally seeds the default users (controlled by AUTO_BOOTSTRAP env var).
  *
  * Idempotent: safe to run on every boot. If schema is already there, it does nothing.
+ *
+ * Tahap-2 security fixes:
+ *   P0-14: Each seeded account now gets a 6-digit random PIN (printed once
+ *          to console) and is flagged `must_change_pin=TRUE`, forcing
+ *          rotation on first login. The legacy `123456` PIN is gone.
+ *   P0-15: bcrypt rounds come from BCRYPT_ROUNDS env (default 12) so this
+ *          file matches auth.service.js / data.service.js and the work
+ *          factor is tunable per environment.
  */
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { pool, queryOne } = require('../config/database');
 
 const SCHEMA_FILE = path.join(__dirname, '..', '..', 'database', 'ptsss_db.sql');
+
+// P0-15: single source of truth for the bcrypt work factor across the
+// backend. Anything that hashes a PIN must read it from here (or inline
+// the same `parseInt(process.env.BCRYPT_ROUNDS || '12')` expression).
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
+
+// P0-14: cryptographically random 6-digit PIN. Math.random() would work
+// (and is what the issue ticket suggested) but crypto.randomInt is the
+// same cost, available in Node ≥14, and removes any predictability around
+// the seed PIN — a small but free improvement. Since must_change_pin
+// forces rotation on first login, the temp PIN's strength matters mainly
+// for the window between account creation and first successful login.
+function randomPin() {
+  return String(crypto.randomInt(100000, 1000000));
+}
 
 async function schemaExists() {
   try {
@@ -63,8 +87,7 @@ async function seedDefaultUsers() {
     return;
   }
 
-  console.log('[BOOTSTRAP] Users table empty — seeding default users (PIN: 123456)');
-  const pinHash = await bcrypt.hash('123456', 10);
+  console.log('[BOOTSTRAP] Users table empty — seeding default users with RANDOM PINs');
   const users = [
     { nrp: 'ADM001', nama: 'Admin System',     role: 'admin',      shift: '08:00-16:00' },
     { nrp: 'SPV001', nama: 'Budi Supervisor',  role: 'supervisor', shift: '08:00-16:00' },
@@ -74,15 +97,43 @@ async function seedDefaultUsers() {
     { nrp: 'AGT003', nama: 'Joko Patrol',      role: 'anggota',    shift: '22:00-06:00' },
   ];
 
+  // Collect (nrp, pin) pairs so we can print them in one block at the end.
+  // Printing as we go would interleave with the per-user log line and the
+  // operator would have to grep both halves back together.
+  const printedCreds = [];
+
   for (const u of users) {
+    // P0-14: per-user random PIN — no shared default. If two accounts get
+    // the same PIN by chance, that's fine: NRP+PIN together still
+    // authenticates uniquely, and both accounts will be force-rotated.
+    const pin = randomPin();
+    const pinHash = await bcrypt.hash(pin, BCRYPT_ROUNDS);
     await pool.query(
-      'INSERT INTO users (nrp, nama, role, shift, pin_hash, status) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (nrp) DO NOTHING',
+      `INSERT INTO users (nrp, nama, role, shift, pin_hash, status, must_change_pin)
+       VALUES ($1,$2,$3,$4,$5,$6, TRUE)
+       ON CONFLICT (nrp) DO NOTHING`,
       [u.nrp, u.nama, u.role, u.shift, pinHash, 'off_duty']
     );
-    console.log(`[BOOTSTRAP]   ✓ ${u.nrp} (${u.role}) PIN=123456`);
+    printedCreds.push({ nrp: u.nrp, role: u.role, pin });
+    console.log(`[BOOTSTRAP]   ✓ ${u.nrp} (${u.role}) seeded`);
   }
 
-  console.log('[BOOTSTRAP] ⚠️  GANTI PIN default setelah login pertama!');
+  // P0-14: print credentials ONCE in a clearly-marked block. Operators
+  // are expected to capture these from the boot log and distribute them
+  // out-of-band (1Password, Signal, ...). They will be invalidated by
+  // the must_change_pin flow on the first successful login.
+  console.log('');
+  console.log('==============================================================');
+  console.log(' INITIAL SEED CREDENTIALS — FORCED ROTATION ON FIRST LOGIN');
+  console.log('==============================================================');
+  for (const c of printedCreds) {
+    console.log(`   ${c.nrp.padEnd(8)} (${c.role.padEnd(10)})  PIN: ${c.pin}`);
+  }
+  console.log('==============================================================');
+  console.log(' Capture these PINs now. They will not be re-printed.');
+  console.log(' Each user must change their PIN on first login.');
+  console.log('==============================================================');
+  console.log('');
 }
 
 /**

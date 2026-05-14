@@ -8,7 +8,14 @@ const { pool, queryOne } = require('../config/database');
 
 async function seed() {
   console.log('🌱 Seeding database...\n');
-  const pin = await bcrypt.hash('123456', 10);
+  // P0-15: rounds come from BCRYPT_ROUNDS env (default 12) so this dev
+  //        seed matches the work factor used by bootstrap.js / auth.service.js
+  //        / data.service.js. Previously hardcoded to 10.
+  // Note: PIN '123456' is intentionally retained here because this script
+  //       is *only* run manually by developers (`node src/utils/seed.js`)
+  //       to populate a local dev DB with predictable credentials. The
+  //       production-facing bootstrap.js seeds with random per-user PINs.
+  const pin = await bcrypt.hash('123456', parseInt(process.env.BCRYPT_ROUNDS || '12'));
 
   const users = [
     { nrp: 'ADM001', nama: 'Admin System', role: 'admin', shift: '08:00-16:00' },

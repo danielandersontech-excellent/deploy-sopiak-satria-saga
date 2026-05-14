@@ -8,9 +8,19 @@ class AuthRepository extends BaseRepository {
   constructor() { super('users'); }
 
   async findByNrp(nrp) {
+    // P0-14: must_change_pin added to the SELECT list so auth.service.js
+    // can surface the mustChangePin flag on login. Older DBs that haven't
+    // had migration 002 applied will simply not have the column — the
+    // query will fail and the caller will see "column does not exist".
+    // Operators are expected to apply migration 002 before deploying
+    // the matching service-layer code, but if you need to ship the
+    // service-layer change first you can replace the explicit column
+    // with `COALESCE((SELECT must_change_pin), FALSE) AS must_change_pin`
+    // wrapped in a try/catch in the service layer. Leaving the simple
+    // form for clarity.
     return queryOne(
-      `SELECT id, nrp, nama, role, no_hp, foto_url, lokasi_id, pos_jaga_id, 
-              shift, status, skor, pin_hash FROM users WHERE UPPER(nrp) = UPPER($1)`,
+      `SELECT id, nrp, nama, role, no_hp, foto_url, lokasi_id, pos_jaga_id,
+              shift, status, skor, pin_hash, must_change_pin FROM users WHERE UPPER(nrp) = UPPER($1)`,
       [nrp]
     );
   }

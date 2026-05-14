@@ -25,7 +25,10 @@ const { v4: uuidv4 } = require('uuid');
 async function seedFull() {
   console.log('\n🌱 === PT SOPIAK SATRIA SAGA - FULL SEED ===\n');
   
-  const pinHash = await bcrypt.hash('123456', 10);
+  // P0-15: rounds from env (default 12). Same rationale as seed.js — this
+  //        is dev tooling so the demo PIN is preserved on purpose, but the
+  //        work factor matches production.
+  const pinHash = await bcrypt.hash('123456', parseInt(process.env.BCRYPT_ROUNDS || '12'));
   const now = new Date();
   const today = now.toISOString().split('T')[0];
   

@@ -17,12 +17,10 @@
  *   users table: id, nama, nrp, pin, role, no_hp, pos_jaga,
  *   shift, lokasi_id, foto, skor, created_at
  *
- * LOGIN CREDENTIALS:
- *   ADMIN:      ADM001 / 123456
- *   SUPERVISOR: SPV001 / 123456
- *   KOMANDAN:   KMD001-KMD005 / 123456
- *   ANGGOTA:    AGT001-AGT023 / 123456
- *   KLIEN:      K001-K006 / 123456
+ * P0-1 (Tahap 2 fixes): Quick-login dev tooling no longer ships in this
+ * screen. The block previously here listing ADM001/SPV001/KMD001/AGT001/K001
+ * with PIN 123456 has been removed — those defaults are also being replaced
+ * by random per-user PINs (see P0-14) so the listing was already misleading.
  */
 import React, { useState, useRef, useEffect } from 'react';
 import {
@@ -36,7 +34,7 @@ import { Spacing, Radius, Shadows } from '../../constants';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { API_URL, testConnection } from '../../lib/apiClient';
-import type { UserRole } from '../../types';
+// P0-1: UserRole import removed along with handleQuickLogin.
 import { useTheme } from '../../lib/theme';
 
 const { width } = Dimensions.get('window');
@@ -53,7 +51,10 @@ export default function LoginScreen({ navigation }: any) {
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
   const login = useAuthStore((s) => s.login);
-  const loginAsRole = useAuthStore((s) => s.loginAsRole);
+  // P0-1: Quick-login (loginAsRole) is intentionally NOT imported here.
+  // The store keeps the function for dev tooling, gated by __DEV__ —
+  // pulling it into the screen would expose a code-path that can ship to
+  // production. If you need it for local dev, re-import behind __DEV__.
   const loadAllData = useDataStore((s) => s.loadAllData);
 
   // Theme-aware colors for this screen (single source of truth)
@@ -132,28 +133,13 @@ export default function LoginScreen({ navigation }: any) {
     }
   };
 
-  const handleQuickLogin = async (role: UserRole) => {
-    if (loading) return;
-    setLoading(true);
-    setError('');
-    try {
-      const ok = await loginAsRole(role);
-      if (ok) {
-        try { await loadAllData(); } catch (dataErr) { console.log('[Login] loadAllData warning:', dataErr); }
-        setLoading(false);
-        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
-      } else {
-        setLoading(false);
-        const msg = useAuthStore.getState().error || 'Login gagal. Periksa koneksi server.';
-        setError(msg);
-        shake();
-      }
-    } catch (e: any) {
-      setLoading(false);
-      setError(e?.message || 'Terjadi kesalahan saat login');
-      shake();
-    }
-  };
+  // P0-1: handleQuickLogin removed. The previous version called
+  // useAuthStore.loginAsRole(role) with hardcoded NRP+PIN credentials
+  // (ADM001/123456, AGT001/123456, K001/123456, ...). Even though no
+  // visible button referenced it in the latest source, leaving the
+  // function in the bundle means production builds carry the credential
+  // map and the wiring to use it — one stray `__DEV__` regression or a
+  // copy-paste in another screen would re-expose it. Removed entirely.
 
   return (
     <SafeAreaView style={[styles.safeArea, { backgroundColor: C.bg }]} edges={['top', 'left', 'right']}>

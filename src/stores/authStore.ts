@@ -115,6 +115,17 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   loginAsRole: async (role) => {
+    // P0-1: This function exists ONLY to make local development less
+    // painful (one-tap login as each role). It must never execute in a
+    // production bundle — the hardcoded credentials below would let
+    // anyone with the APK sign in as admin. Metro/Hermes inlines
+    // `__DEV__` as a boolean literal at build time, so the entire
+    // credential map below is dead-code-eliminated from release builds.
+    if (!__DEV__) {
+      set({ error: 'Quick login tidak tersedia di production' });
+      console.warn('[Auth] loginAsRole called in non-dev build — ignored.');
+      return false;
+    }
     const roleMap: Record<string, { nrp: string; pin: string }> = {
       anggota:    { nrp: 'AGT001', pin: '123456' },
       komandan:   { nrp: 'KMD001', pin: '123456' },

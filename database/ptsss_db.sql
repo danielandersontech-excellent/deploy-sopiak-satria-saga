@@ -156,6 +156,9 @@ CREATE TABLE public.clients (
     last_seen timestamp with time zone,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
+    -- P0-14: force PIN rotation after first login (random temporary PIN
+    --        is set on account creation in auth.service.js / data.service.js).
+    must_change_pin BOOLEAN DEFAULT TRUE,
     CONSTRAINT clients_jenis_kelamin_check CHECK (((jenis_kelamin)::text = ANY ((ARRAY['Laki-Laki'::character varying, 'Perempuan'::character varying, 'Lainnya/Instansi'::character varying])::text[]))),
     CONSTRAINT clients_status_klien_check CHECK (((status_klien)::text = ANY ((ARRAY['Aktif'::character varying, 'Non-Aktif'::character varying, 'Blacklist'::character varying])::text[])))
 );
@@ -569,6 +572,9 @@ CREATE TABLE public.users (
     berkas_cv text,
     berkas_foto_formal text,
     berkas_kontrak text,
+    -- P0-14: force PIN rotation after first login (random temporary PIN
+    --        is set on account creation in auth.service.js / bootstrap.js).
+    must_change_pin BOOLEAN DEFAULT TRUE,
     CONSTRAINT users_role_check CHECK ((role = ANY (ARRAY['anggota'::text, 'komandan'::text, 'supervisor'::text, 'admin'::text]))),
     CONSTRAINT users_status_check CHECK ((status = ANY (ARRAY['on_duty'::text, 'patroli'::text, 'break'::text, 'off_duty'::text]))),
     CONSTRAINT users_status_penempatan_check CHECK ((status_penempatan = ANY (ARRAY['belum_ditempatkan'::text, 'ditempatkan'::text, 'nonaktif'::text])))

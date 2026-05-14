@@ -1,9 +1,24 @@
 /**
  * DATA SERVICE - Generic CRUD for master data
  * v23 - Fixed update stripping computed fields, client pin, kode_unik removal
+ * v24 - P0-14: client create() now mints a random 6-digit PIN, sets
+ *       must_change_pin=true, and surfaces the temp PIN once in the
+ *       response. Removes the hardcoded '123456' default that previously
+ *       gave every new klien the same out-of-the-box password.
  */
+const crypto = require('crypto');
 const repos = require('../repositories/data.repository');
 const { queryAll, queryOne } = require('../config/database');
+
+// Same rounds as auth.service.js / bootstrap.js — P0-15.
+const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
+
+// P0-14: see comment in auth.service.js for the rationale around
+// crypto.randomInt vs Math.random. Same helper, kept local to avoid
+// a circular import via auth.service.
+function randomPin() {
+  return String(crypto.randomInt(100000, 1000000));
+}
 
 class DataService {
   getRepo(table) {
@@ -97,12 +112,31 @@ class DataService {
       if (!data.nrp_login) {
         data.nrp_login = (data.kode_klien || '').replace(/[-\s]/g, '').toUpperCase();
       }
+      // P0-14: random temp PIN, must_change_pin=true. The PIN is
+      // returned to the admin who created the account (see the
+      // `temp_pin` field at the bottom of this branch) and must be
+      // delivered out-of-band — it's the only point the PIN exists
+      // in the clear anywhere in the system.
+      let _tempPin = null;
       if (!data.pin_hash) {
         try {
           const bcrypt = require('bcryptjs');
-          data.pin_hash = await bcrypt.hash('123456', parseInt(process.env.BCRYPT_ROUNDS || '12'));
+          _tempPin = randomPin();
+          data.pin_hash = await bcrypt.hash(_tempPin, BCRYPT_ROUNDS);
+          data.must_change_pin = true;
         } catch (e) { console.log('[DataService] bcrypt error:', e.message); }
       }
+      const created = await repo.create(data);
+      if (_tempPin && created) {
+        // Return the temp PIN exactly once. Anything that re-reads the
+        // client row later will NOT see it (we never store the plain
+        // PIN, only the bcrypt hash). The admin UI is responsible for
+        // displaying it immediately and warning the operator to copy
+        // it now.
+        created.temp_pin = _tempPin;
+        created.must_change_pin = true;
+      }
+      return created;
     }
     return repo.create(data);
   }
@@ -119,7 +153,12 @@ class DataService {
       if (data.pin && !data.pin_hash) {
         try {
           const bcrypt = require('bcryptjs');
-          data.pin_hash = await bcrypt.hash(String(data.pin), parseInt(process.env.BCRYPT_ROUNDS || '12'));
+          data.pin_hash = await bcrypt.hash(String(data.pin), BCRYPT_ROUNDS);
+          // P0-14: an admin pushing a new PIN through the data update
+          // endpoint is effectively a forced reset — the client never
+          // chose this PIN. Flag for rotation on next login so the
+          // client picks their own value as soon as they're back in.
+          data.must_change_pin = true;
         } catch (e) {}
       }
       delete data.pin;
