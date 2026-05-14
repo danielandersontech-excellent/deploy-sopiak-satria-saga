@@ -28,7 +28,8 @@ async function seed() {
 
   for (const u of users) {
     try {
-      const existing = await queryOne('SELECT id FROM users WHERE nrp = $1', [u.nrp]);
+      // P1-6: case-insensitive existence check, matches auth.repository.js
+      const existing = await queryOne('SELECT id FROM users WHERE UPPER(nrp) = UPPER($1)', [u.nrp]);
       if (existing) { console.log(`  ⏭️  ${u.nrp} sudah ada`); continue; }
       await queryOne(
         'INSERT INTO users (nrp, nama, role, shift, pin_hash, status) VALUES ($1,$2,$3,$4,$5,$6)',

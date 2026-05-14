@@ -21,6 +21,18 @@
  *   P0-15: bcrypt rounds come from BCRYPT_ROUNDS env (default 12) so this
  *          file matches auth.service.js / data.service.js and the work
  *          factor is tunable per environment.
+ *
+ * Tahap-6 hardening:
+ *   P1-8:  The bottom-most catch used to swallow the error and let the
+ *          process keep running with a half-loaded schema, which produced
+ *          a backend that boots green and then returns 500 on every
+ *          endpoint. Behaviour is now governed by BOOTSTRAP_STRICT
+ *          (defaults to true when NODE_ENV=production):
+ *            - strict:    log fatal + process.exit(1). Coolify will
+ *                         restart the container, and the operator sees
+ *                         a clear failure instead of a silent corruption.
+ *            - non-strict: log the error and keep running, so a developer
+ *                         can poke at the failing DB without restarting.
  */
 const fs = require('fs');
 const path = require('path');
@@ -43,6 +55,20 @@ const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
 // for the window between account creation and first successful login.
 function randomPin() {
   return String(crypto.randomInt(100000, 1000000));
+}
+
+// P1-8: resolve BOOTSTRAP_STRICT into a definite boolean.
+// Default policy:
+//   - production: STRICT (fail-fast — better to crash-loop on Coolify
+//                 than to silently serve a broken backend)
+//   - everything else (development, test, undefined): NON-STRICT
+// Operators can force either mode explicitly by setting BOOTSTRAP_STRICT
+// to "true" or "false" (case-insensitive) in the environment.
+function isStrictMode() {
+  const raw = (process.env.BOOTSTRAP_STRICT || '').toLowerCase().trim();
+  if (raw === 'true' || raw === '1' || raw === 'yes') return true;
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  return process.env.NODE_ENV === 'production';
 }
 
 async function schemaExists() {
@@ -144,6 +170,11 @@ async function seedDefaultUsers() {
  *   - "true"  (default): load schema if missing + seed default users if empty
  *   - "false": skip everything (production with manual schema management)
  *   - "schema-only": load schema if missing but DON'T seed users
+ *
+ * P1-8: Failure handling is controlled by BOOTSTRAP_STRICT (see
+ * isStrictMode() above). In strict mode the process exits with code 1
+ * so the orchestrator (Coolify) can restart the container; the previous
+ * behaviour swallowed the error and let the backend keep serving 500s.
  */
 async function bootstrap() {
   const mode = (process.env.AUTO_BOOTSTRAP || 'true').toLowerCase();
@@ -167,9 +198,24 @@ async function bootstrap() {
 
     console.log('[BOOTSTRAP] ✓ Done');
   } catch (err) {
-    console.error('[BOOTSTRAP] ✗ Failed:', err.message);
-    // Don't kill the process — backend can still serve /ping etc.
-    // The operator will see the error in logs and can fix it manually.
+    const strict = isStrictMode();
+    if (strict) {
+      // FATAL: backend cannot be trusted to serve traffic. Log loudly,
+      // then exit so the container restarts and the operator sees a
+      // crash-loop in Coolify instead of a silent corruption.
+      console.error('[BOOTSTRAP] ✗ FATAL — bootstrap failed in strict mode, exiting');
+      console.error('[BOOTSTRAP]   reason:', err && err.message ? err.message : err);
+      if (err && err.stack) console.error(err.stack);
+      console.error('[BOOTSTRAP]   set BOOTSTRAP_STRICT=false to keep the process alive (development only).');
+      // Give stderr a tick to flush before exiting on PaaS log shippers
+      // that buffer on the writable side of stderr.
+      process.exit(1);
+    }
+    // NON-strict (dev / opt-out): keep the process alive so the
+    // developer can diagnose. The previous behaviour. Logged as ERROR
+    // (not WARN) so it still stands out in the dev console.
+    console.error('[BOOTSTRAP] ✗ Failed (non-strict mode — process kept alive):', err.message);
+    if (err && err.stack) console.error(err.stack);
   }
 }
 

@@ -18,6 +18,10 @@ class AuthRepository extends BaseRepository {
     // with `COALESCE((SELECT must_change_pin), FALSE) AS must_change_pin`
     // wrapped in a try/catch in the service layer. Leaving the simple
     // form for clarity.
+    //
+    // P1-6: comparison is `UPPER(nrp) = UPPER($1)` so login is
+    // case-insensitive. See nrpExists() below for the matching duplicate
+    // check and migration 004 for the database-level unique index.
     return queryOne(
       `SELECT id, nrp, nama, role, no_hp, foto_url, lokasi_id, pos_jaga_id,
               shift, status, skor, pin_hash, must_change_pin FROM users WHERE UPPER(nrp) = UPPER($1)`,
@@ -49,8 +53,14 @@ class AuthRepository extends BaseRepository {
     return query('UPDATE users SET last_seen = NOW() WHERE id = $1', [userId]);
   }
 
+  // P1-6: was `WHERE nrp = $1` (case-sensitive), which let an admin create
+  // a duplicate "agt001" alongside an existing "AGT001" — findByNrp would
+  // then resolve one of them non-deterministically at login time.
+  // Now matches findByNrp's normalisation. The functional UNIQUE index
+  // added in migration 004 enforces the same rule at the DB level so a
+  // concurrent insert cannot slip past this application check.
   async nrpExists(nrp) {
-    const row = await queryOne('SELECT id FROM users WHERE nrp = $1', [nrp]);
+    const row = await queryOne('SELECT id FROM users WHERE UPPER(nrp) = UPPER($1)', [nrp]);
     return !!row;
   }
 
