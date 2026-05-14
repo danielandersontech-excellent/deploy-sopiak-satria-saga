@@ -85,7 +85,13 @@ const schemas = {
     if (!body.nrp || body.nrp.length < 1 || body.nrp.length > 20) errors.push('NRP wajib (max 20 karakter)');
     if (!body.nama || body.nama.length < 2 || body.nama.length > 100) errors.push('Nama wajib (2-100 karakter)');
     if (!body.role || !isIn(body.role, ['anggota', 'komandan', 'supervisor', 'admin'])) {
-      errors.push('Role wajib (anggota/komandan/supervisor/admin/klien)');
+      // P1-5: error message used to list "/klien" even though 'klien'
+      // is NOT in the allowed list above — klien identity lives in
+      // the clients table, never created via the /register endpoint.
+      // The mismatched message would tell users they could register
+      // a klien here and then 400 when they tried. Listed roles now
+      // match the actual allow-list.
+      errors.push('Role wajib (anggota/komandan/supervisor/admin)');
     }
     if (body.no_hp && body.no_hp.length > 20) errors.push('No HP max 20 karakter');
     if (body.lokasi_id && !isUUID(body.lokasi_id)) errors.push('lokasi_id harus UUID valid');
