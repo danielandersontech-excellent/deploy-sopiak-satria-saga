@@ -1,6 +1,10 @@
 # ============================================
 # PT Sopiak Satria Saga — Docker Compose (Coolify edition)
 # ============================================
+# Tahap 5+ hotfix: routing via Traefik Docker labels.
+# Replace dependency to /data/coolify/proxy/dynamic/sopiak.yml which
+# breaks every deploy because it hardcodes container names. With labels,
+# Traefik auto-discovers each service on (re)deploy.
 
 services:
 
@@ -67,6 +71,20 @@ services:
       - backend_downloads:/app/downloads
     expose:
       - "3000"
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.sopiak-backend.rule=Host(`api.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-backend.entrypoints=https"
+      - "traefik.http.routers.sopiak-backend.tls=true"
+      - "traefik.http.routers.sopiak-backend.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sopiak-backend.service=sopiak-backend"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.sopiak-backend-http.rule=Host(`api.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-backend-http.entrypoints=http"
+      - "traefik.http.routers.sopiak-backend-http.middlewares=sopiak-https-redirect"
+      # Service definition (port 3000)
+      - "traefik.http.services.sopiak-backend.loadbalancer.server.port=3000"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3000/api/health"]
       interval: 15s
@@ -90,6 +108,23 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.sopiak-webadmin.rule=Host(`hq.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-webadmin.entrypoints=https"
+      - "traefik.http.routers.sopiak-webadmin.tls=true"
+      - "traefik.http.routers.sopiak-webadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sopiak-webadmin.service=sopiak-webadmin"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.sopiak-webadmin-http.rule=Host(`hq.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-webadmin-http.entrypoints=http"
+      - "traefik.http.routers.sopiak-webadmin-http.middlewares=sopiak-https-redirect"
+      # Service definition (port 3001)
+      - "traefik.http.services.sopiak-webadmin.loadbalancer.server.port=3001"
+      # Shared HTTPS redirect middleware (declared once, shared by all)
+      - "traefik.http.middlewares.sopiak-https-redirect.redirectscheme.scheme=https"
+      - "traefik.http.middlewares.sopiak-https-redirect.redirectscheme.permanent=true"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/"]
       interval: 15s
@@ -107,6 +142,20 @@ services:
       TZ: Asia/Jakarta
     expose:
       - "3002"
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router — accept both apex and www
+      - "traefik.http.routers.sopiak-website.rule=Host(`sopiaksatriasaga.com`) || Host(`www.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-website.entrypoints=https"
+      - "traefik.http.routers.sopiak-website.tls=true"
+      - "traefik.http.routers.sopiak-website.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sopiak-website.service=sopiak-website"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.sopiak-website-http.rule=Host(`sopiaksatriasaga.com`) || Host(`www.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-website-http.entrypoints=http"
+      - "traefik.http.routers.sopiak-website-http.middlewares=sopiak-https-redirect"
+      # Service definition (port 3002)
+      - "traefik.http.services.sopiak-website.loadbalancer.server.port=3002"
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3002/"]
       interval: 15s
@@ -131,6 +180,20 @@ services:
       - pgadmin_data:/var/lib/pgadmin
     expose:
       - "80"
+    labels:
+      - "traefik.enable=true"
+      # HTTPS router
+      - "traefik.http.routers.sopiak-pgadmin.rule=Host(`pgadmin.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-pgadmin.entrypoints=https"
+      - "traefik.http.routers.sopiak-pgadmin.tls=true"
+      - "traefik.http.routers.sopiak-pgadmin.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.sopiak-pgadmin.service=sopiak-pgadmin"
+      # HTTP → HTTPS redirect
+      - "traefik.http.routers.sopiak-pgadmin-http.rule=Host(`pgadmin.sopiaksatriasaga.com`)"
+      - "traefik.http.routers.sopiak-pgadmin-http.entrypoints=http"
+      - "traefik.http.routers.sopiak-pgadmin-http.middlewares=sopiak-https-redirect"
+      # Service definition (port 80)
+      - "traefik.http.services.sopiak-pgadmin.loadbalancer.server.port=80"
 
 volumes:
   postgres_data:
