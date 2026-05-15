@@ -38,7 +38,7 @@ const crypto = require('crypto');
 // MIGRATIONS_DIR: bisa override via env untuk testing. Default mengikuti
 // struktur project: database/migrations/ di root project.
 // Path resolusi: backend/src/utils/migrationRunner.js → ../../../database/migrations
-const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', '..', 'database', 'migrations');
+const DEFAULT_MIGRATIONS_DIR = path.resolve(__dirname, '..', '..', 'database', 'migrations');
 
 /**
  * SHA256 checksum dari isi file. Dipakai untuk deteksi perubahan migration
