@@ -6,7 +6,7 @@
  * patroli, laporan and generic upload flows so every piece of photographic
  * evidence carries its own verification metadata.
  *
- * Tahap-6 hardening (P1-17):
+ * Tahap-6 hardening (P1-17 round 1):
  *
  *   The previous implementation silently returned the ORIGINAL,
  *   un-watermarked path on every failure path (sharp not installed,
@@ -31,6 +31,40 @@
  *   request. Strict mode therefore upgrades the audit trail without
  *   adding new failure surface for end users.
  *
+ * AUDIT FIX (P1-17 round 2 — extension/content mismatch):
+ *
+ *   The pipeline always re-encodes as JPEG (`.jpeg({ quality: 85, ... })`)
+ *   but the file on disk was overwritten in place, keeping its original
+ *   extension. A `.png` upload became JPEG bytes inside a `.png` file:
+ *     - HTTP Content-Type would be derived from the extension (image/png)
+ *       but the body would be image/jpeg, breaking strict clients.
+ *     - Some image viewers and download workflows fail on the mismatch.
+ *
+ *   Fix: after a successful watermark, if the input extension is not
+ *   already .jpg / .jpeg, rename the file to .jpg and RETURN THE NEW
+ *   PATH. Callers must use the return value instead of the original
+ *   path going forward. The current callers (4 of them) have been
+ *   updated in this same release to assign back into req.file.path
+ *   so getFileUrl() picks up the new name.
+ *
+ * AUDIT FIX (P1-18 — OOM guard on absurd dimensions):
+ *
+ *   sharp materializes the decoded image in memory before compositing.
+ *   A 50000×50000 PNG (perfectly possible at ~5MB compressed) needs
+ *   ~10GB of RAM to decode, instantly OOM-killing the container. The
+ *   multer fileSize cap (10MB) does not save us here because PNG and
+ *   WebP compress extremely large pixel grids efficiently.
+ *
+ *   Fix: read metadata FIRST (cheap — no full decode), refuse to
+ *   process anything beyond WATERMARK_MAX_DIM per side. Default 6000,
+ *   which covers every smartphone camera in 2026 (a 108MP smartphone
+ *   photo is ~12000×9000 — already pushing it, but still under cap if
+ *   the user explicitly raised WATERMARK_MAX_DIM).
+ *
+ *   In strict mode: throws. In lenient mode: returns the original
+ *   path with a warning, so the upload still completes WITHOUT a
+ *   watermark (operator sees the warning in logs and can act).
+ *
  *   Logging:
  *     - Switched from console.log/error to logger.info/warn/error so
  *       failures end up in logs/error.log (rotated, persistent) rather
@@ -54,6 +88,11 @@ try {
     { error: err.message }
   );
 }
+
+// AUDIT FIX (P1-18): hard dimension cap per side. Anything bigger than
+// this never makes it to sharp's decoder. Operator can override with
+// the env var if a legitimate workflow needs larger inputs.
+const MAX_DIM = parseInt(process.env.WATERMARK_MAX_DIM || '6000', 10);
 
 /**
  * Decide whether a watermark failure should throw or be swallowed.
@@ -187,10 +226,18 @@ function renderOverlaySvg(width, height, lines) {
 /**
  * Apply the watermark to `inputPath` in place.
  *
- * Returns the same `inputPath` (the file is overwritten with the
- * watermarked version). In strict mode, ANY failure throws. In lenient
- * mode (or NODE_ENV !== production with no override), failures return
- * the original path so the upload can proceed un-watermarked.
+ * Returns the FINAL path on disk. Usually that is `inputPath`. If the
+ * input extension wasn't .jpg/.jpeg, the watermarked output is renamed
+ * to .jpg (because the pipeline re-encodes as JPEG), and the new path
+ * is returned instead. Callers MUST use the returned value going
+ * forward — for the in-process callers in this repo, the convention is:
+ *
+ *     req.file.path = await applyWatermark(req.file.path, info);
+ *     const url = getFileUrl(req.file.path);
+ *
+ * In strict mode (production), ANY failure throws. In lenient mode (or
+ * NODE_ENV !== production with no override), failures return the
+ * original path so the upload can proceed un-watermarked.
  */
 async function applyWatermark(inputPath, info) {
   // Each of these is an "abort" condition. They are checked in order
@@ -211,9 +258,20 @@ async function applyWatermark(inputPath, info) {
   }
 
   try {
+    // AUDIT FIX (P1-18): metadata() decodes only the header, not pixels.
+    // We can read width/height for ~zero RAM and refuse oversized input
+    // BEFORE sharp ever materialises the bitmap.
     const meta = await sharp(inputPath).metadata();
     const width = meta.width || 640;
     const height = meta.height || 480;
+
+    if (width > MAX_DIM || height > MAX_DIM) {
+      return handleFailure(
+        `image too large (${width}x${height} px, max ${MAX_DIM}/side)`,
+        new Error('WATERMARK_OOM_GUARD'),
+        inputPath
+      );
+    }
 
     const overlaySvg = renderOverlaySvg(width, height, lines);
 
@@ -228,10 +286,58 @@ async function applyWatermark(inputPath, info) {
     fs.copyFileSync(outPath, inputPath);
     try { fs.unlinkSync(outPath); } catch { /* best-effort cleanup */ }
 
-    logger.info(`[Watermark] ✅ applied to ${path.basename(inputPath)}`);
-    return inputPath;
+    // AUDIT FIX (P1-17): the bytes on disk are now JPEG. If the
+    // extension is not already .jpg/.jpeg, rename the file so the disk
+    // extension matches the content type. We return the new path so
+    // callers can update their `getFileUrl()` reference.
+    //
+    // Edge case: the renamed-target already exists. fs.renameSync
+    // overwrites on POSIX, throws on Windows — wrap in try/catch and
+    // fall back to the original path if rename fails for any reason
+    // (the JPEG bytes are still valid; only the extension is wrong).
+    const finalPath = renameToJpgIfNeeded(inputPath);
+
+    logger.info(`[Watermark] ✅ applied to ${path.basename(finalPath)}`);
+    return finalPath;
   } catch (err) {
     return handleFailure('rendering failed', err, inputPath);
+  }
+}
+
+/**
+ * AUDIT FIX (P1-17): rename `<name>.png` (or .webp / .gif / anything
+ * non-.jpg) to `<name>.jpg` after the watermark pipeline has converted
+ * the content to JPEG bytes. Returns the new path, or the original
+ * path if no rename was needed or the rename failed.
+ *
+ * Pure helper — does not log fatal, just emits a warning on rename
+ * failure since the JPEG content is still valid (only the extension
+ * is wrong, which the audit accepts as a low-impact regression).
+ */
+function renameToJpgIfNeeded(inputPath) {
+  const ext = path.extname(inputPath).toLowerCase();
+  if (ext === '.jpg' || ext === '.jpeg') return inputPath;
+
+  const newPath = inputPath.slice(0, inputPath.length - ext.length) + '.jpg';
+
+  // If the target already exists (shouldn't normally — multer uses
+  // UUID-based filenames — but defensive), pick a unique suffix so we
+  // never silently clobber an unrelated file on disk.
+  let target = newPath;
+  if (fs.existsSync(target)) {
+    target = inputPath.slice(0, inputPath.length - ext.length) + '_wm.jpg';
+  }
+
+  try {
+    fs.renameSync(inputPath, target);
+    logger.info(`[Watermark] renamed ${path.basename(inputPath)} → ${path.basename(target)} (content is JPEG)`);
+    return target;
+  } catch (err) {
+    logger.warn(
+      `[Watermark] rename to .jpg failed (${err.message}) — keeping ${path.basename(inputPath)} ` +
+      `(content is still valid JPEG, only the extension is misleading)`
+    );
+    return inputPath;
   }
 }
 

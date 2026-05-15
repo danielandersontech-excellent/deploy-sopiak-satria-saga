@@ -228,8 +228,17 @@ app.get('/api/health', (req, res) => {
 // Setup Swagger API Documentation (akses di /api-docs)
 setupSwagger(app);
 
-// 404 handler
-app.use('/api/*', (req, res) => {
+// AUDIT FIX (P2-16): 404 handler now uses a regex matcher instead of
+// the string pattern '/api/*'. The regex form is supported in BOTH
+// Express 4 (current) and Express 5 (path-to-regexp v6+, which dropped
+// support for the bare `*` wildcard in path strings — Express 5
+// requires named wildcards like '/api/*splat'). Using a regex keeps
+// the same matching semantics across the version boundary with zero
+// runtime behaviour change today.
+//
+// The regex matches any path that starts with `/api/`. Identical in
+// every observable way to the previous `'/api/*'` Express 4 pattern.
+app.use(/^\/api\//, (req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 

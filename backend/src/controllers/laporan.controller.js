@@ -1,27 +1,47 @@
 /**
  * LAPORAN CONTROLLER + FCM Push Notifications + Watermark + Google Drive CDN
+ *
+ * AUDIT FIX (P1-17): applyWatermark() now returns the final on-disk
+ * path. processPhotos() mutates f.path so getFileUrl() resolves the
+ * renamed file (.png -> .jpg etc.) instead of a stale name.
+ *
+ * AUDIT FIX (latent bug): the previous file declared
+ *   const { logger } = require('../utils/logger');
+ * INSIDE the try block of processPhotos(). That const is block-scoped,
+ * so the four `logger.error(...)` calls in createHarian / validateHarian
+ * / createKejadian / validateKejadian (outside that block) would have
+ * thrown ReferenceError the first time an FCM push promise rejected —
+ * silently making those error handlers a *new* source of crashes. Moved
+ * to module scope so every function in this file shares the same logger.
  */
 const laporanService = require('../services/laporan.service');
 const { getFileUrl } = require('../middleware/upload');
 const fcm = require('../services/fcm.service');
+const { logger } = require('../utils/logger');
 
 /**
  * Helper: Apply watermark + upload to Drive for multiple files
+ *
+ * f.path is MUTATED in place when applyWatermark renames the file
+ * (e.g. .png → .jpg after JPEG re-encoding). This way, getFileUrl()
+ * below — and any downstream code that reads f.path — always sees
+ * the actual on-disk filename.
  */
 async function processPhotos(files, user, customText) {
   if (!files || !files.length) return [];
-  
+
   const urls = [];
   for (const f of files) {
     // Apply watermark
     try {
       const { applyWatermark } = require('../services/watermark.service');
-const { logger } = require('../utils/logger');
-      await applyWatermark(f.path, {
+      // AUDIT FIX (P1-17): capture the returned path so a rename to
+      // .jpg is reflected in the URL we hand to the service layer.
+      f.path = (await applyWatermark(f.path, {
         nama: user.nama || 'Unknown',
         nrp: user.nrp || '-',
         customText: customText || 'LAPORAN',
-      });
+      })) || f.path;
     } catch (wmErr) {
       logger.info(`[Laporan] Watermark skipped: ${wmErr.message}`);
     }

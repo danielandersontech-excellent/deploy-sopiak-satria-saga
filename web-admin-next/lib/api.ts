@@ -1,34 +1,57 @@
 /**
  * PT Sopiak Satria Saga Web Admin - Direct API Client
- * v18 - Klien Login, Berkas Upload, Enhanced Features
+ * v19 - AUDIT FIX: P0-17 LocalStorage Token Removal
+ *
+ * History:
+ *   v18 (Tahap 2 attempt): backend started setting httpOnly cookies
+ *     (ptsss_token / ptsss_refresh) for web-admin auth. BUT this file
+ *     ALSO kept localStorage.{set,get}Item for the access and refresh
+ *     tokens and added them as `Authorization: Bearer` on every fetch.
+ *     The httpOnly cookie protection was undermined because any XSS
+ *     could still read the token straight out of localStorage.
+ *
+ *   v19 (audit fix): localStorage is purged for tokens entirely. The
+ *     backend already supports cookie-only auth:
+ *       - middleware/auth.js reads req.cookies.ptsss_token
+ *       - controllers/auth.controller.js refresh path reads
+ *         req.cookies.ptsss_refresh
+ *     Frontend now relies exclusively on credentials: 'include' so the
+ *     browser ships the cookie automatically. No JS-readable token
+ *     anywhere — an XSS can no longer exfiltrate the session.
+ *
+ *     User object (nama, role, client_id, ...) still lives in
+ *     localStorage because it's not sensitive and is read on every
+ *     page render. Stealing it via XSS yields no privilege the user
+ *     doesn't already have.
  */
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
-const TOKEN_KEY = 'ptsss_admin_token';
 const USER_KEY = 'ptsss_admin_user';
-const REFRESH_KEY = 'ptsss_admin_refresh';
 
-export function getToken(): string | null { return typeof window !== 'undefined' ? localStorage.getItem(TOKEN_KEY) : null; }
-export function setToken(t: string) { if (typeof window !== "undefined") localStorage.setItem(TOKEN_KEY, t); }
-export function getRefreshToken(): string | null { return typeof window !== 'undefined' ? localStorage.getItem(REFRESH_KEY) : null; }
-export function setRefreshToken(t: string) { if (typeof window !== "undefined") localStorage.setItem(REFRESH_KEY, t); }
-export function clearAuth() { if (typeof window === "undefined") return; localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(USER_KEY); localStorage.removeItem(REFRESH_KEY); }
-export function getUser(): any { if (typeof window === 'undefined') return null; const r = localStorage.getItem(USER_KEY); return r ? JSON.parse(r) : null; }
-export function setUser(u: any) { if (typeof window !== "undefined") localStorage.setItem(USER_KEY, JSON.stringify(u)); }
+// User-object helpers ONLY. No token helpers — tokens live in httpOnly
+// cookies set by the backend; JS cannot and should not read them.
+export function clearAuth() {
+  if (typeof window === 'undefined') return;
+  localStorage.removeItem(USER_KEY);
+  // Best-effort: wipe any leftover token keys from v18 installs so a
+  // refreshing browser doesn't carry stale plaintext tokens forward.
+  localStorage.removeItem('ptsss_admin_token');
+  localStorage.removeItem('ptsss_admin_refresh');
+}
+export function getUser(): any {
+  if (typeof window === 'undefined') return null;
+  const r = localStorage.getItem(USER_KEY);
+  return r ? JSON.parse(r) : null;
+}
+export function setUser(u: any) {
+  if (typeof window !== 'undefined') localStorage.setItem(USER_KEY, JSON.stringify(u));
+}
 
 export const ROLE_MENUS: Record<string, string[]> = {
   admin:      ['/', '/live-map', '/lokasi', '/clients', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/backup', '/analytics', '/qr-generator'],
   supervisor: ['/', '/live-map', '/lokasi', '/clients', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/analytics', '/qr-generator'],
   komandan:   ['/', '/live-map', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/broadcast', '/panic', '/export'],
   anggota:    ['/', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima'],
-  // P1-15 (tahap 5): klien restricted to read-only. Previously listed
-  // /absensi, /patroli, /panic, /broadcast, /export — those have write
-  // intent (broadcast publishes, panic creates alerts, absensi/patroli
-  // are operator workflows that don't belong to a client). Klien now
-  // sees dashboard landing, live map (read-only view of their lokasi),
-  // and the two laporan listings (which are scope-filtered by tahap 4
-  // P0-6 anyway). Note: this is UI-layer gating only; the backend
-  // route guards in /api/laporan/harian POST etc. are the actual
-  // authorization barrier — see tahap 4 scope.js.
+  // P1-15 (tahap 5): klien restricted to read-only.
   klien:      ['/', '/live-map', '/laporan-harian', '/laporan-kejadian'],
 };
 
@@ -38,38 +61,65 @@ export function isMenuAllowed(path: string): boolean {
   return (ROLE_MENUS[role] || ROLE_MENUS.anggota).includes(path);
 }
 
+// Refresh coordination: collapse concurrent 401s into a single refresh
+// attempt so we don't issue N parallel refresh requests when N requests
+// race against an expired token.
 let isRefreshing = false;
 let refreshPromise: Promise<boolean> | null = null;
 
 async function tryRefresh(): Promise<boolean> {
-  const rt = getRefreshToken();
-  if (!rt) return false;
+  // The refresh token rides in the httpOnly cookie 'ptsss_refresh'.
+  // credentials:'include' is the only thing that ships it; we don't
+  // need (and can't read) the token in JS. The backend rotates it
+  // and sets new ptsss_token + ptsss_refresh cookies on success.
   try {
-    const res = await fetch(`${API_URL}/api/auth/refresh`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: rt }), credentials: 'include' });
+    const res = await fetch(`${API_URL}/api/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'include',
+    });
     if (!res.ok) return false;
     const data = await res.json();
-    setToken(data.token); if (data.refresh_token) setRefreshToken(data.refresh_token); if (data.user) setUser(data.user);
+    if (data.user) setUser(data.user);
     return true;
-  } catch { return false; }
+  } catch {
+    return false;
+  }
 }
 
 export async function apiFetch(endpoint: string, opts: any = {}) {
-  const { method = 'GET', body, noAuth } = opts;
-  const headers: any = { 'Content-Type': 'application/json' };
-  if (!noAuth) { const t = getToken(); if (t) headers['Authorization'] = `Bearer ${t}`; }
-  const config: any = { method, headers, credentials: 'include' as RequestCredentials };
-  if (body && method !== 'GET') config.body = JSON.stringify(body);
+  const { method = 'GET', body /* noAuth ignored: cookies decide */ } = opts;
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  // No Authorization header — the httpOnly cookie carries auth, sent
+  // automatically by the browser when credentials:'include' is set.
+  const config: RequestInit = { method, headers, credentials: 'include' };
+  if (body && method !== 'GET') (config as any).body = JSON.stringify(body);
+
   let res = await fetch(`${API_URL}${endpoint}`, config);
-  if (res.status === 401 && !noAuth) {
-    const errData = await res.json().catch(() => ({}));
+
+  // Auto-refresh on expired access token. The refresh endpoint itself
+  // is excluded so a failing refresh doesn't infinite-loop.
+  if (res.status === 401 && !endpoint.startsWith('/api/auth/refresh') && !endpoint.startsWith('/api/auth/login')) {
+    const errData = await res.clone().json().catch(() => ({}));
     if (errData.code === 'TOKEN_EXPIRED') {
-      if (!isRefreshing) { isRefreshing = true; refreshPromise = tryRefresh(); }
+      if (!isRefreshing) {
+        isRefreshing = true;
+        refreshPromise = tryRefresh();
+      }
       const refreshed = await refreshPromise;
-      isRefreshing = false; refreshPromise = null;
-      if (refreshed) { headers['Authorization'] = `Bearer ${getToken()}`; res = await fetch(`${API_URL}${endpoint}`, { ...config, headers }); }
-      else { clearAuth(); if (typeof window !== 'undefined') window.location.href = '/login'; throw new Error('Session expired'); }
+      isRefreshing = false;
+      refreshPromise = null;
+      if (refreshed) {
+        // Retry once — the new ptsss_token cookie is already set.
+        res = await fetch(`${API_URL}${endpoint}`, config);
+      } else {
+        clearAuth();
+        if (typeof window !== 'undefined') window.location.href = '/login';
+        throw new Error('Session expired');
+      }
     }
   }
+
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || data.message || `HTTP ${res.status}`);
   return data;
@@ -79,9 +129,13 @@ export async function apiUploadFile(endpoint: string, file: File, extraFields?: 
   const formData = new FormData();
   formData.append('file', file);
   if (extraFields) for (const [k, v] of Object.entries(extraFields)) formData.append(k, v);
-  const headers: any = {};
-  const t = getToken(); if (t) headers['Authorization'] = `Bearer ${t}`;
-  const res = await fetch(`${API_URL}${endpoint}`, { method: 'POST', headers, body: formData, credentials: 'include' });
+  // No Authorization header. multipart/form-data Content-Type is
+  // auto-set by the browser when body is FormData.
+  const res = await fetch(`${API_URL}${endpoint}`, {
+    method: 'POST',
+    body: formData,
+    credentials: 'include',
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data;
@@ -97,8 +151,10 @@ function toArray(data: any): any[] {
 export const authApi = {
   login: async (nrp: string, pin: string) => {
     const clean = nrp.replace(/@ptsss\.app$/i, '').toUpperCase();
-    const data = await apiFetch('/api/auth/login', { method: 'POST', body: { nrp: clean, pin }, noAuth: true });
-    setToken(data.token); if (data.refresh_token) setRefreshToken(data.refresh_token); setUser(data.user);
+    // Backend sets ptsss_token + ptsss_refresh cookies. We only need
+    // to remember the user object for client-side rendering.
+    const data = await apiFetch('/api/auth/login', { method: 'POST', body: { nrp: clean, pin } });
+    if (data.user) setUser(data.user);
     return data;
   },
   register: async (payload: any) => {
@@ -110,8 +166,15 @@ export const authApi = {
   getUserRole: () => getUser()?.role || 'anggota',
   getClientId: () => getUser()?.client_id || null,
   isKlien: () => getUser()?.role === 'klien',
-  logout: () => { try { apiFetch('/api/auth/logout', { method: 'POST' }).catch(() => {}); } catch {} clearAuth(); },
-  isLoggedIn: () => !!getToken(),
+  logout: async () => {
+    try { await apiFetch('/api/auth/logout', { method: 'POST' }); } catch { /* network fail OK on logout */ }
+    clearAuth();
+  },
+  // We don't have JS access to the token anymore. "Logged in" now
+  // means "we have a user object stored", which Reflects-by-construction
+  // the last successful login. apiFetch will detect a stale session at
+  // its next call and redirect to /login.
+  isLoggedIn: () => !!getUser(),
 };
 
 export function crud(base: string) {

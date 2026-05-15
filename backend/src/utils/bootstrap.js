@@ -8,7 +8,7 @@
  * (or if the schema file is updated), the DB stays empty / out of sync forever.
  *
  * This script runs on every backend startup. It:
- * 1. Checks whether the schema is already present (looks for the `users` table).
+ * 1. Checks whether the schema is already present (looks for the core tables).
  * 2. If missing, executes the entire database/ptsss_db.sql against the live DB.
  * 3. Runs pending migrations from database/migrations/ via migrationRunner.
  * 4. Optionally seeds the default users (controlled by AUTO_BOOTSTRAP env var).
@@ -22,6 +22,19 @@
  * "INITIAL SEED CREDENTIALS" block: those PINs are operator-facing one-time
  * output that MUST NOT end up in log files (PINs in log files = security
  * regression). That block stays as console.log with a clear comment.
+ *
+ * AUDIT FIX (P1-9): schemaExists() previously checked only `users` and
+ * `geofence_izin`. If those two happened to exist but other core tables
+ * (clients, lokasi, audit_log, ...) were missing — e.g. a partial schema
+ * load that errored midway and was never retried — bootstrap would skip
+ * the schema load on the next boot, leaving the system silently broken.
+ *
+ * The check now covers every CORE table the application actually depends on
+ * for normal operation. `schema_migrations` is intentionally excluded:
+ * that table is created by migrationRunner.ensureTableExists() AFTER
+ * bootstrap loads the base schema, so it cannot be present before the
+ * first full bootstrap completes — including it here would force an
+ * unnecessary re-load of ptsss_db.sql on every fresh deploy.
  */
 const fs = require('fs');
 const path = require('path');
@@ -37,6 +50,29 @@ const SCHEMA_FILE = path.join(__dirname, '..', '..', 'database', 'ptsss_db.sql')
 // backend. Anything that hashes a PIN must read it from here (or inline
 // the same `parseInt(process.env.BCRYPT_ROUNDS || '12')` expression).
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
+
+// AUDIT FIX (P1-9): tables the application cannot function without.
+// All of these are defined in database/ptsss_db.sql and exist after the
+// initial schema load. If ANY are missing, schema is partial/corrupt and
+// must be re-loaded. Order is alphabetical for stable log output.
+//
+// We deliberately do NOT include every table from the 24-table schema —
+// some are optional (e.g. report_exports, broadcasts, notifikasi work
+// fine with empty rows but the app would just degrade gracefully). The
+// list below is the "if-missing-the-app-throws-500" set.
+const REQUIRED_TABLES = [
+  'absensi',
+  'audit_log',
+  'clients',
+  'geofence_izin',
+  'laporan_harian',
+  'laporan_kejadian',
+  'lokasi',
+  'patroli',
+  'pos_jaga',
+  'refresh_tokens',
+  'users',
+];
 
 // P0-14: cryptographically random 6-digit PIN. Math.random() would work
 // (and is what the issue ticket suggested) but crypto.randomInt is the
@@ -62,13 +98,43 @@ function isStrictMode() {
   return process.env.NODE_ENV === 'production';
 }
 
+/**
+ * AUDIT FIX (P1-9): comprehensive schema presence check.
+ *
+ * Builds a single SELECT that probes every REQUIRED_TABLES entry with
+ * to_regclass(). Postgres returns the table OID (truthy) when the
+ * table exists, NULL otherwise. One round-trip, all answers.
+ *
+ * Returns:
+ *   true  - every required table is present.
+ *   false - at least one is missing (logged with the list for the operator).
+ *           Bootstrap will treat this as "schema absent" and re-load
+ *           ptsss_db.sql. The SQL is idempotent (CREATE TABLE IF NOT
+ *           EXISTS etc.) so re-running over a partial schema is safe.
+ */
 async function schemaExists() {
   try {
-    const r = await queryOne(
-      `SELECT to_regclass('public.users') AS t, to_regclass('public.geofence_izin') AS g`
-    );
-    // Both tables must exist for schema to be considered "loaded".
-    return !!(r && r.t && r.g);
+    // Build "SELECT to_regclass('public.users') AS users, ..." dynamically.
+    // We alias each column with the table name so the result object is
+    // self-describing: r.users, r.clients, ... directly indicate presence.
+    const cols = REQUIRED_TABLES
+      .map(t => `to_regclass('public.${t}') AS ${t}`)
+      .join(', ');
+    const r = await queryOne(`SELECT ${cols}`);
+    if (!r) return false;
+
+    const missing = REQUIRED_TABLES.filter(t => !r[t]);
+    if (missing.length > 0) {
+      // Don't error — bootstrap will follow up with a re-load. Just
+      // surface the list so the operator (and the log file) knows
+      // which tables triggered the re-load. This makes diagnosing a
+      // half-broken schema state much faster after the fact.
+      logger.warn(
+        `[BOOTSTRAP] schemaExists: ${missing.length}/${REQUIRED_TABLES.length} required table(s) missing: ${missing.join(', ')}`
+      );
+      return false;
+    }
+    return true;
   } catch (err) {
     logger.error(`[BOOTSTRAP] schemaExists check failed: ${err.message}`);
     return false;
@@ -192,10 +258,10 @@ async function bootstrap() {
   try {
     const ok = await schemaExists();
     if (!ok) {
-      logger.info('[BOOTSTRAP] Schema not detected — initializing from database/ptsss_db.sql');
+      logger.info('[BOOTSTRAP] Schema not detected (or partial) — initializing from database/ptsss_db.sql');
       await loadSchemaFile();
     } else {
-      logger.info('[BOOTSTRAP] Schema already present — skipping schema load');
+      logger.info(`[BOOTSTRAP] Schema complete (${REQUIRED_TABLES.length} required tables present) — skipping schema load`);
     }
 
     // Tahap 10 Bug #1 (P1-22): run migrations sebelum seed.
@@ -239,4 +305,4 @@ async function bootstrap() {
   }
 }
 
-module.exports = { bootstrap, schemaExists };
+module.exports = { bootstrap, schemaExists, REQUIRED_TABLES };

@@ -162,19 +162,62 @@ noR.get('/', auth, opCtrl.getNotifikasi); noR.post('/', auth, opCtrl.createNotif
 noR.put('/read-all', auth, opCtrl.markAllRead); noR.put('/:id/read', auth, opCtrl.markRead);
 router.use('/notifikasi', noR);
 router.get('/dashboard/stats', auth, dashCtrl.getStats);
+
 // File upload with watermark
+//
 // SECURITY (P0-16): pickUploadFolder runs BEFORE multer parses the body, so
 // invalid folder values are rejected before any bytes hit the disk.
-router.post('/upload', uploadLimiter, auth, pickUploadFolder, upload.single('file'), async(req,res)=>{
-  if(!req.file) return res.status(400).json({error:'No file'});
-  try{let fp=req.file.path;const wm=req.headers['x-watermark-info']||req.body.watermark;
-  if(wm&&req.file.mimetype&&req.file.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');const info=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);fp=await applyWatermark(fp,info);}catch(e){logger.warn(`[Upload] WM skip: ${e.message}`);}}
-  res.json({url:getFileUrl(fp)});}catch(e){res.json({url:getFileUrl(req.file.path)});}
+//
+// AUDIT FIX (P1-17): applyWatermark may rename the file (.png → .jpg)
+// after JPEG re-encoding. We capture the returned path and use it for
+// getFileUrl so the URL handed back to the client matches what's on disk.
+router.post('/upload', uploadLimiter, auth, pickUploadFolder, upload.single('file'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file' });
+  try {
+    let fp = req.file.path;
+    const wm = req.headers['x-watermark-info'] || req.body.watermark;
+    if (wm && req.file.mimetype && req.file.mimetype.startsWith('image/')) {
+      try {
+        const { applyWatermark } = require('../services/watermark.service');
+        const info = JSON.parse(typeof wm === 'string' ? decodeURIComponent(wm) : wm);
+        fp = (await applyWatermark(fp, info)) || fp;
+      } catch (e) {
+        logger.warn(`[Upload] WM skip: ${e.message}`);
+      }
+    }
+    res.json({ url: getFileUrl(fp) });
+  } catch (e) {
+    res.json({ url: getFileUrl(req.file.path) });
+  }
 });
-router.post('/upload/multiple', uploadLimiter, auth, pickUploadFolder, upload.array('files',10), async(req,res)=>{
-  if(!req.files||!req.files.length)return res.status(400).json({error:'No files'});
-  try{const wm=req.headers['x-watermark-info']||req.body.watermark;let wi=null;if(wm)try{wi=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);}catch{}
-  const urls=await Promise.all(req.files.map(async f=>{if(wi&&f.mimetype&&f.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');await applyWatermark(f.path,wi);}catch{}}return getFileUrl(f.path);}));
-  res.json({urls});}catch{res.json({urls:req.files.map(f=>getFileUrl(f.path))});}
+
+router.post('/upload/multiple', uploadLimiter, auth, pickUploadFolder, upload.array('files', 10), async (req, res) => {
+  if (!req.files || !req.files.length) return res.status(400).json({ error: 'No files' });
+  try {
+    const wm = req.headers['x-watermark-info'] || req.body.watermark;
+    let wi = null;
+    if (wm) {
+      try {
+        wi = JSON.parse(typeof wm === 'string' ? decodeURIComponent(wm) : wm);
+      } catch { /* malformed watermark info: skip wm, upload still proceeds */ }
+    }
+    const urls = await Promise.all(req.files.map(async (f) => {
+      if (wi && f.mimetype && f.mimetype.startsWith('image/')) {
+        try {
+          const { applyWatermark } = require('../services/watermark.service');
+          // AUDIT FIX (P1-17): mutate f.path so getFileUrl below picks
+          // up the renamed file. Previously the rename was silently
+          // ignored because we used the return value (which we threw
+          // away) instead of f.path.
+          f.path = (await applyWatermark(f.path, wi)) || f.path;
+        } catch { /* lenient: keep f.path as-is, file still uploaded */ }
+      }
+      return getFileUrl(f.path);
+    }));
+    res.json({ urls });
+  } catch {
+    res.json({ urls: req.files.map((f) => getFileUrl(f.path)) });
+  }
 });
+
 module.exports = router;
