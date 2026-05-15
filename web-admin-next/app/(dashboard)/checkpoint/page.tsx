@@ -5,6 +5,7 @@ import { statusColor } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { QRCodeImage } from "@/components/ui/QRCodeImage";
 import { useToast } from "@/hooks/useToast";
 
 export default function CheckpointPage() {
@@ -184,10 +185,12 @@ export default function CheckpointPage() {
                 <td>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
                     <code style={{ fontSize: 10 }}>{r.qr_code}</code>
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${encodeURIComponent(r.qr_code)}`} 
+                    {/* BUG #6 (P2-5): QR rendered locally. */}
+                    <QRCodeImage
+                      data={r.qr_code || ""}
+                      size={40}
                       alt="QR"
-                      style={{ width: 40, height: 40, borderRadius: 4, background: '#fff', padding: 2 }}
+                      style={{ borderRadius: 4, background: '#fff', padding: 2 }}
                     />
                   </div>
                 </td>
@@ -366,10 +369,12 @@ export default function CheckpointPage() {
                 placeholder="Otomatis jika kosong"
               />
               {form.qr_code && (
-                <img 
-                  src={`https://api.qrserver.com/v1/create-qr-code/?size=80x80&data=${encodeURIComponent(form.qr_code)}`} 
+                /* BUG #6 (P2-5): QR rendered locally. */
+                <QRCodeImage
+                  data={form.qr_code}
+                  size={40}
                   alt="QR Preview"
-                  style={{ width: 40, height: 40, borderRadius: 4, background: '#fff', padding: 2, border: '1px solid var(--border)' }}
+                  style={{ borderRadius: 4, background: '#fff', padding: 2, border: '1px solid var(--border)' }}
                 />
               )}
             </div>

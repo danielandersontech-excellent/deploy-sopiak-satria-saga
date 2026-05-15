@@ -1,25 +1,74 @@
 /**
- * REPORT EXPORT - PDF & Excel
- * Direct API to Express Backend → PostgreSQL (ptsss_db)
- * TANPA SUPABASE
+ * REPORT EXPORT - PDF (client) & Excel (server-rendered, downloaded)
+ *
+ * TAHAP 7 BUG #2 (P1-13): The previous version used the `xlsx` npm
+ * package on the client. That package is under a CVE-rated high-
+ * severity advisory and isn't being maintained — it's been removed
+ * from package.json. Excel exports now hit the backend's
+ * /api/export/{type} endpoint, which already exists (Tahap 6) and uses
+ * ExcelJS server-side. The browser receives a ready-to-download .xlsx
+ * blob and never has to parse spreadsheet code paths itself.
+ *
+ * Backend endpoints (already deployed, see backend/src/routes/export.routes.js):
+ *   GET /api/export/absensi?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&lokasi_id=<uuid>]
+ *   GET /api/export/laporan?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&lokasi_id=<uuid>]
+ *   GET /api/export/patroli?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD[&lokasi_id=<uuid>]
+ *
+ * Each returns Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+ * with res.download(), so we just .blob() the response and trigger the
+ * browser save. Auth is via the existing httpOnly cookie — passing
+ * `credentials: 'include'` is enough.
  */
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import * as XLSX from 'xlsx';
 import { apiFetch } from '@/lib/api';
 
-// ==================== EXCEL ====================
-export function exportToExcel(data: any[], filename: string, sheetName = 'Data') {
-  if (!data.length) return;
-  const ws = XLSX.utils.json_to_sheet(data);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, sheetName);
-  const colWidths = Object.keys(data[0] || {}).map(key => ({ wch: Math.max(key.length, ...data.map(row => String(row[key] || '').length)) + 2 }));
-  ws['!cols'] = colWidths;
-  XLSX.writeFile(wb, `${filename}.xlsx`);
+const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
+
+// ==================== EXCEL (server-backed) ====================
+/**
+ * Download an Excel export by calling the backend.
+ * `type` = 'absensi' | 'laporan' | 'patroli'
+ */
+export async function exportToExcel(
+  type: 'absensi' | 'laporan' | 'patroli',
+  startDate: string,
+  endDate: string,
+  lokasiId?: string,
+  filename?: string,
+): Promise<void> {
+  const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
+  if (lokasiId) qs.set('lokasi_id', lokasiId);
+
+  const res = await fetch(`${API_URL}/api/export/${type}?${qs.toString()}`, {
+    method: 'GET',
+    credentials: 'include',
+  });
+
+  if (!res.ok) {
+    // Try to surface a useful error from the JSON body if there is one.
+    let message = `Gagal mengunduh Excel (HTTP ${res.status})`;
+    try {
+      const err = await res.json();
+      if (err?.error) message = err.error;
+    } catch { /* not json */ }
+    throw new Error(message);
+  }
+
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename || `${type}_${startDate}_${endDate}.xlsx`;
+  // Some browsers want the anchor in the DOM before .click() will work.
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  // Defer revoke a moment so the download initiates cleanly.
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-// ==================== PDF HELPERS ====================
+// ==================== PDF (still client-side) ====================
 function createPDFHeader(doc: jsPDF, title: string, subtitle?: string) {
   doc.setFillColor(26, 82, 118);
   doc.rect(0, 0, doc.internal.pageSize.getWidth(), 35, 'F');

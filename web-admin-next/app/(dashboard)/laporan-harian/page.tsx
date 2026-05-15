@@ -18,8 +18,15 @@ export default function LaporanHarianPage() {
   const PAGE_SIZE = 15;
   const load = async () => {
     setLoading(true);
-    try { const d = await laporanHarianApi.list(); setData(Array.isArray(d) ? d : []); } catch {}
-    setLoading(false);
+    try {
+      const d = await laporanHarianApi.list();
+      setData(Array.isArray(d) ? d : []);
+    } catch {
+      // silent — empty state will show
+    } finally {
+      // BUG #4 (P2-2): finally so loading clears on error too.
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
   const validate = async (id: string, status: string) => {
@@ -88,7 +95,24 @@ export default function LaporanHarianPage() {
             </tr>
           </thead>
           <tbody>
-            {pagedData.map((r) => (
+            {loading && data.length === 0 ? (
+              // BUG #4 (P2-3): skeleton rows while initial fetch in flight.
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skel-${i}`}>
+                  <td colSpan={8}>
+                    <div
+                      className="animate-pulse"
+                      style={{
+                        background: "var(--hover-row, #e5e7eb)",
+                        height: 36,
+                        borderRadius: 6,
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>{pagedData.map((r) => (
               <tr key={r.id}>
                 <td className="user-cell">
                   <img
@@ -145,6 +169,7 @@ export default function LaporanHarianPage() {
                   Tidak ada laporan harian
                 </td>
               </tr>
+            )}</>
             )}
           </tbody>
         </table>

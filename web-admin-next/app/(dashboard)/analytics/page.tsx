@@ -26,13 +26,21 @@ export default function AnalyticsPage() {
 
   const loadAll = async () => {
     setLoading(true);
-    try { const s = await dashboardApi.stats(); setStats(s); } catch {}
-    try { setAbsensiData(await absensiApi.list()); } catch {}
-    try { setLaporanH(await laporanHarianApi.list()); } catch {}
-    try { setLaporanK(await laporanKejadianApi.list()); } catch {}
-    try { setUsers(await usersApi.list()); } catch {}
-    try { setPatroliData(await patroliApi.list()); } catch {}
-    setLoading(false);
+    try {
+      try { const s = await dashboardApi.stats(); setStats(s); } catch {}
+      try { setAbsensiData(await absensiApi.list()); } catch {}
+      try { setLaporanH(await laporanHarianApi.list()); } catch {}
+      try { setLaporanK(await laporanKejadianApi.list()); } catch {}
+      // BUG #5 (P2-4): /api/users now paginates by default. Analytics
+      // needs every user to aggregate over — opt in to the legacy
+      // unbounded list via ?all=true.
+      try { setUsers(await usersApi.list("all=true")); } catch {}
+      try { setPatroliData(await patroliApi.list()); } catch {}
+    } finally {
+      // BUG #4 (P2-2): finally so loading clears even if something
+      // unexpected bubbles up.
+      setLoading(false);
+    }
   };
   useEffect(() => { loadAll(); }, []);
 

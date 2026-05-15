@@ -32,7 +32,9 @@ export default function ShiftAssignmentPage() {
       setData(await shiftAssignApi.list());
     } catch {}
     try {
-      setUsers(await usersApi.list());
+      // BUG #5 (P2-4): the dropdown needs every assignable user; bypass
+      // the new default pagination on /api/users.
+      setUsers(await usersApi.list("all=true"));
     } catch {}
     try {
       setShifts(await jadwalApi.list());

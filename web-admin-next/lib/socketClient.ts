@@ -1,10 +1,32 @@
 /**
  * Web Admin - Socket.io Realtime Client (Next.js)
- * Zero console.log in production
+ * Zero console.log in production.
+ *
+ * TAHAP 7 BUG #1 HOTFIX:
+ *   The auth token lives in an httpOnly cookie (Tahap 2 P0-17) and is
+ *   therefore unreadable from JS. Instead of trying to pass it through
+ *   `auth.token`, the client now sends credentials with the WebSocket
+ *   handshake via `withCredentials: true`. The backend's io.use() reads
+ *   the cookie from the handshake headers (socketio.js). Web-admin
+ *   realtime works again without exposing the token to JS.
+ *
+ *   The URL must be absolute (`https://api.sopiaksatriasaga.com` in
+ *   prod) for the browser to send the cross-site cookie correctly — a
+ *   relative URL falls back to the web-admin's own origin, where the
+ *   Socket.io server isn't listening.
  */
 import { io, Socket } from 'socket.io-client';
 
-const API_URL = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000');
+// Resolve socket URL once at module load. Prefer the explicit env var,
+// fall back to the API URL, then to the page origin (dev-only).
+function resolveSocketUrl(): string {
+  if (process.env.NEXT_PUBLIC_SOCKET_URL) return process.env.NEXT_PUBLIC_SOCKET_URL;
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL;
+  if (typeof window !== 'undefined') return window.location.origin;
+  return 'http://localhost:3000';
+}
+
+const SOCKET_URL = resolveSocketUrl();
 
 let socket: Socket | null = null;
 let connected = false;
@@ -26,6 +48,12 @@ const REALTIME_EVENTS = [
   'geofence:izin',
 ];
 
+/**
+ * Initialize the socket. The optional `token` parameter is kept for the
+ * mobile-app code path that still hands the token explicitly; web-admin
+ * just calls `initSocketIO()` with no arguments and the cookie carries
+ * the credentials.
+ */
 export function initSocketIO(token?: string) {
   if (socket?.connected) return;
 
@@ -36,7 +64,12 @@ export function initSocketIO(token?: string) {
   }
 
   try {
-    socket = io(API_URL, {
+    socket = io(SOCKET_URL, {
+      // BUG #1: send the httpOnly auth cookie alongside the WebSocket
+      // handshake. The backend reads it from `socket.handshake.headers.cookie`.
+      withCredentials: true,
+      // If a caller did pass an explicit token (mobile), keep using it as
+      // a fallback. Web-admin will pass undefined and rely on the cookie.
       auth: token ? { token } : undefined,
       transports: ['websocket', 'polling'],
       reconnection: true,

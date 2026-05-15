@@ -14,33 +14,37 @@ export default function DashboardPage() {
   const loadDashboard = useCallback(async () => {
     setLoading(true);
     try {
-      const stats = await dashboardApi.stats();
-      setS(stats);
-      const absData = await absensiApi.today();
-      setAct(Array.isArray(absData) ? absData.slice(0, 8) : []);
-    } catch {}
-    const days: string[] = [];
-    for (let i = 6; i >= 0; i--) {
-      const d = new Date();
-      d.setDate(d.getDate() - i);
-      days.push(d.toISOString().split("T")[0]);
+      try {
+        const stats = await dashboardApi.stats();
+        setS(stats);
+        const absData = await absensiApi.today();
+        setAct(Array.isArray(absData) ? absData.slice(0, 8) : []);
+      } catch {}
+      const days: string[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        days.push(d.toISOString().split("T")[0]);
+      }
+      try {
+        const weekData = await Promise.all(
+          days.map(async (day) => {
+            const d = await absensiApi.byDate(day);
+            return {
+              day: new Date(day).toLocaleDateString("id-ID", {
+                weekday: "short",
+                day: "2-digit",
+              }),
+              count: Array.isArray(d) ? d.length : 0,
+            };
+          }),
+        );
+        setWeekly(weekData);
+      } catch {}
+    } finally {
+      // BUG #4 (P2-2): finally guarantees loading clears on any error.
+      setLoading(false);
     }
-    try {
-      const weekData = await Promise.all(
-        days.map(async (day) => {
-          const d = await absensiApi.byDate(day);
-          return {
-            day: new Date(day).toLocaleDateString("id-ID", {
-              weekday: "short",
-              day: "2-digit",
-            }),
-            count: Array.isArray(d) ? d.length : 0,
-          };
-        }),
-      );
-      setWeekly(weekData);
-    } catch {}
-    setLoading(false);
   }, []);
   useEffect(() => {
     loadDashboard();

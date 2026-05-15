@@ -1,6 +1,6 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { authApi, apiUploadFile, usersApi, lokasiApi, API_URL } from "@/lib/api";
+import { authApi, apiUploadFile, usersApi, lokasiApi, apiFetch, API_URL } from "@/lib/api";
 import { fmtDate, fmtDateTime, statusColor, avatarUrl } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
@@ -53,32 +53,73 @@ export default function PersonilPage() {
     berkas_cv: "",
   });
   const [currentPage, setCurrentPage] = useState(1);
-  const PAGE_SIZE = 15;
+  const PAGE_SIZE = 25;
+  // BUG #5 (P2-4): server-side pagination. We track the server's reported
+  // totals so the pager can render properly. `loading` finally has a
+  // setter so we can show a skeleton (BUG #4).
+  const [totalUsers, setTotalUsers] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
   const load = async () => {
+    setLoading(true);
     try {
-      const d = await usersApi.list();
-      setData(Array.isArray(d) ? d : []);
-    } catch {}
+      // Paginated user list. Other consumers (analytics, shift-assignment)
+      // pass `?all=true` to bypass pagination.
+      const qs = new URLSearchParams({
+        page: String(currentPage),
+        limit: String(PAGE_SIZE),
+      });
+      if (filterRole) qs.set("role", filterRole);
+      if (filterLokasi) qs.set("lokasi_id", filterLokasi);
+      if (filterPenempatan) qs.set("status_penempatan", filterPenempatan);
+      const d: any = await apiFetch(`/api/users?${qs.toString()}`);
+      // Backend returns { data, total, page, limit, totalPages } when paginated,
+      // or a raw array when ?all=true is passed. Handle both shapes defensively.
+      if (Array.isArray(d)) {
+        setData(d);
+        setTotalUsers(d.length);
+        setTotalPages(1);
+      } else {
+        setData(Array.isArray(d?.data) ? d.data : []);
+        setTotalUsers(Number(d?.total) || 0);
+        setTotalPages(Number(d?.totalPages) || 1);
+      }
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat data personil", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
+      // Locations list is small; load once. Use ?all=true wouldn't apply
+      // here — lokasi has its own endpoint without forced pagination.
       const d = await lokasiApi.list("status=active");
       setLokasi(Array.isArray(d) ? d : []);
     } catch {}
   };
   useEffect(() => {
     load();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPage, filterRole, filterLokasi, filterPenempatan]);
+
+  // Reset to page 1 whenever a filter changes (otherwise you might land
+  // on an empty page beyond totalPages for the new filter).
+  useEffect(() => {
+    if (currentPage !== 1) setCurrentPage(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filterRole, filterLokasi, filterPenempatan]);
+
+  // Search is client-side and only filters the CURRENT page (server
+  // pagination trade-off). For full-list searches, users should clear
+  // search and use the filter dropdowns, which are server-side.
   const filtered = data.filter((u) => {
     const q = search.toLowerCase();
     return (
-      (!q ||
-        u.nama?.toLowerCase().includes(q) ||
-        u.nrp?.toLowerCase().includes(q)) &&
-      (!filterRole || u.role === filterRole) &&
-      (!filterPenempatan || u.status_penempatan === filterPenempatan) &&
-      (!filterLokasi || u.lokasi_id === filterLokasi)
+      !q ||
+      u.nama?.toLowerCase().includes(q) ||
+      u.nrp?.toLowerCase().includes(q)
     );
   });
-  const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pagedData = filtered;
   const openNew = () => {
     setEdit(null);
     setForm(emptyForm);
@@ -238,13 +279,28 @@ export default function PersonilPage() {
               </option>
             ))}
           </select>
-          <span className="muted">{filtered.length} personil</span>
+          <span className="muted">{totalUsers} personil{search ? ` (${filtered.length} match di halaman ini)` : ""}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
             <button className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('table')} title="Tampilan Tabel"><i className="fas fa-list" /></button>
             <button className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('grid')} title="Tampilan Grid"><i className="fas fa-th" /></button>
           </div>
         </div>
-        {viewMode === 'grid' ? (
+        {loading && data.length === 0 ? (
+          // BUG #4 (P2-3): skeleton while initial load is in flight.
+          <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+            {Array.from({ length: 8 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse"
+                style={{
+                  background: "var(--hover-row, #e5e7eb)",
+                  height: 56,
+                  borderRadius: 8,
+                }}
+              />
+            ))}
+          </div>
+        ) : viewMode === 'grid' ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16, marginTop: 16 }}>
             {pagedData.map((u) => (
               <div key={u.id} className="section-card" style={{ padding: 16, cursor: 'pointer', transition: 'var(--transition)', border: '1px solid var(--border)' }} onClick={() => setDetail(u)}>
@@ -377,7 +433,7 @@ export default function PersonilPage() {
           </tbody>
         </table>
         )}
-        <Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
+        <Pagination currentPage={currentPage} totalItems={totalUsers} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
       </div>
       {/* DETAIL MODAL with TABS */}
       {detail && (

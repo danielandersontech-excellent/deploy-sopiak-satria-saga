@@ -3,24 +3,7 @@
  * SOCKET.IO REALTIME SERVER
  * ============================================
  * Mengganti polling 60 detik → push realtime instan
- * 
- * PENJELASAN:
- * Sebelumnya, aplikasi menggunakan "polling" - setiap 60 detik, 
- * semua client (HP anggota, HP komandan, web admin) mengirim request
- * ke server untuk mengecek "ada data baru nggak?". 
- * 
- * Masalahnya:
- * - Boros bandwidth (ratusan request/menit walau tidak ada perubahan)
- * - Delay sampai 60 detik (panic button baru muncul setelah 1 menit!)
- * - Server kelebihan beban jika banyak user online
- * 
- * Solusi Socket.io:
- * - Server langsung KIRIM data ke client saat ada perubahan
- * - Panic button → komandan langsung terima notifikasi (0-1 detik)
- * - Absensi baru → dashboard langsung update
- * - Laporan baru → badge langsung bertambah
- * - Bandwidth berkurang drastis (hanya kirim saat ada data baru)
- * 
+ *
  * EVENTS:
  * Server → Client:
  *   'absensi:new'        - Ada absensi baru
@@ -32,25 +15,57 @@
  *   'broadcast:new'      - Broadcast pesan baru
  *   'user:status'        - Status user berubah (on_duty/off_duty)
  *   'stats:update'       - Dashboard stats berubah
- * 
+ *
  * Client → Server:
  *   'join:role'          - Bergabung ke room sesuai role
  *   'join:lokasi'        - Bergabung ke room lokasi tertentu
  *   'location:ping'      - Update lokasi GPS
  *
  * v2 - SECURITY (P0-10): the auth middleware no longer accepts anonymous
- *      connections. The previous behavior of silently downgrading any
- *      missing/invalid token to an "anonymous" pseudo-user meant attackers
- *      could connect to the realtime channel without credentials and listen
- *      for events broadcast to all sockets (including panic alerts and live
- *      location pings). Connections without a valid JWT are now rejected
- *      at the io.use() handshake stage with "Authentication required".
+ *      connections. Connections without a valid JWT are rejected at the
+ *      io.use() handshake stage with "Authentication required".
+ *
+ * v3 - TAHAP 7 BUG #1 HOTFIX: P0-17 (Tahap 2) moved auth tokens from
+ *      localStorage to an httpOnly cookie. Web-admin's Socket.io client
+ *      can therefore no longer read the token in JS to pass via
+ *      `socket.handshake.auth.token`. The middleware now also looks at
+ *      the cookie header set by auth.controller.js (`ptsss_token`),
+ *      keeping the Authorization header / auth-object paths as fallbacks
+ *      for the mobile app (which still uses SecureStore + headers).
+ *      Result: web-admin realtime (panic alerts, broadcast, live tracking,
+ *      auto-refresh) works again without re-opening the localStorage hole.
  */
 
 const jwt = require('jsonwebtoken');
 const JWT_SECRET = process.env.JWT_SECRET;
+const { logger } = require('../utils/logger');
 
 let io = null;
+
+/**
+ * Parse a `Cookie:` header value into a plain object.
+ * Deliberately tolerant of edge cases — a bad cookie should never break
+ * a handshake, it should just produce an empty object and let the
+ * downstream token-lookup fail gracefully.
+ *
+ * Example:
+ *   parseCookies('foo=bar; ptsss_token=abc.def.ghi; baz=qux')
+ *   → { foo: 'bar', ptsss_token: 'abc.def.ghi', baz: 'qux' }
+ */
+function parseCookies(cookieHeader = '') {
+  if (!cookieHeader || typeof cookieHeader !== 'string') return {};
+  return Object.fromEntries(
+    cookieHeader
+      .split(';')
+      .map((c) => c.trim().split('='))
+      .filter(([k]) => k)
+      .map(([k, ...v]) => {
+        let value = v.join('=').trim();
+        try { value = decodeURIComponent(value); } catch { /* keep raw */ }
+        return [k.trim(), value];
+      })
+  );
+}
 
 function initSocketIO(server) {
   const { Server } = require('socket.io');
@@ -66,10 +81,31 @@ function initSocketIO(server) {
   });
 
   // ===== AUTH MIDDLEWARE =====
-  // Verify JWT token on connection. SECURITY (P0-10): missing or invalid
-  // tokens MUST reject the handshake — no "anonymous" fallback.
+  // Verify JWT on connection. SECURITY (P0-10): missing or invalid tokens
+  // MUST reject the handshake — no "anonymous" fallback.
+  //
+  // Token lookup order (Tahap 7 Bug #1):
+  //   1. Cookie `ptsss_token`           - web-admin (httpOnly, set by auth.controller.js)
+  //   2. socket.handshake.auth.token    - mobile app passes it explicitly
+  //   3. Authorization: Bearer ...      - also used by some clients
+  //   4. socket.handshake.query.token   - legacy, kept for backward compat
   io.use((socket, next) => {
-    const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+    const cookies = parseCookies(socket.handshake.headers && socket.handshake.headers.cookie);
+    // auth.controller.js sets `res.cookie('ptsss_token', ...)`. Keep the
+    // generic fallbacks in case the cookie name ever changes — picking the
+    // first one that's present lets the server be tolerant of legacy
+    // sessions or other deployments that named it differently.
+    const cookieToken = cookies['ptsss_token'] || cookies['token'] || cookies['auth_token'] || cookies['accessToken'];
+
+    const authObjToken = socket.handshake.auth && socket.handshake.auth.token;
+    const authHeader = socket.handshake.headers && socket.handshake.headers.authorization;
+    const headerToken = authHeader && typeof authHeader === 'string'
+      ? authHeader.replace(/^Bearer\s+/i, '')
+      : null;
+    const queryToken = socket.handshake.query && socket.handshake.query.token;
+
+    const token = cookieToken || authObjToken || headerToken || queryToken;
+
     if (!token) {
       return next(new Error('Authentication required'));
     }
@@ -91,7 +127,7 @@ function initSocketIO(server) {
   // ===== CONNECTION HANDLER =====
   io.on('connection', (socket) => {
     const user = socket.user;
-    console.log(`[Socket.io] ✅ Connected: ${user.nama || user.nrp || user.id} (${user.role}) - ${socket.id}`);
+    logger.info(`[Socket.io] Connected: ${user.nama || user.nrp || user.id} (${user.role}) - ${socket.id}`);
 
     // Auto-join role + per-user rooms (we're guaranteed an authenticated
     // user at this point, so no anon guard is needed).
@@ -102,7 +138,7 @@ function initSocketIO(server) {
     socket.on('join:lokasi', (lokasiId) => {
       if (lokasiId) {
         socket.join(`lokasi:${lokasiId}`);
-        console.log(`[Socket.io] ${user.nama || user.id} joined lokasi:${lokasiId}`);
+        logger.info(`[Socket.io] ${user.nama || user.id} joined lokasi:${lokasiId}`);
       }
     });
 
@@ -125,11 +161,11 @@ function initSocketIO(server) {
 
     // Disconnect
     socket.on('disconnect', (reason) => {
-      console.log(`[Socket.io] ❌ Disconnected: ${user.nama || user.id} - ${reason}`);
+      logger.info(`[Socket.io] Disconnected: ${user.nama || user.id} - ${reason}`);
     });
   });
 
-  console.log('[Socket.io] 🔌 Realtime server initialized');
+  logger.info('[Socket.io] Realtime server initialized');
   return io;
 }
 

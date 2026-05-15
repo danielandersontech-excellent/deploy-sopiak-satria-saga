@@ -14,8 +14,15 @@ export default function PatroliPage() {
   const PAGE_SIZE = 15;
   const load = async () => {
     setLoading(true);
-    try { const d = await patroliApi.list(); setData(Array.isArray(d) ? d : []); } catch {}
-    setLoading(false);
+    try {
+      const d = await patroliApi.list();
+      setData(Array.isArray(d) ? d : []);
+    } catch {
+      // intentionally silent — empty data state will show "tidak ada data"
+    } finally {
+      // BUG #4 (P2-2): finally so loading clears on error too.
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
   const filtered = data.filter(

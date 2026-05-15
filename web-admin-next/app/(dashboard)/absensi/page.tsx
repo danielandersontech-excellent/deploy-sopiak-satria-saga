@@ -29,9 +29,14 @@ export default function AbsensiPage() {
       const params = filterDate ? `date=${filterDate}` : "";
       const d = await absensiApi.list(params);
       setData(Array.isArray(d) ? d : []);
-    } catch (e: any) { toast(e.message, "error"); }
-    try { setLokasi(await lokasiApi.list()); } catch {}
-    setLoading(false);
+      try { setLokasi(await lokasiApi.list()); } catch {}
+    } catch (e: any) {
+      toast(e.message, "error");
+    } finally {
+      // BUG #4 (P2-2): finally so loading clears even if something
+      // unexpected bubbles up.
+      setLoading(false);
+    }
   }, [filterDate]);
 
   useEffect(() => { load(); }, [load]);
@@ -145,8 +150,19 @@ export default function AbsensiPage() {
         </div>
 
         {loading ? (
-          <div style={{ textAlign: "center", padding: 48, color: "var(--text-muted)" }}>
-            <div className="spinner" style={{ margin: "0 auto 12px" }} /> Memuat data absensi...
+          // BUG #4 (P2-3): skeleton placeholder while data is loading.
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="animate-pulse"
+                style={{
+                  background: "var(--hover-row, #e5e7eb)",
+                  height: 44,
+                  borderRadius: 6,
+                }}
+              />
+            ))}
           </div>
         ) : (
           <table>

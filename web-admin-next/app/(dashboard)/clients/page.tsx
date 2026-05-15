@@ -1,12 +1,31 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { apiUploadFile, clientsApi } from "@/lib/api";
+import { apiUploadFile, apiFetch, clientsApi } from "@/lib/api";
 import { fmtDate } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { QRCodeImage } from "@/components/ui/QRCodeImage";
 import { useToast } from "@/hooks/useToast";
 
+/**
+ * CLIENTS PAGE — Tahap 7
+ *
+ * Three Tahap 7 fixes converge in this file:
+ *   - BUG #6 (P2-5): QR codes are now rendered client-side via
+ *     <QRCodeImage>. No more api.qrserver.com leak.
+ *   - BUG #7 (P2-6): The plaintext "PIN: 123456" hint is gone from the
+ *     table and from the create/edit modal banner. Admins can no longer
+ *     glance at the table and see what every klien's PIN is — even if it
+ *     was a default, surfacing it builds bad muscle memory.
+ *   - BUG #8 (P2-7): A "Reset PIN" action button lives in each row's
+ *     Aksi column. It calls the new POST /api/data/clients/:id/reset-pin
+ *     endpoint, which returns a one-shot plaintext PIN that we surface
+ *     in a modal with copy + 60s countdown.
+ *
+ * BUG #4 (P2-2/P2-3): the loading state finally clears properly on
+ * error, and the table shows a skeleton while the initial fetch runs.
+ */
 export default function ClientsPage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
@@ -16,6 +35,19 @@ export default function ClientsPage() {
   const [del, setDel] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+
+  // BUG #8: reset-PIN flow uses two states:
+  //   - resetPinConfirm: client awaiting confirmation to reset
+  //   - resetPinResult: the one-shot PIN returned by the backend; we show
+  //     it inside a modal with a countdown and a Copy button, then drop it.
+  const [resetPinConfirm, setResetPinConfirm] = useState<any>(null);
+  const [resetPinResult, setResetPinResult] = useState<{
+    client: any;
+    pin: string;
+    secondsLeft: number;
+  } | null>(null);
+  const [resetPinLoading, setResetPinLoading] = useState(false);
+
   const emptyForm = {
     kode_klien: "",
     nama_klien: "",
@@ -33,15 +65,40 @@ export default function ClientsPage() {
   const [form, setForm] = useState(emptyForm);
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
+
   const load = async () => {
+    setLoading(true);
     try {
       const d = await clientsApi.list();
       setData(Array.isArray(d) ? d : []);
-    } catch {}
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat data klien", "error");
+    } finally {
+      // BUG #4 (P2-2): always clear loading.
+      setLoading(false);
+    }
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // BUG #8: tick the countdown on the result modal. When it hits 0 we
+  // close the modal — the operator's window to read the PIN closes.
+  useEffect(() => {
+    if (!resetPinResult) return;
+    if (resetPinResult.secondsLeft <= 0) {
+      setResetPinResult(null);
+      return;
+    }
+    const t = window.setTimeout(() => {
+      setResetPinResult((prev) =>
+        prev ? { ...prev, secondsLeft: prev.secondsLeft - 1 } : prev,
+      );
+    }, 1000);
+    return () => window.clearTimeout(t);
+  }, [resetPinResult]);
+
   const openNew = () => {
     const newCode = `CLI-${Date.now().toString().slice(-6)}`;
     setEdit(null);
@@ -98,6 +155,40 @@ export default function ClientsPage() {
       toast(e.message, "error");
     }
   };
+
+  // BUG #8: actual reset call. Backend returns the new plaintext PIN
+  // exactly once; we show it in a modal and never store it locally
+  // beyond the modal lifetime.
+  const doResetPin = async () => {
+    const client = resetPinConfirm;
+    if (!client) return;
+    setResetPinLoading(true);
+    try {
+      const res: any = await apiFetch(`/api/data/clients/${client.id}/reset-pin`, {
+        method: "POST",
+      });
+      if (!res?.pin) {
+        throw new Error(res?.error || "Server tidak mengembalikan PIN baru");
+      }
+      setResetPinConfirm(null);
+      setResetPinResult({ client, pin: String(res.pin), secondsLeft: 60 });
+    } catch (e: any) {
+      toast(e?.message || "Gagal reset PIN", "error");
+    } finally {
+      setResetPinLoading(false);
+    }
+  };
+
+  const copyPin = async () => {
+    if (!resetPinResult?.pin) return;
+    try {
+      await navigator.clipboard.writeText(resetPinResult.pin);
+      toast("PIN tersalin ke clipboard");
+    } catch {
+      toast("Gagal menyalin ke clipboard", "warning");
+    }
+  };
+
   const filtered = data.filter(
     (r) =>
       (!search ||
@@ -105,7 +196,10 @@ export default function ClientsPage() {
         r.kode_klien?.toLowerCase().includes(search.toLowerCase())) &&
       (!filterStatus || r.status_klien === filterStatus),
   );
-  const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const pagedData = filtered.slice(
+    (currentPage - 1) * PAGE_SIZE,
+    currentPage * PAGE_SIZE,
+  );
   const statusBadge = (s: string) =>
     s === "Aktif" ? "success" : s === "Non-Aktif" ? "default" : "danger";
   return (
@@ -158,85 +252,133 @@ export default function ClientsPage() {
             </tr>
           </thead>
           <tbody>
-            {pagedData.map((r) => (
-              <tr key={r.id}>
-                <td>
-                  <code>{r.kode_klien}</code>
-                </td>
-                <td>
-                  <strong>{r.nama_klien}</strong>
-                </td>
-                <td>{r.kontak_person || "-"}</td>
-                <td>{r.nomor_telepon || "-"}</td>
-                <td>{r.email || "-"}</td>
-                <td>{r.jenis_jasa || "-"}</td>
-                <td>
-                  {r.tgl_mulai_kontrak
-                    ? `${fmtDate(r.tgl_mulai_kontrak)} - ${fmtDate(r.tgl_habis_kontrak)}`
-                    : "-"}
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                      <code
+            {loading && data.length === 0 ? (
+              // BUG #4 (P2-3): skeleton while initial fetch runs.
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skel-${i}`}>
+                  <td colSpan={10}>
+                    <div
+                      className="animate-pulse"
+                      style={{
+                        background: "var(--hover-row, #e5e7eb)",
+                        height: 48,
+                        borderRadius: 6,
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>
+                {pagedData.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <code>{r.kode_klien}</code>
+                    </td>
+                    <td>
+                      <strong>{r.nama_klien}</strong>
+                    </td>
+                    <td>{r.kontak_person || "-"}</td>
+                    <td>{r.nomor_telepon || "-"}</td>
+                    <td>{r.email || "-"}</td>
+                    <td>{r.jenis_jasa || "-"}</td>
+                    <td>
+                      {r.tgl_mulai_kontrak
+                        ? `${fmtDate(r.tgl_mulai_kontrak)} - ${fmtDate(r.tgl_habis_kontrak)}`
+                        : "-"}
+                    </td>
+                    <td>
+                      <div
                         style={{
-                          fontSize: 10,
-                          background: "var(--hover-row)",
-                          padding: "2px 6px",
-                          borderRadius: 4,
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
                         }}
                       >
-                        {r.nrp_login || r.kode_klien}
-                      </code>
-                      <span className="muted" style={{ fontSize: 9, marginTop: 2 }}>
-                        PIN: 123456
+                        <div
+                          style={{ display: "flex", flexDirection: "column" }}
+                        >
+                          <code
+                            style={{
+                              fontSize: 10,
+                              background: "var(--hover-row)",
+                              padding: "2px 6px",
+                              borderRadius: 4,
+                            }}
+                          >
+                            {r.nrp_login || r.kode_klien}
+                          </code>
+                          {/* BUG #7 (P2-6): the plaintext "PIN: 123456"
+                              hint has been removed. PIN is hashed at rest
+                              and admins use Reset PIN to issue a new one. */}
+                        </div>
+                        {/* BUG #6 (P2-5): QR rendered locally, not via api.qrserver.com. */}
+                        <QRCodeImage
+                          data={r.nrp_login || r.kode_klien || ""}
+                          size={32}
+                          alt="Login QR"
+                          style={{
+                            borderRadius: 4,
+                            background: "#fff",
+                            border: "1px solid var(--border)",
+                          }}
+                        />
+                      </div>
+                    </td>
+                    <td>
+                      <span
+                        className={`badge badge-${statusBadge(r.status_klien)}`}
+                      >
+                        {r.status_klien}
                       </span>
-                    </div>
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=50x50&data=${encodeURIComponent(r.nrp_login || r.kode_klien)}`} 
-                      alt="Login QR"
-                      style={{ width: 32, height: 32, borderRadius: 4, background: '#fff', border: '1px solid var(--border)' }}
-                    />
-                  </div>
-                </td>
-                <td>
-                  <span
-                    className={`badge badge-${statusBadge(r.status_klien)}`}
-                  >
-                    {r.status_klien}
-                  </span>
-                </td>
-                <td>
-                  <div className="btn-group">
-                    <button
-                      className="btn-icon"
-                      title="Edit"
-                      onClick={() => openEdit(r)}
-                    >
-                      <i className="fas fa-pen" />
-                    </button>
-                    <button
-                      className="btn-icon"
-                      title="Hapus"
-                      onClick={() => setDel(r)}
-                      style={{ color: "var(--danger)" }}
-                    >
-                      <i className="fas fa-trash" />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={10} className="empty-row">
-                  Tidak ada data klien
-                </td>
-              </tr>
+                    </td>
+                    <td>
+                      <div className="btn-group">
+                        <button
+                          className="btn-icon"
+                          title="Edit"
+                          onClick={() => openEdit(r)}
+                        >
+                          <i className="fas fa-pen" />
+                        </button>
+                        {/* BUG #8 (P2-7): Reset PIN trigger. */}
+                        <button
+                          className="btn-icon"
+                          title="Reset PIN"
+                          onClick={() => setResetPinConfirm(r)}
+                          style={{ color: "var(--warning, #d97706)" }}
+                        >
+                          <i className="fas fa-key" />
+                        </button>
+                        <button
+                          className="btn-icon"
+                          title="Hapus"
+                          onClick={() => setDel(r)}
+                          style={{ color: "var(--danger)" }}
+                        >
+                          <i className="fas fa-trash" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={10} className="empty-row">
+                      Tidak ada data klien
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>
-      <Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
+        <Pagination
+          currentPage={currentPage}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+        />
       </div>
       {modal && (
         <Modal
@@ -265,10 +407,16 @@ export default function ClientsPage() {
                 value={form.kode_klien}
                 readOnly
                 disabled
-                style={{ background: "var(--hover-row)", fontWeight: 'bold', cursor: 'not-allowed' }}
+                style={{
+                  background: "var(--hover-row)",
+                  fontWeight: "bold",
+                  cursor: "not-allowed",
+                }}
                 placeholder="Auto-generated"
               />
-              <small className="muted">Kode klien dibuat otomatis, tidak bisa diubah</small>
+              <small className="muted">
+                Kode klien dibuat otomatis, tidak bisa diubah
+              </small>
             </div>
             <div className="form-group">
               <label className="form-label">Nama Klien *</label>
@@ -408,7 +556,10 @@ export default function ClientsPage() {
                   if (!file) return;
                   try {
                     toast("Mengunggah file...", "info");
-                    const up = await apiUploadFile("/api/data/upload?folder=kontrak", file);
+                    const up = await apiUploadFile(
+                      "/api/data/upload?folder=kontrak",
+                      file,
+                    );
                     setForm({ ...form, path_kontrak_pdf: up.url });
                     toast("File berhasil diunggah");
                   } catch (err: any) {
@@ -423,13 +574,17 @@ export default function ClientsPage() {
                   target="_blank"
                   className="btn btn-sm btn-outline"
                   style={{ whiteSpace: "nowrap" }}
+                  rel="noreferrer"
                 >
                   Lihat Berkas
                 </a>
               )}
             </div>
             {form.path_kontrak_pdf && (
-              <small className="success" style={{ marginTop: 4, display: "block" }}>
+              <small
+                className="success"
+                style={{ marginTop: 4, display: "block" }}
+              >
                 ✓ {form.path_kontrak_pdf}
               </small>
             )}
@@ -437,6 +592,8 @@ export default function ClientsPage() {
           <h4 style={{ margin: "16px 0 10px", color: "var(--success)" }}>
             🔐 Login Klien (Monitoring Mobile/Web)
           </h4>
+          {/* BUG #7 (P2-6): info banner used to leak the default PIN.
+              Replaced with a non-revealing reminder. */}
           <div
             style={{
               background: "var(--primary-light)",
@@ -447,33 +604,54 @@ export default function ClientsPage() {
               color: "var(--primary)",
             }}
           >
-            <i className="fas fa-info-circle" /> Klien bisa login ke web/mobile
-            untuk monitoring perusahaannya. Berikan kode akses berikut. Default
-            PIN: <strong>123456</strong>
+            <i className="fas fa-info-circle" /> Klien dapat login ke
+            web/mobile untuk monitoring. Setelah klien dibuat, gunakan tombol{" "}
+            <strong>Reset PIN</strong> di tabel untuk menerbitkan PIN
+            sementara — PIN hanya tampil sekali setelah reset.
           </div>
           <div className="form-row">
             <div className="form-group">
               <label className="form-label">ID Login Klien *</label>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+              <div
+                style={{ display: "flex", gap: 12, alignItems: "center" }}
+              >
                 <div style={{ flex: 1 }}>
                   <input
                     className="form-input"
                     value={form.kode_klien}
                     disabled
-                    style={{ background: "var(--hover-row)", fontWeight: 'bold' }}
+                    style={{
+                      background: "var(--hover-row)",
+                      fontWeight: "bold",
+                    }}
                   />
                   <small className="muted">
                     Gunakan ID ini untuk login di aplikasi mobile
                   </small>
                 </div>
-                {(form.kode_klien) && (
-                  <div style={{ textAlign: 'center' }}>
-                    <img 
-                      src={`https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(form.kode_klien)}`} 
+                {form.kode_klien && (
+                  <div style={{ textAlign: "center" }}>
+                    {/* BUG #6 (P2-5): QR rendered locally. */}
+                    <QRCodeImage
+                      data={form.kode_klien}
+                      size={60}
                       alt="Login QR"
-                      style={{ width: 60, height: 60, borderRadius: 4, background: '#fff', padding: 2, border: '1px solid var(--border)' }}
+                      style={{
+                        borderRadius: 4,
+                        background: "#fff",
+                        padding: 2,
+                        border: "1px solid var(--border)",
+                      }}
                     />
-                    <div style={{ fontSize: 9, color: 'var(--primary)', marginTop: 2 }}>Scan Login</div>
+                    <div
+                      style={{
+                        fontSize: 9,
+                        color: "var(--primary)",
+                        marginTop: 2,
+                      }}
+                    >
+                      Scan Login
+                    </div>
                   </div>
                 )}
               </div>
@@ -489,7 +667,77 @@ export default function ClientsPage() {
           onCancel={() => setDel(null)}
         />
       )}
+
+      {/* BUG #8: Reset PIN confirmation step. */}
+      {resetPinConfirm && !resetPinResult && (
+        <ConfirmDialog
+          title="Reset PIN Klien?"
+          msg={`PIN klien "${resetPinConfirm.nama_klien}" akan diganti dengan PIN baru acak. PIN lama tidak bisa digunakan lagi. Lanjutkan?`}
+          onConfirm={doResetPin}
+          onCancel={() => !resetPinLoading && setResetPinConfirm(null)}
+        />
+      )}
+
+      {/* BUG #8: Result modal — one-shot PIN display with countdown. */}
+      {resetPinResult && (
+        <Modal
+          title="PIN Baru Klien"
+          onClose={() => {
+            /* deliberately no-op: force user to click the bottom button */
+          }}
+          footer={
+            <>
+              <button className="btn btn-outline" onClick={copyPin}>
+                <i className="fas fa-copy" /> Copy PIN
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setResetPinResult(null)}
+              >
+                Sudah Dicatat & Tutup
+              </button>
+            </>
+          }
+        >
+          <div style={{ textAlign: "center" }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
+              {resetPinResult.client.nama_klien}
+            </div>
+            <div
+              style={{
+                fontFamily: "monospace",
+                fontSize: "2.25rem",
+                fontWeight: 700,
+                letterSpacing: "0.25rem",
+                padding: "16px 24px",
+                margin: "10px auto 16px",
+                background: "var(--hover-row, #f3f4f6)",
+                border: "2px dashed var(--primary, #1a5276)",
+                borderRadius: 12,
+                display: "inline-block",
+              }}
+              aria-label="PIN baru"
+            >
+              {resetPinResult.pin}
+            </div>
+            <div
+              style={{
+                color: "var(--danger, #dc2626)",
+                fontSize: 13,
+                fontWeight: 600,
+                marginBottom: 6,
+              }}
+            >
+              ⚠️ Catat PIN ini sekarang. Setelah modal ditutup, PIN tidak
+              dapat dilihat lagi.
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>
+              Modal akan otomatis tertutup dalam{" "}
+              <strong>{resetPinResult.secondsLeft}</strong> detik.
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
-

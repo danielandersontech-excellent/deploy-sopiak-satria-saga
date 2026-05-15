@@ -4,15 +4,14 @@ const opCtrl = require('../controllers/operasional.controller');
 const dashCtrl = require('../controllers/dashboard.controller');
 const { auth, requireRole } = require('../middleware/auth');
 const { upload, setFolder, getFileUrl } = require('../middleware/upload');
+const { logEvent } = require('../middleware/auditlog');
+const { query, queryOne } = require('../config/database');
+const { logger } = require('../utils/logger');
+const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 
 // =============================================================================
 // SECURITY (P0-16): Whitelist for upload subfolders.
-// Previously `req.query.folder` was forwarded straight to multer's
-// destination resolver, which joined it onto the uploads root. An attacker
-// could pass `folder=../../etc` or any other traversal sequence and steer
-// the write outside the uploads directory. We now refuse anything that
-// is not on this short, explicit list. The default ('general') is also a
-// member, so legitimate callers that omit the param keep working.
 // =============================================================================
 const SAFE_FOLDERS = ['general', 'absensi', 'laporan', 'kejadian', 'patroli', 'kontrak', 'personil', 'profile'];
 
@@ -24,6 +23,113 @@ function pickUploadFolder(req, res, next) {
   req.uploadFolder = requested;
   next();
 }
+
+// =============================================================================
+// TAHAP 7 BUG #8 (P2-7): Reset PIN for a client.
+//
+// POST /api/data/clients/:id/reset-pin
+//
+// Generates a fresh 6-digit PIN, stores only its bcrypt hash, sets
+// must_change_pin so the client is forced to rotate on first login, and
+// returns the plaintext PIN ONCE in the JSON response so the admin can
+// hand it off. The plaintext is never written to disk and the audit log
+// records only the action (not the PIN itself).
+//
+// Authorization: admin or supervisor only. Klien themselves cannot trigger
+// this (they should use change-PIN with their existing one); komandan and
+// anggota have no business resetting client credentials.
+//
+// We use crypto.randomInt for a uniform distribution across 100000..999999
+// (Math.random would be predictable). The cost factor matches the rest of
+// the auth surface — BCRYPT_ROUNDS env, default 12.
+// =============================================================================
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+router.post(
+  '/clients/:id/reset-pin',
+  auth,
+  requireRole('admin', 'supervisor'),
+  async (req, res) => {
+    const clientId = req.params.id;
+    if (!clientId || !UUID_RE.test(String(clientId))) {
+      return res.status(400).json({ error: 'ID klien tidak valid' });
+    }
+
+    try {
+      // Generate uniformly-random 6-digit PIN (100000..999999, padded
+      // string so a leading zero would be preserved — though randomInt's
+      // lower bound is 100000 so no leading zero arises today, the
+      // padStart is a cheap safety net if the range is ever widened).
+      const pin = String(crypto.randomInt(100000, 1000000)).padStart(6, '0');
+
+      const rounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
+      const pinHash = await bcrypt.hash(pin, rounds);
+
+      const updated = await queryOne(
+        `UPDATE clients
+            SET pin_hash = $1,
+                must_change_pin = TRUE,
+                updated_at = NOW()
+          WHERE id = $2
+          RETURNING id, nrp_login, kode_klien, nama_klien`,
+        [pinHash, clientId],
+      );
+
+      if (!updated) {
+        return res.status(404).json({ error: 'Klien tidak ditemukan' });
+      }
+
+      // P1-2 follow-on: any existing klien refresh tokens are now stale.
+      // Wipe them so the rotated PIN actually takes effect on next login —
+      // a leftover refresh token would let an attacker who learned the
+      // old PIN ride the existing session past the rotation.
+      try {
+        await query(
+          'DELETE FROM refresh_tokens WHERE client_id = $1',
+          [clientId],
+        );
+      } catch (cleanupErr) {
+        // Non-fatal; log and continue. The PIN rotation itself succeeded.
+        logger.warn(
+          `[reset-pin] Gagal hapus refresh_tokens untuk client ${clientId}: ${cleanupErr.message}`,
+        );
+      }
+
+      // Audit log — NEVER include the plaintext PIN in detail.
+      try {
+        await logEvent(
+          req.user.id,
+          req.user.nama || '',
+          'CLIENT_PIN_RESET',
+          'clients',
+          clientId,
+          {
+            client_kode: updated.kode_klien,
+            client_nama: updated.nama_klien,
+            // Note absence of `pin` field — plaintext does not enter logs.
+          },
+        );
+      } catch (auditErr) {
+        // Audit failure shouldn't block the response, but we want to see
+        // it in the error log so it's findable later.
+        logger.error(
+          `[reset-pin] Audit log failed for client ${clientId}: ${auditErr.message}`,
+        );
+      }
+
+      return res.json({
+        success: true,
+        pin,
+        client_id: updated.id,
+        nrp_login: updated.nrp_login || updated.kode_klien,
+        message: 'PIN baru hanya ditampilkan sekali. Catat sebelum menutup modal.',
+      });
+    } catch (err) {
+      logger.error(`[reset-pin] error for client ${clientId}: ${err.message}`);
+      return res.status(500).json({ error: 'Gagal reset PIN klien' });
+    }
+  },
+);
 
 function crudRoutes(ctrl, adminOnly = false) {
   const r = require('express').Router();
@@ -60,7 +166,7 @@ router.get('/dashboard/stats', auth, dashCtrl.getStats);
 router.post('/upload', auth, pickUploadFolder, upload.single('file'), async(req,res)=>{
   if(!req.file) return res.status(400).json({error:'No file'});
   try{let fp=req.file.path;const wm=req.headers['x-watermark-info']||req.body.watermark;
-  if(wm&&req.file.mimetype&&req.file.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');const info=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);fp=await applyWatermark(fp,info);}catch(e){console.log('[Upload] WM skip:',e.message);}}
+  if(wm&&req.file.mimetype&&req.file.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');const info=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);fp=await applyWatermark(fp,info);}catch(e){logger.warn(`[Upload] WM skip: ${e.message}`);}}
   res.json({url:getFileUrl(fp)});}catch(e){res.json({url:getFileUrl(req.file.path)});}
 });
 router.post('/upload/multiple', auth, pickUploadFolder, upload.array('files',10), async(req,res)=>{

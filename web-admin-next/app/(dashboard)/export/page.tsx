@@ -1,10 +1,25 @@
 "use client";
 import React, { useState, useEffect } from "react";
-import { authApi, getUser, lokasiApi, reportExportsApi } from "@/lib/api";
-import { exportToExcel, exportAbsensiPDF, exportLaporanPDF, exportPatroliPDF, fetchAbsensiForExport, fetchLaporanForExport, fetchPatroliForExport } from "@/lib/reportExport";
+import { authApi, lokasiApi, reportExportsApi } from "@/lib/api";
+import {
+  exportToExcel,
+  exportAbsensiPDF,
+  exportLaporanPDF,
+  exportPatroliPDF,
+  fetchAbsensiForExport,
+  fetchLaporanForExport,
+  fetchPatroliForExport,
+} from "@/lib/reportExport";
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
 
+/**
+ * TAHAP 7 BUG #2:
+ *   Excel exports no longer use the `xlsx` package on the client.
+ *   `exportToExcel` now hits the existing backend /api/export/{type}
+ *   endpoint and streams the .xlsx file to the user's downloads.
+ *   PDF exports remain client-side via jsPDF.
+ */
 export default function ExportPage() {
   const { toast } = useToast();
   const { t } = useSettings();
@@ -31,89 +46,53 @@ export default function ExportPage() {
       .then((d) => setLokasi(Array.isArray(d) ? d : []))
       .catch(() => {});
   }, []);
-  const handle = async (type: string, format: string) => {
+  const handle = async (type: "absensi" | "laporan" | "patroli", format: "pdf" | "excel") => {
     setLoading(`${type}-${format}`);
     try {
       const uid = authApi.getUserId();
-      if (type === "absensi") {
-        const d = await fetchAbsensiForExport(
+      if (format === "excel") {
+        // BUG #2: server-side export. The browser receives a ready .xlsx
+        // blob; no spreadsheet library on the client.
+        await exportToExcel(
+          type,
           startDate,
           endDate,
           filterLokasi || undefined,
+          `${type === "absensi" ? "Absensi" : type === "laporan" ? "Laporan" : "Patroli"}_${startDate}_${endDate}.xlsx`,
         );
-        if (format === "pdf") exportAbsensiPDF(d, `${startDate} - ${endDate}`);
-        else
-          exportToExcel(
-            d.map((r: any) => ({
-              Nama: r.users?.nama || r.nama,
-              NRP: r.users?.nrp || r.nrp,
-              Tipe: r.tipe,
-              Waktu: r.waktu,
-              Status: r.status,
-              Pos_Jaga: r.pos_jaga,
-              Alamat: r.alamat,
-            })),
-            `Absensi_${startDate}`,
-          );
-      }
-      if (type === "laporan") {
-        const { harian, kejadian } = await fetchLaporanForExport(
-          startDate,
-          endDate,
-        );
-        if (format === "pdf")
+      } else {
+        // PDF path unchanged — uses jsPDF in the browser.
+        if (type === "absensi") {
+          const d = await fetchAbsensiForExport(startDate, endDate, filterLokasi || undefined);
+          exportAbsensiPDF(d, `${startDate} - ${endDate}`);
+        } else if (type === "laporan") {
+          const { harian, kejadian } = await fetchLaporanForExport(startDate, endDate);
           exportLaporanPDF(harian, kejadian, `${startDate} - ${endDate}`);
-        else
-          exportToExcel(
-            [
-              ...harian.map((h: any) => ({
-                Tipe: "Harian",
-                Pelapor: h.users?.nama,
-                Kondisi: h.kondisi,
-                Status: h.status,
-                Tanggal: h.tanggal,
-              })),
-              ...kejadian.map((k: any) => ({
-                Tipe: "Kejadian",
-                Pelapor: k.users?.nama,
-                Jenis: k.jenis,
-                Prioritas: k.prioritas,
-                Status: k.status,
-              })),
-            ],
-            `Laporan_${startDate}`,
-          );
+        } else if (type === "patroli") {
+          const d = await fetchPatroliForExport(startDate, endDate);
+          exportPatroliPDF(d, `${startDate} - ${endDate}`);
+        }
       }
-      if (type === "patroli") {
-        const d = await fetchPatroliForExport(startDate, endDate);
-        if (format === "pdf") exportPatroliPDF(d, `${startDate} - ${endDate}`);
-        else
-          exportToExcel(
-            d.map((r: any) => ({
-              Petugas: r.users?.nama,
-              NRP: r.users?.nrp,
-              Rute: r.route_name,
-              Status: r.status,
-              Checkpoint: `${r.checkpoint_scanned || 0}/${r.checkpoint_total || 0}`,
-              Mulai: r.start_time,
-            })),
-            `Patroli_${startDate}`,
-          );
+      try {
+        await reportExportsApi.create({
+          tipe: type,
+          lokasi_id: filterLokasi || null,
+          periode_start: startDate,
+          periode_end: endDate,
+          file_url: `${type}_${startDate}_${endDate}.${format}`,
+          generated_by: uid,
+        });
+      } catch {
+        // history logging is best-effort; don't block on it
       }
-      await reportExportsApi.create({
-        tipe: type,
-        lokasi_id: filterLokasi || null,
-        periode_start: startDate,
-        periode_end: endDate,
-        file_url: `${type}_${startDate}_${endDate}.${format}`,
-        generated_by: uid,
-      });
       toast(`Export ${type} (${format.toUpperCase()}) berhasil! 📥`);
       loadHistory();
     } catch (err: any) {
       toast(`Error: ${err.message}`, "error");
+    } finally {
+      // BUG #4: always clear loading, even if an error escapes the try block.
+      setLoading("");
     }
-    setLoading("");
   };
   return (
     <div>
@@ -158,11 +137,11 @@ export default function ExportPage() {
           </select>
         </div>
         <div className="export-grid">
-          {[
-            { type: "absensi", icon: "📋", label: t("absensi") },
-            { type: "laporan", icon: "📝", label: t("lap_harian") },
-            { type: "patroli", icon: "🚶", label: t("patroli") },
-          ].map((e) => (
+          {([
+            { type: "absensi" as const, icon: "📋", label: t("absensi") },
+            { type: "laporan" as const, icon: "📝", label: t("lap_harian") },
+            { type: "patroli" as const, icon: "🚶", label: t("patroli") },
+          ]).map((e) => (
             <div key={e.type} className="export-card">
               <h4>
                 {e.icon} {e.label}
@@ -190,4 +169,3 @@ export default function ExportPage() {
     </div>
   );
 }
-

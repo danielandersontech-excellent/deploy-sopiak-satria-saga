@@ -17,8 +17,15 @@ export default function LaporanKejadianPage() {
   const PAGE_SIZE = 15;
   const load = async () => {
     setLoading(true);
-    try { const d = await laporanKejadianApi.list(); setData(Array.isArray(d) ? d : []); } catch {}
-    setLoading(false);
+    try {
+      const d = await laporanKejadianApi.list();
+      setData(Array.isArray(d) ? d : []);
+    } catch {
+      // silent — empty state will show
+    } finally {
+      // BUG #4 (P2-2): finally so loading clears on error too.
+      setLoading(false);
+    }
   };
   useEffect(() => { load(); }, []);
   const validate = async (id: string, status: string) => {
@@ -82,58 +89,78 @@ export default function LaporanKejadianPage() {
             </tr>
           </thead>
           <tbody>
-            {pagedData.map((r) => (
-              <tr key={r.id}>
-                <td className="user-cell">
-                  <img
-                    className="avatar avatar-sm"
-                    src={avatarUrl(r.users?.foto_url)}
-                   alt="avatar" />
-                  <span>{r.users?.nama}</span>
-                </td>
-                <td>
-                  <strong>{r.jenis}</strong>
-                </td>
-                <td>
-                  <span className={`badge badge-${statusColor(r.prioritas)}`}>
-                    {r.prioritas}
-                  </span>
-                </td>
-                <td>{r.lokasi_text || "-"}</td>
-                <td>{fmtDateTime(r.waktu_kejadian)}</td>
-                <td
-                  style={{
-                    maxWidth: 200,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                  }}
-                >
-                  {r.kronologi || "-"}
-                </td>
-                <td>
-                  {r.bukti_media?.length > 0
-                    ? `${r.bukti_media.length} foto`
-                    : "-"}
-                </td>
-                <td>
-                  <span className={`badge badge-${statusColor(r.status)}`}>
-                    {r.status}
-                  </span>
-                </td>
-                <td>
-                  <button className="btn-icon" onClick={() => setDetail(r)}>
-                    <i className="fas fa-eye" />
-                  </button>
-                </td>
-              </tr>
-            ))}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={9} className="empty-row">
-                  Tidak ada laporan kejadian
-                </td>
-              </tr>
+            {loading && data.length === 0 ? (
+              // BUG #4 (P2-3): skeleton rows while initial fetch in flight.
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skel-${i}`}>
+                  <td colSpan={9}>
+                    <div
+                      className="animate-pulse"
+                      style={{
+                        background: "var(--hover-row, #e5e7eb)",
+                        height: 36,
+                        borderRadius: 6,
+                      }}
+                    />
+                  </td>
+                </tr>
+              ))
+            ) : (
+              <>
+                {pagedData.map((r) => (
+                  <tr key={r.id}>
+                    <td className="user-cell">
+                      <img
+                        className="avatar avatar-sm"
+                        src={avatarUrl(r.users?.foto_url)}
+                       alt="avatar" />
+                      <span>{r.users?.nama}</span>
+                    </td>
+                    <td>
+                      <strong>{r.jenis}</strong>
+                    </td>
+                    <td>
+                      <span className={`badge badge-${statusColor(r.prioritas)}`}>
+                        {r.prioritas}
+                      </span>
+                    </td>
+                    <td>{r.lokasi_text || "-"}</td>
+                    <td>{fmtDateTime(r.waktu_kejadian)}</td>
+                    <td
+                      style={{
+                        maxWidth: 200,
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {r.kronologi || "-"}
+                    </td>
+                    <td>
+                      {r.bukti_media?.length > 0
+                        ? `${r.bukti_media.length} foto`
+                        : "-"}
+                    </td>
+                    <td>
+                      <span className={`badge badge-${statusColor(r.status)}`}>
+                        {r.status}
+                      </span>
+                    </td>
+                    <td>
+                      <button className="btn-icon" onClick={() => setDetail(r)}>
+                        <i className="fas fa-eye" />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={9} className="empty-row">
+                      Tidak ada laporan kejadian
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>

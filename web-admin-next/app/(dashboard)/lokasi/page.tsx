@@ -28,14 +28,20 @@ export default function LokasiPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
   const load = async () => {
+    setLoading(true);
     try {
-      const d = await lokasiApi.list();
-      setData(Array.isArray(d) ? d : []);
-    } catch {}
-    try {
-      const u = await clientsApi.list();
-      setKlienUsers(Array.isArray(u) ? u : []);
-    } catch {}
+      try {
+        const d = await lokasiApi.list();
+        setData(Array.isArray(d) ? d : []);
+      } catch {}
+      try {
+        const u = await clientsApi.list();
+        setKlienUsers(Array.isArray(u) ? u : []);
+      } catch {}
+    } finally {
+      // BUG #4 (P2-2): always clear loading, even on unexpected error.
+      setLoading(false);
+    }
   };
   useEffect(() => {
     load();
@@ -163,61 +169,81 @@ export default function LokasiPage() {
             </tr>
           </thead>
           <tbody>
-            {pagedData.map((r) => {
-              const kl = klienUsers.find((k) => k.id == r.client_id);
-              return (
-                <tr key={r.id}>
-                  <td>
-                    <strong>{r.nama}</strong>
-                  </td>
-                  <td>
-                    {kl ? (
-                      <span className="badge badge-info">{kl.nama_klien}</span>
-                    ) : (
-                      <span className="muted">-</span>
-                    )}
-                  </td>
-                  <td>{r.alamat}</td>
-                  <td style={{ fontFamily: "monospace", fontSize: 12 }}>
-                    {r.latitude?.toFixed?.(4)}, {r.longitude?.toFixed?.(4)}
-                  </td>
-                  <td>
-                    <strong>{r.radius || 500}m</strong>
-                  </td>
-                  <td>
-                    <span className={`badge badge-${statusColor(r.status)}`}>
-                      {r.status}
-                    </span>
-                  </td>
-                  <td>{fmtDate(r.created_at)}</td>
-                  <td>
-                    <div className="btn-group">
-                      <button
-                        className="btn-icon"
-                        title="Edit"
-                        onClick={() => openEdit(r)}
-                      >
-                        <i className="fas fa-pen" />
-                      </button>
-                      <button
-                        className="btn-icon"
-                        title="Hapus"
-                        onClick={() => setDel(r)}
-                        style={{ color: "var(--danger)" }}
-                      >
-                        <i className="fas fa-trash" />
-                      </button>
-                    </div>
+            {loading && data.length === 0 ? (
+              // BUG #4 (P2-3): skeleton while initial fetch is in flight.
+              Array.from({ length: 5 }).map((_, i) => (
+                <tr key={`skel-${i}`}>
+                  <td colSpan={8}>
+                    <div
+                      className="animate-pulse"
+                      style={{
+                        background: "var(--hover-row, #e5e7eb)",
+                        height: 40,
+                        borderRadius: 6,
+                      }}
+                    />
                   </td>
                 </tr>
-              );
-            })}
-            {filtered.length === 0 && (
-              <tr>
-                <td colSpan={8} className="empty-row">
-                  Tidak ada data lokasi
-                </td>
-              </tr>
+              ))
+            ) : (
+              <>
+                {pagedData.map((r) => {
+                  const kl = klienUsers.find((k) => k.id == r.client_id);
+                  return (
+                    <tr key={r.id}>
+                      <td>
+                        <strong>{r.nama}</strong>
+                      </td>
+                      <td>
+                        {kl ? (
+                          <span className="badge badge-info">{kl.nama_klien}</span>
+                        ) : (
+                          <span className="muted">-</span>
+                        )}
+                      </td>
+                      <td>{r.alamat}</td>
+                      <td style={{ fontFamily: "monospace", fontSize: 12 }}>
+                        {r.latitude?.toFixed?.(4)}, {r.longitude?.toFixed?.(4)}
+                      </td>
+                      <td>
+                        <strong>{r.radius || 500}m</strong>
+                      </td>
+                      <td>
+                        <span className={`badge badge-${statusColor(r.status)}`}>
+                          {r.status}
+                        </span>
+                      </td>
+                      <td>{fmtDate(r.created_at)}</td>
+                      <td>
+                        <div className="btn-group">
+                          <button
+                            className="btn-icon"
+                            title="Edit"
+                            onClick={() => openEdit(r)}
+                          >
+                            <i className="fas fa-pen" />
+                          </button>
+                          <button
+                            className="btn-icon"
+                            title="Hapus"
+                            onClick={() => setDel(r)}
+                            style={{ color: "var(--danger)" }}
+                          >
+                            <i className="fas fa-trash" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={8} className="empty-row">
+                      Tidak ada data lokasi
+                    </td>
+                  </tr>
+                )}
+              </>
             )}
           </tbody>
         </table>

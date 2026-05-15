@@ -4,19 +4,20 @@ import { getUser } from "@/lib/api";
 import { initSocketIO, disconnectSocket } from "@/lib/socketClient";
 
 /**
- * P0-17 follow-on (Tahap 2): the localStorage token storage was removed
- * in favor of httpOnly cookies. That means client-side JS can no longer
- * read the auth token to pass into Socket.io's handshake `auth.token`.
+ * TAHAP 7 BUG #1: web-admin Socket.io realtime is restored.
  *
- * For now we initialize the socket without a token. The backend's
- * io.use() middleware (P0-10) will reject the handshake — realtime
- * features in the web admin will be temporarily unavailable until a
- * proper cookie-based socket auth flow is implemented (e.g. a
- * short-lived `/api/auth/socket-token` endpoint, or backend reading
- * the cookie from `socket.handshake.headers.cookie`).
+ * History:
+ *   - Pre-Tahap 2: token in localStorage, passed to socket via auth.token.
+ *   - Tahap 2 P0-17: token moved to httpOnly cookie (good for XSS) — but
+ *     this broke the web-admin's Socket.io because JS can no longer read
+ *     the token to hand to the auth handshake.
+ *   - Tahap 7 Bug #1: socketClient.ts now opens the socket with
+ *     `withCredentials: true`, and backend/src/realtime/socketio.js reads
+ *     `ptsss_token` out of the handshake's cookie header. No more token
+ *     in JS, but the realtime channel works.
  *
- * REST API endpoints continue to work normally — they use the
- * httpOnly cookie via `credentials: 'include'` in apiFetch().
+ * REST API endpoints continue to work via `credentials: 'include'` in
+ * apiFetch() for the same reason.
  */
 export function useAuth() {
   const [user, setUser] = useState<any>(null);
@@ -26,6 +27,7 @@ export function useAuth() {
     const u = getUser();
     if (u) {
       setUser(u);
+      // No token argument — the cookie carries auth.
       initSocketIO();
     }
     setLoading(false);
