@@ -1,6 +1,11 @@
 "use client";
 /**
- * PWA Update Prompt - Shows notification when a new version is available
+ * PWA Update Prompt - Shows notification when a new version is available.
+ *
+ * Tahap 10 Bug #4 (P3-11): hardcoded hex colors replaced with CSS variables
+ * from styles/globals.css. This is a dark-themed floating toast — uses the
+ * --brand-dark-* family. Note: --brand-dark-text-muted-strong (#94A3B8) ≈
+ * the original #94a3b8 from the close button.
  */
 import { useState, useEffect } from 'react';
 
@@ -43,8 +48,8 @@ export default function PWAUpdatePrompt() {
       left: '50%',
       transform: 'translateX(-50%)',
       zIndex: 9999,
-      background: '#1e293b',
-      color: '#fff',
+      background: 'var(--brand-dark-surface)',
+      color: 'var(--brand-dark-text)',
       padding: '14px 24px',
       borderRadius: 12,
       boxShadow: '0 8px 30px rgba(0,0,0,0.3)',
@@ -55,13 +60,13 @@ export default function PWAUpdatePrompt() {
       fontWeight: 500,
       animation: 'slideUp 0.3s ease',
     }}>
-      <i className="fas fa-arrow-rotate-right" style={{ color: '#60a5fa' }}></i>
+      <i className="fas fa-arrow-rotate-right" style={{ color: 'var(--brand-accent-light)' }}></i>
       <span>Versi baru tersedia!</span>
       <button
         onClick={handleUpdate}
         style={{
-          background: '#2563eb',
-          color: '#fff',
+          background: 'var(--brand-accent-strong)',
+          color: 'var(--brand-dark-text)',
           border: 'none',
           padding: '6px 16px',
           borderRadius: 8,
@@ -77,7 +82,7 @@ export default function PWAUpdatePrompt() {
         style={{
           background: 'transparent',
           border: 'none',
-          color: '#94a3b8',
+          color: 'var(--brand-dark-text-muted-strong)',
           cursor: 'pointer',
           fontSize: 16,
         }}

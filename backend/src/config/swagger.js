@@ -16,6 +16,7 @@
  */
 const swaggerJsdoc = require('swagger-jsdoc');
 const swaggerUi = require('swagger-ui-express');
+const { logger } = require('../utils/logger');
 
 const options = {
   definition: {
@@ -351,7 +352,7 @@ function setupSwagger(app) {
   // Raw JSON spec
   app.get('/api-docs.json', (req, res) => res.json(spec));
   
-  console.log(`📖 Swagger docs: http://localhost:${process.env.PORT || 3000}/api-docs`);
+  logger.info(`📖 Swagger docs: http://localhost:${process.env.PORT || 3000}/api-docs`);
 }
 
 module.exports = { setupSwagger };

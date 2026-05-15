@@ -12,6 +12,7 @@
  * JSON, so the trail is still queryable.
  */
 const { query } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 // P1-1: A lenient UUID detector. We deliberately don't require the
 // full 8-4-4-4-12 form here — we just want to reject anything that
@@ -53,7 +54,7 @@ async function logAudit(userId, userNama, action, resource, resourceId, detail, 
        ip || null]
     );
   } catch (err) {
-    console.error('[Audit] Failed to log:', err.message);
+    logger.error(`[Audit] Failed to log: ${err.message}`);
   }
 }
 

@@ -12,6 +12,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { promisify } = require('util');
+const { logger } = require('../utils/logger');
 
 const execAsync = promisify(exec);
 
@@ -61,7 +62,7 @@ async function createBackup() {
     const sizeMB = (stats.size / (1024 * 1024)).toFixed(2);
     const sizeStr = stats.size > 1024 * 1024 ? `${sizeMB} MB` : `${sizeKB} KB`;
 
-    console.log(`[Backup] ✅ Created: ${filename} (${sizeStr})`);
+    logger.info(`[Backup] ✅ Created: ${filename} (${sizeStr})`);
 
     return {
       filename,
@@ -71,11 +72,11 @@ async function createBackup() {
       created_at: new Date().toISOString(),
     };
   } catch (err) {
-    console.error('[Backup] ❌ pg_dump failed:', err.message);
+    logger.error(`[Backup] ❌ pg_dump failed: ${err.message}`);
 
     // Fallback: Use SQL COPY approach via pg library
     try {
-      console.log('[Backup] Trying SQL-based backup fallback...');
+      logger.info('[Backup] Trying SQL-based backup fallback...');
       return await createSQLBackup(filename, filepath);
     } catch (fallbackErr) {
       throw new Error(`Backup failed: ${err.message}. Fallback also failed: ${fallbackErr.message}`);
@@ -139,7 +140,7 @@ async function createSQLBackup(filename, filepath) {
     ? `${(stats.size / (1024 * 1024)).toFixed(2)} MB`
     : `${Math.round(stats.size / 1024)} KB`;
 
-  console.log(`[Backup] ✅ SQL fallback created: ${filename} (${sizeStr})`);
+  logger.info(`[Backup] ✅ SQL fallback created: ${filename} (${sizeStr})`);
 
   return {
     filename,
@@ -227,17 +228,17 @@ async function restoreBackup(filename) {
 
   try {
     const { stdout, stderr } = await execAsync(cmd, { env, timeout: 300000 });
-    console.log(`[Backup] ✅ Restored: ${safeName}`);
-    if (stderr && !stderr.includes('NOTICE')) console.log('[Backup] Warnings:', stderr);
+    logger.info(`[Backup] ✅ Restored: ${safeName}`);
+    if (stderr && !stderr.includes('NOTICE')) logger.info(`[Backup] Warnings: ${stderr}`);
     return { success: true, message: `Database restored from ${safeName}` };
   } catch (err) {
     // Fallback: read SQL and execute via pg
     try {
-      console.log('[Backup] psql not found, trying pg fallback...');
+      logger.info('[Backup] psql not found, trying pg fallback...');
       const { pool } = require('../config/database');
       const sql = fs.readFileSync(filepath, 'utf8');
       await pool.query(sql);
-      console.log(`[Backup] ✅ Restored via pg: ${safeName}`);
+      logger.info(`[Backup] ✅ Restored via pg: ${safeName}`);
       return { success: true, message: `Database restored from ${safeName} (pg fallback)` };
     } catch (pgErr) {
       throw new Error(`Restore failed: ${err.message}. PG fallback: ${pgErr.message}`);
@@ -314,10 +315,10 @@ async function uploadToDrive(filename) {
       uploaded_at: new Date().toISOString(),
     }));
 
-    console.log(`[Backup] ☁️ Uploaded to Drive: ${filename} → ${driveUrl}`);
+    logger.info(`[Backup] ☁️ Uploaded to Drive: ${filename} → ${driveUrl}`);
     return { drive_url: driveUrl, filename };
   } catch (err) {
-    console.error('[Backup] Drive upload failed:', err.message);
+    logger.error(`[Backup] Drive upload failed: ${err.message}`);
     throw new Error(`Google Drive upload failed: ${err.message}`);
   }
 }
@@ -333,7 +334,7 @@ function deleteBackup(filename) {
     // Also delete metadata
     const metaPath = filepath + '.meta.json';
     if (fs.existsSync(metaPath)) fs.unlinkSync(metaPath);
-    console.log(`[Backup] 🗑️ Deleted: ${filename}`);
+    logger.info(`[Backup] 🗑️ Deleted: ${filename}`);
     return true;
   }
   return false;
@@ -361,7 +362,7 @@ function setSchedule(enabled, time) {
       const now = new Date();
       const hhmm = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
       if (hhmm === scheduleConfig.time) {
-        console.log('[Backup] ⏰ Auto backup triggered at', hhmm);
+        logger.info(`[Backup] ⏰ Auto backup triggered at ${hhmm}`);
         try {
           const result = await createBackup();
           // Auto-upload to Drive if enabled
@@ -372,14 +373,14 @@ function setSchedule(enabled, time) {
             }
           } catch {}
         } catch (err) {
-          console.error('[Backup] Auto backup failed:', err.message);
+          logger.error(`[Backup] Auto backup failed: ${err.message}`);
         }
       }
     }, 60000); // Check every minute
 
-    console.log(`[Backup] ⏰ Auto backup scheduled at ${scheduleConfig.time} daily`);
+    logger.info(`[Backup] ⏰ Auto backup scheduled at ${scheduleConfig.time} daily`);
   } else {
-    console.log('[Backup] ⏰ Auto backup disabled');
+    logger.info('[Backup] ⏰ Auto backup disabled');
   }
 
   return scheduleConfig;

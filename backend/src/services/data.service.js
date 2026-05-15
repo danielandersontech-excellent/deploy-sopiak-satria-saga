@@ -9,6 +9,7 @@
 const crypto = require('crypto');
 const repos = require('../repositories/data.repository');
 const { queryAll, queryOne } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 // Same rounds as auth.service.js / bootstrap.js — P0-15.
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
@@ -84,7 +85,7 @@ class DataService {
           if (r.pos_jaga_id && pMap[r.pos_jaga_id]) { r.pos_nama = pMap[r.pos_jaga_id].nama; }
         });
       }
-    } catch (err) { console.error('[DataService] Enrich error:', err.message); }
+    } catch (err) { logger.error(`[DataService] Enrich error: ${err.message}`); }
     return results;
   }
 
@@ -124,7 +125,7 @@ class DataService {
           _tempPin = randomPin();
           data.pin_hash = await bcrypt.hash(_tempPin, BCRYPT_ROUNDS);
           data.must_change_pin = true;
-        } catch (e) { console.log('[DataService] bcrypt error:', e.message); }
+        } catch (e) { logger.info(`[DataService] bcrypt error: ${e.message}`); }
       }
       const created = await repo.create(data);
       if (_tempPin && created) {

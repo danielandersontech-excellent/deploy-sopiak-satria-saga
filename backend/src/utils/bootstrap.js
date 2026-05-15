@@ -10,35 +10,26 @@
  * This script runs on every backend startup. It:
  * 1. Checks whether the schema is already present (looks for the `users` table).
  * 2. If missing, executes the entire database/ptsss_db.sql against the live DB.
- * 3. Optionally seeds the default users (controlled by AUTO_BOOTSTRAP env var).
+ * 3. Runs pending migrations from database/migrations/ via migrationRunner.
+ * 4. Optionally seeds the default users (controlled by AUTO_BOOTSTRAP env var).
  *
- * Idempotent: safe to run on every boot. If schema is already there, it does nothing.
+ * Idempotent: safe to run on every boot. If schema is already there and all
+ * migrations are applied, the only DB work is a few SELECTs.
  *
- * Tahap-2 security fixes:
- *   P0-14: Each seeded account now gets a 6-digit random PIN (printed once
- *          to console) and is flagged `must_change_pin=TRUE`, forcing
- *          rotation on first login. The legacy `123456` PIN is gone.
- *   P0-15: bcrypt rounds come from BCRYPT_ROUNDS env (default 12) so this
- *          file matches auth.service.js / data.service.js and the work
- *          factor is tunable per environment.
- *
- * Tahap-6 hardening:
- *   P1-8:  The bottom-most catch used to swallow the error and let the
- *          process keep running with a half-loaded schema, which produced
- *          a backend that boots green and then returns 500 on every
- *          endpoint. Behaviour is now governed by BOOTSTRAP_STRICT
- *          (defaults to true when NODE_ENV=production):
- *            - strict:    log fatal + process.exit(1). Coolify will
- *                         restart the container, and the operator sees
- *                         a clear failure instead of a silent corruption.
- *            - non-strict: log the error and keep running, so a developer
- *                         can poke at the failing DB without restarting.
+ * Logging policy (Tahap 10 Bug #2):
+ * Diagnostic messages go through `logger` (winston-style write stream — async,
+ * non-blocking, also written to logs/app.log). The ONE exception is the
+ * "INITIAL SEED CREDENTIALS" block: those PINs are operator-facing one-time
+ * output that MUST NOT end up in log files (PINs in log files = security
+ * regression). That block stays as console.log with a clear comment.
  */
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const bcrypt = require('bcryptjs');
 const { pool, queryOne } = require('../config/database');
+const { logger } = require('./logger');
+const { runMigrations } = require('./migrationRunner');
 
 const SCHEMA_FILE = path.join(__dirname, '..', '..', 'database', 'ptsss_db.sql');
 
@@ -79,27 +70,27 @@ async function schemaExists() {
     // Both tables must exist for schema to be considered "loaded".
     return !!(r && r.t && r.g);
   } catch (err) {
-    console.error('[BOOTSTRAP] schemaExists check failed:', err.message);
+    logger.error(`[BOOTSTRAP] schemaExists check failed: ${err.message}`);
     return false;
   }
 }
 
 async function loadSchemaFile() {
   if (!fs.existsSync(SCHEMA_FILE)) {
-    console.warn(`[BOOTSTRAP] Schema file not found at ${SCHEMA_FILE} — skipping.`);
+    logger.warn(`[BOOTSTRAP] Schema file not found at ${SCHEMA_FILE} — skipping.`);
     return false;
   }
   const sql = fs.readFileSync(SCHEMA_FILE, 'utf8');
-  console.log(`[BOOTSTRAP] Executing schema (${(sql.length / 1024).toFixed(1)} KB)...`);
+  logger.info(`[BOOTSTRAP] Executing schema (${(sql.length / 1024).toFixed(1)} KB)...`);
 
   // Run inside one connection so SET statements stay scoped.
   const client = await pool.connect();
   try {
     await client.query(sql);
-    console.log('[BOOTSTRAP] ✓ Schema loaded successfully');
+    logger.info('[BOOTSTRAP] ✓ Schema loaded successfully');
     return true;
   } catch (err) {
-    console.error('[BOOTSTRAP] ✗ Schema load failed:', err.message);
+    logger.error(`[BOOTSTRAP] ✗ Schema load failed: ${err.message}`);
     throw err;
   } finally {
     client.release();
@@ -109,11 +100,11 @@ async function loadSchemaFile() {
 async function seedDefaultUsers() {
   const existing = await queryOne('SELECT COUNT(*)::int AS c FROM users');
   if (existing && existing.c > 0) {
-    console.log(`[BOOTSTRAP] Users table already has ${existing.c} rows — skipping seed.`);
+    logger.info(`[BOOTSTRAP] Users table already has ${existing.c} rows — skipping seed.`);
     return;
   }
 
-  console.log('[BOOTSTRAP] Users table empty — seeding default users with RANDOM PINs');
+  logger.info('[BOOTSTRAP] Users table empty — seeding default users with RANDOM PINs');
   const users = [
     { nrp: 'ADM001', nama: 'Admin System',     role: 'admin',      shift: '08:00-16:00' },
     { nrp: 'SPV001', nama: 'Budi Supervisor',  role: 'supervisor', shift: '08:00-16:00' },
@@ -141,13 +132,20 @@ async function seedDefaultUsers() {
       [u.nrp, u.nama, u.role, u.shift, pinHash, 'off_duty']
     );
     printedCreds.push({ nrp: u.nrp, role: u.role, pin });
-    console.log(`[BOOTSTRAP]   ✓ ${u.nrp} (${u.role}) seeded`);
+    logger.info(`[BOOTSTRAP]   ✓ ${u.nrp} (${u.role}) seeded`);
   }
 
-  // P0-14: print credentials ONCE in a clearly-marked block. Operators
-  // are expected to capture these from the boot log and distribute them
-  // out-of-band (1Password, Signal, ...). They will be invalidated by
-  // the must_change_pin flow on the first successful login.
+  // P0-14: SECURITY-CRITICAL — print credentials ONCE to STDOUT only.
+  // Tahap 10 Bug #2 note: this block intentionally uses console.log
+  // INSTEAD OF logger.info because:
+  //   1. logger.info also writes to logs/app.log — we do NOT want plain-text
+  //      PINs persisted to disk, even briefly. The whole point of
+  //      must_change_pin is to keep the temp PIN window short.
+  //   2. The output is operator-facing one-time display. Capturing from
+  //      `docker logs` (stdout) and distributing out-of-band is the
+  //      intended workflow.
+  // DO NOT convert this block to logger.* — that would be a security
+  // regression.
   console.log('');
   console.log('==============================================================');
   console.log(' INITIAL SEED CREDENTIALS — FORCED ROTATION ON FIRST LOGIN');
@@ -166,10 +164,18 @@ async function seedDefaultUsers() {
  * Main bootstrap entrypoint.
  * Call this once after the DB pool is connected, before app.listen().
  *
+ * Order of operations:
+ *   1. Schema check — load ptsss_db.sql kalau tables belum ada
+ *   2. Migration runner — apply migration baru dari database/migrations/
+ *   3. Seed users — kalau tabel users kosong
+ *
  * Behavior is controlled by AUTO_BOOTSTRAP env var:
- *   - "true"  (default): load schema if missing + seed default users if empty
- *   - "false": skip everything (production with manual schema management)
- *   - "schema-only": load schema if missing but DON'T seed users
+ *   - "true"  (default): full bootstrap (schema + migrations + seed)
+ *   - "false": skip everything (production with manual schema management).
+ *             NOTE: bahkan dalam mode false, migrations TETAP perlu di-run
+ *             manual via `node database/migrate.js` — kalau tidak, migration
+ *             baru tidak akan ke-apply.
+ *   - "schema-only": load schema + run migrations, tapi SKIP seed users
  *
  * P1-8: Failure handling is controlled by BOOTSTRAP_STRICT (see
  * isStrictMode() above). In strict mode the process exits with code 1
@@ -179,30 +185,45 @@ async function seedDefaultUsers() {
 async function bootstrap() {
   const mode = (process.env.AUTO_BOOTSTRAP || 'true').toLowerCase();
   if (mode === 'false') {
-    console.log('[BOOTSTRAP] Disabled (AUTO_BOOTSTRAP=false)');
+    logger.info('[BOOTSTRAP] Disabled (AUTO_BOOTSTRAP=false)');
     return;
   }
 
   try {
     const ok = await schemaExists();
     if (!ok) {
-      console.log('[BOOTSTRAP] Schema not detected — initializing from database/ptsss_db.sql');
+      logger.info('[BOOTSTRAP] Schema not detected — initializing from database/ptsss_db.sql');
       await loadSchemaFile();
     } else {
-      console.log('[BOOTSTRAP] Schema already present — skipping schema load');
+      logger.info('[BOOTSTRAP] Schema already present — skipping schema load');
     }
+
+    // Tahap 10 Bug #1 (P1-22): run migrations sebelum seed.
+    // Kenapa di sini? Migration mungkin add column ke users — kalau
+    // seed jalan dulu dengan INSERT yang belum tahu kolom baru, akan
+    // pakai default (atau gagal kalau NOT NULL tanpa default).
+    // migrationRunner internally pakai logger context yang sama.
+    const migResult = await runMigrations(pool, { logger });
+    logger.info(
+      `[BOOTSTRAP] Migrations — applied: ${migResult.applied.length}, ` +
+      `skipped: ${migResult.skipped.length}, total: ${migResult.total}`
+    );
 
     if (mode !== 'schema-only') {
       await seedDefaultUsers();
     }
 
-    console.log('[BOOTSTRAP] ✓ Done');
+    logger.info('[BOOTSTRAP] ✓ Done');
   } catch (err) {
     const strict = isStrictMode();
     if (strict) {
       // FATAL: backend cannot be trusted to serve traffic. Log loudly,
       // then exit so the container restarts and the operator sees a
       // crash-loop in Coolify instead of a silent corruption.
+      // NOTE: console.error here (not logger.error) — logger is async via
+      // write streams, and we're about to process.exit(1). console.error
+      // is synchronous to stderr, so the operator actually sees the
+      // reason in Coolify logs before the container exits.
       console.error('[BOOTSTRAP] ✗ FATAL — bootstrap failed in strict mode, exiting');
       console.error('[BOOTSTRAP]   reason:', err && err.message ? err.message : err);
       if (err && err.stack) console.error(err.stack);
@@ -212,10 +233,9 @@ async function bootstrap() {
       process.exit(1);
     }
     // NON-strict (dev / opt-out): keep the process alive so the
-    // developer can diagnose. The previous behaviour. Logged as ERROR
-    // (not WARN) so it still stands out in the dev console.
-    console.error('[BOOTSTRAP] ✗ Failed (non-strict mode — process kept alive):', err.message);
-    if (err && err.stack) console.error(err.stack);
+    // developer can diagnose. Logged as ERROR so it stands out.
+    logger.error(`[BOOTSTRAP] ✗ Failed (non-strict mode — process kept alive): ${err.message}`);
+    if (err && err.stack) logger.error(err.stack);
   }
 }
 

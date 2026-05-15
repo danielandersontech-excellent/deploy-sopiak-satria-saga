@@ -83,7 +83,7 @@ function handleFailure(context, err, inputPath) {
   if (isStrictMode()) {
     logger.error(`[Watermark] FAILED (strict) — ${context}`, { error: message, inputPath });
     // Re-throw with a stable, descriptive prefix so callers logging the
-    // error get something useful in their `console.log('WM skip:', e.message)`.
+    // error get something useful in their `logger.info(`WM skip: ${e.message}`)`.
     throw new Error(`Watermark failed: ${context}: ${message}`);
   }
   logger.warn(`[Watermark] failed (lenient) — ${context}, returning original`, { error: message, inputPath });

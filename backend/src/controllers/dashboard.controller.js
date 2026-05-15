@@ -13,6 +13,7 @@
  */
 const dashService = require('../services/dashboard.service');
 const { getScopeFilter } = require('../utils/scope');
+const { logger } = require('../utils/logger');
 
 exports.getStats = async (req, res) => {
   try {
@@ -43,7 +44,7 @@ exports.getStats = async (req, res) => {
     const stats = await dashService.getStats(lokasiIds);
     res.json(stats);
   } catch (e) {
-    console.error('[Dashboard] Error:', e.message);
+    logger.error(`[Dashboard] Error: ${e.message}`);
     res.status(500).json({ error: e.message });
   }
 };

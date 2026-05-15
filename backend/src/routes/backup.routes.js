@@ -7,6 +7,7 @@ const { auth, requireRole } = require('../middleware/auth');
 const backupService = require('../services/backup.service');
 const path = require('path');
 const fs = require('fs');
+const { logger } = require('../utils/logger');
 
 const guard = [auth, requireRole('admin', 'supervisor')];
 
@@ -21,7 +22,7 @@ router.post('/create', ...guard, async (req, res) => {
     const result = await backupService.createBackup();
     res.json({ success: true, ...result });
   } catch (err) {
-    console.error('[Backup Route] Create error:', err.message);
+    logger.error(`[Backup Route] Create error: ${err.message}`);
     res.status(500).json({ error: err.message || 'Gagal membuat backup' });
   }
 });
@@ -32,7 +33,7 @@ router.get('/list', ...guard, async (req, res) => {
     const backups = backupService.listBackups();
     res.json(Array.isArray(backups) ? backups : []);
   } catch (err) {
-    console.error('[Backup Route] List error:', err.message);
+    logger.error(`[Backup Route] List error: ${err.message}`);
     res.json([]);
   }
 });
@@ -49,7 +50,7 @@ router.get('/download/:filename', ...guard, async (req, res) => {
     if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File not found' });
     res.download(filePath, filename);
   } catch (err) {
-    console.error('[Backup Route] Download error:', err.message);
+    logger.error(`[Backup Route] Download error: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });
@@ -62,7 +63,7 @@ router.post('/restore', ...adminGuard, async (req, res) => {
     const result = await backupService.restoreBackup(filename);
     res.json({ success: true, ...result });
   } catch (err) {
-    console.error('[Backup Route] Restore error:', err.message);
+    logger.error(`[Backup Route] Restore error: ${err.message}`);
     res.status(500).json({ error: err.message || 'Gagal restore backup' });
   }
 });
@@ -75,7 +76,7 @@ router.post('/upload-drive', ...guard, async (req, res) => {
     const result = await backupService.uploadToDrive(filename);
     res.json({ success: true, ...result });
   } catch (err) {
-    console.error('[Backup Route] Drive upload error:', err.message);
+    logger.error(`[Backup Route] Drive upload error: ${err.message}`);
     res.status(500).json({ error: err.message });
   }
 });

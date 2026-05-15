@@ -44,6 +44,26 @@
   --sidebar-text-active: #ffffff;
   --sidebar-border: rgba(255,255,255,0.04);
 
+  /* ============================================
+     Tahap 10 Bug #4 (P3-3 / P3-11): dark-theme accents
+     Used by:
+       - app/download/page.tsx       (public APK download landing)
+       - components/PWAUpdatePrompt  (floating update notification)
+     These are intentionally a dark palette (slate/navy) — they sit on
+     their own contained dark backgrounds and don't follow the light
+     admin theme. Defining them as vars (instead of hex inline) keeps
+     all brand colors discoverable in one file.
+     ============================================ */
+  --brand-dark-bg: #0F172A;            /* page background */
+  --brand-dark-surface: #1e293b;       /* card/toast surface */
+  --brand-dark-border: #1E293B;        /* divider on dark bg */
+  --brand-dark-text: #ffffff;
+  --brand-dark-text-muted-strong: #94A3B8;  /* slate-400 — primary muted */
+  --brand-dark-text-muted-soft:   #64748B;  /* slate-500 — secondary muted */
+  --brand-dark-text-muted-faint:  #475569;  /* slate-600 — copyright text */
+  --brand-accent-light:   #60a5fa;          /* blue-400 — icon accents */
+  --brand-accent-strong:  #2563eb;          /* blue-600 — primary action button */
+
   /* Spacing */
   --radius: 10px;
   --radius-lg: 14px;

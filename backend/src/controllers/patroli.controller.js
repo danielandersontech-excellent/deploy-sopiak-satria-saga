@@ -28,13 +28,14 @@ exports.scan = async (req, res) => {
       // Step 1: Apply watermark
       try {
         const { applyWatermark } = require('../services/watermark.service');
+const { logger } = require('../utils/logger');
         await applyWatermark(req.file.path, {
           nama: req.user.nama || 'Unknown',
           nrp: req.user.nrp || '-',
           customText: 'PATROLI CHECKPOINT',
         });
       } catch (wmErr) {
-        console.log('[Patroli] Watermark skipped:', wmErr.message);
+        logger.info(`[Patroli] Watermark skipped: ${wmErr.message}`);
       }
 
       // Step 2: Upload to Google Drive or local

@@ -30,6 +30,7 @@
 
 const path = require('path');
 const { queryAll } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 let admin = null;
 let _initialized = false;
@@ -72,7 +73,7 @@ function initFirebase() {
         try {
           serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
         } catch (jsonErr) {
-          console.log('[Push] ⚠️  FIREBASE_SERVICE_ACCOUNT_JSON invalid:', jsonErr.message);
+          logger.info(`[Push] ⚠️  FIREBASE_SERVICE_ACCOUNT_JSON invalid: ${jsonErr.message}`);
         }
       }
       if (!serviceAccount && process.env.FIREBASE_PROJECT_ID
@@ -85,8 +86,8 @@ function initFirebase() {
         };
       }
       if (!serviceAccount) {
-        console.log('[Push] ⚠️  Firebase service account not found - native FCM disabled');
-        console.log('[Push]    Expo Push Token notifications still work!');
+        logger.info('[Push] ⚠️  Firebase service account not found - native FCM disabled');
+        logger.info('[Push]    Expo Push Token notifications still work!');
         _fcmAvailable = false;
         return false;
       }
@@ -99,11 +100,11 @@ function initFirebase() {
     }
 
     _fcmAvailable = true;
-    console.log('[Push] ✅ Firebase Admin initialized - native FCM + Expo Push both ENABLED');
+    logger.info('[Push] ✅ Firebase Admin initialized - native FCM + Expo Push both ENABLED');
     return true;
   } catch (err) {
-    console.log('[Push] ⚠️  Firebase Admin not available:', err.message);
-    console.log('[Push]    Expo Push Token notifications still work!');
+    logger.info(`[Push] ⚠️  Firebase Admin not available: ${err.message}`);
+    logger.info('[Push]    Expo Push Token notifications still work!');
     _fcmAvailable = false;
     return false;
   }
@@ -140,20 +141,20 @@ async function sendViaExpo(expoPushToken, title, body, data = {}, channelId = 'd
     if (result.data) {
       const ticket = result.data;
       if (ticket.status === 'ok') {
-        console.log(`[Push] ✅ Expo sent: ${title}`);
+        logger.info(`[Push] ✅ Expo sent: ${title}`);
         return { success: true, messageId: ticket.id };
       }
       if (ticket.status === 'error') {
-        console.error(`[Push] ❌ Expo error: ${ticket.message} (${ticket.details?.error})`);
+        logger.error(`[Push] ❌ Expo error: ${ticket.message} (${ticket.details?.error})`);
         const shouldRemove = ticket.details?.error === 'DeviceNotRegistered';
         return { success: false, reason: ticket.message, shouldRemoveToken: shouldRemove };
       }
     }
 
-    console.log(`[Push] ✅ Expo sent (batch): ${title}`);
+    logger.info(`[Push] ✅ Expo sent (batch): ${title}`);
     return { success: true, messageId: 'expo-batch' };
   } catch (err) {
-    console.error(`[Push] ❌ Expo send failed:`, err.message);
+    logger.error(`[Push] ❌ Expo send failed: ${err.message}`);
     return { success: false, reason: err.message };
   }
 }
@@ -206,7 +207,7 @@ async function sendViaExpoBatch(tokens, title, body, data = {}, channelId = 'def
 
     return { success: true, sent, total: tokens.length, invalidTokens: invalidUserIds };
   } catch (err) {
-    console.error('[Push] Expo batch error:', err.message);
+    logger.error(`[Push] Expo batch error: ${err.message}`);
     return { success: false, reason: err.message };
   }
 }
@@ -215,7 +216,7 @@ async function sendViaExpoBatch(tokens, title, body, data = {}, channelId = 'def
 async function sendViaFCM(fcmToken, title, body, data = {}, channelId = 'default') {
   if (!initFirebase() || !admin) {
     // Firebase not available → try Expo Push API as universal fallback
-    console.log(`[Push] Firebase not available, trying Expo Push API for FCM token`);
+    logger.info(`[Push] Firebase not available, trying Expo Push API for FCM token`);
     return sendViaExpo(fcmToken, title, body, data, channelId);
   }
 
@@ -257,10 +258,10 @@ async function sendViaFCM(fcmToken, title, body, data = {}, channelId = 'default
     };
 
     const result = await admin.messaging().send(message);
-    console.log(`[Push] ✅ FCM sent: ${title}`);
+    logger.info(`[Push] ✅ FCM sent: ${title}`);
     return { success: true, messageId: result };
   } catch (err) {
-    console.log(`[Push] ⚠️ FCM send failed: ${err.message}`);
+    logger.info(`[Push] ⚠️ FCM send failed: ${err.message}`);
 
     if (err.code === 'messaging/registration-token-not-registered' ||
         err.code === 'messaging/invalid-registration-token') {
@@ -272,7 +273,7 @@ async function sendViaFCM(fcmToken, title, body, data = {}, channelId = 'default
     // Solusi: kirim via Expo Push API sebagai fallback - Expo Push API bisa handle FCM token Expo Go
     if (err.code === 'messaging/mismatched-credential' || 
         (err.message && err.message.includes('SenderId mismatch'))) {
-      console.log(`[Push] ↩️ SenderId mismatch - token dari Expo Go. Fallback ke Expo Push API...`);
+      logger.info(`[Push] ↩️ SenderId mismatch - token dari Expo Go. Fallback ke Expo Push API...`);
       return sendViaExpo(fcmToken, title, body, data, channelId);
     }
 
@@ -292,7 +293,7 @@ async function sendToDevice(pushToken, title, body, data = {}, channelId = 'defa
     return sendViaFCM(pushToken, title, body, data, channelId);
   }
 
-  console.log(`[Push] ⚠️  Unknown token format: ${pushToken.substring(0, 30)}...`);
+  logger.info(`[Push] ⚠️  Unknown token format: ${pushToken.substring(0, 30)}...`);
   return { success: false, reason: 'Unknown token format' };
 }
 
@@ -304,13 +305,13 @@ async function sendToUser(userId, title, body, data = {}, channelId = 'default')
       [userId]
     );
     if (!rows.length || !rows[0].expo_push_token) {
-      console.log(`[Push] No token for user ${userId}`);
+      logger.info(`[Push] No token for user ${userId}`);
       return { success: false, reason: 'no_token' };
     }
 
     return sendToDevice(rows[0].expo_push_token, title, body, data, channelId);
   } catch (err) {
-    console.error('[Push] sendToUser error:', err);
+    logger.error(`[Push] sendToUser error: ${err && err.message ? err.message : err}`, { stack: err && err.stack });
     return { success: false, reason: err.message };
   }
 }
@@ -325,7 +326,7 @@ async function sendToRole(roles, title, body, data = {}, channelId = 'default') 
     );
 
     if (!rows.length) {
-      console.log(`[Push] No tokens for roles: ${roleArray.join(', ')} (log-only: ${title} - ${body})`);
+      logger.info(`[Push] No tokens for roles: ${roleArray.join(', ')} (log-only: ${title} - ${body})`);
       return { success: true, sent: 0, total: 0 };
     }
 
@@ -371,14 +372,14 @@ async function sendToRole(roles, title, body, data = {}, channelId = 'default') 
       for (const uid of invalidTokenUserIds) {
         await queryAll('UPDATE users SET expo_push_token = NULL WHERE id = $1', [uid]);
       }
-      console.log(`[Push] Cleaned ${invalidTokenUserIds.length} invalid tokens`);
+      logger.info(`[Push] Cleaned ${invalidTokenUserIds.length} invalid tokens`);
     }
 
     const total = expoTokens.length + fcmRows.length;
-    console.log(`[Push] ✅ Sent to ${totalSent}/${total} devices (roles: ${roleArray.join(', ')}) [Expo: ${expoTokens.length}, FCM: ${fcmRows.length}]`);
+    logger.info(`[Push] ✅ Sent to ${totalSent}/${total} devices (roles: ${roleArray.join(', ')}) [Expo: ${expoTokens.length}, FCM: ${fcmRows.length}]`);
     return { success: true, sent: totalSent, total };
   } catch (err) {
-    console.error('[Push] sendToRole error:', err);
+    logger.error(`[Push] sendToRole error: ${err && err.message ? err.message : err}`, { stack: err && err.stack });
     return { success: false, reason: err.message };
   }
 }

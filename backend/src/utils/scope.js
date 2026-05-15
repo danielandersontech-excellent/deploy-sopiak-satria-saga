@@ -34,6 +34,7 @@
  * is in scope, keep it; if not, force lokasi_ids=[] (no results).
  */
 const { queryAll } = require('../config/database');
+const { logger } = require('./logger');
 
 async function getScopeFilter(user) {
   // Fail-closed: missing or malformed user → no data.
@@ -62,7 +63,7 @@ async function getScopeFilter(user) {
     } catch (err) {
       // DB error → deny rather than fail-open. Caller should still
       // log; we just return an empty scope.
-      console.error('[scope] klien lokasi lookup failed:', err.message);
+      logger.error(`[scope] klien lokasi lookup failed: ${err.message}`);
       return { unrestricted: false, lokasiIds: [] };
     }
     return { unrestricted: false, lokasiIds: rows.map((r) => r.id) };

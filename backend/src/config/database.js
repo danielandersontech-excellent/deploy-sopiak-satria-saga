@@ -8,6 +8,7 @@
  * which resolves on the internal compose network.
  */
 const { Pool } = require('pg');
+const { logger } = require('../utils/logger');
 
 const useSSL = String(process.env.DB_SSL || '').toLowerCase() === 'true';
 
@@ -28,12 +29,12 @@ pool.on('connect', () => {
   _dbConnectCount++;
   // Only log the first connection — subsequent ones add noise.
   if (_dbConnectCount === 1) {
-    console.log(`[DB] Connected to PostgreSQL → ${pool.options.host}:${pool.options.port}/${pool.options.database}`);
+    logger.info(`[DB] Connected to PostgreSQL → ${pool.options.host}:${pool.options.port}/${pool.options.database}`);
   }
 });
 
 pool.on('error', (err) => {
-  console.error('[DB] Unexpected error:', err.message);
+  logger.error(`[DB] Unexpected error: ${err.message}`);
 });
 
 /** Run a parameterized query. Logs slow queries (>1s). */
@@ -41,7 +42,7 @@ async function query(text, params) {
   const start = Date.now();
   const res = await pool.query(text, params);
   const duration = Date.now() - start;
-  if (duration > 1000) console.log(`[DB] Slow query (${duration}ms):`, text.substring(0, 80));
+  if (duration > 1000) logger.info(`[DB] Slow query (${duration}ms): ${text.substring(0, 80)}`);
   return res;
 }
 
@@ -61,10 +62,10 @@ async function queryAll(text, params) {
 async function testConnection() {
   try {
     const res = await pool.query('SELECT NOW() AS time, current_database() AS db');
-    console.log(`[DB] ✓ Connected to "${res.rows[0].db}" at ${res.rows[0].time}`);
+    logger.info(`[DB] ✓ Connected to "${res.rows[0].db}" at ${res.rows[0].time}`);
     return true;
   } catch (err) {
-    console.error('[DB] ✗ Connection failed:', err.message);
+    logger.error(`[DB] ✗ Connection failed: ${err.message}`);
     return false;
   }
 }

@@ -21,13 +21,13 @@ const { scheduleCleanup } = require('./utils/fileCleanup');
 const { bootstrap } = require('./utils/bootstrap');
 
 const app = express();
-// TAHAP 9 BUG #5 (P2-16): hapus header X-Powered-By yang membocorkan
-// fingerprint "Express" — bantu attacker pilih payload yang spesifik
-// untuk versi Express tertentu. Harus dipanggil SEBELUM middleware lain
-// agar tidak ada response yang sempat ber-fingerprint.
+// Hapus header X-Powered-By yang membocorkan fingerprint Express.
+// Dipanggil SEBELUM middleware lain agar tidak ada response yang sempat
+// ber-fingerprint.
 app.disable('x-powered-by');
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 
 // ===== TRUST PROXY =====
 // Express must trust upstream proxies (Coolify Traefik + Cloudflare) so that
@@ -36,12 +36,6 @@ const PORT = process.env.PORT || 3000;
 // together (everyone shares one internal Docker IP), and req.secure is always
 // false even behind HTTPS.
 //
-// SECURITY (P0-13): The previous value 'loopback, linklocal, uniquelocal'
-// only trusted private/internal IPs as proxies. Behind Coolify's Traefik
-// (and any further reverse proxy in front of it) every request enters the
-// container from the same Docker bridge IP, so req.ip resolved to that
-// single internal address for ALL users — completely defeating per-IP rate
-// limiting (one abusive client could exhaust the bucket for everyone).
 // Setting trust proxy to the integer 1 tells Express to trust exactly one
 // hop of X-Forwarded-For (the Traefik in front of us) and use the
 // client-side IP it forwards. If you ever add another proxy layer
@@ -50,7 +44,7 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // ===== MIDDLEWARE =====
-// TAHAP 9 BUG #5 (P2-16): konfigurasi helmet eksplisit untuk REST API.
+// Konfigurasi helmet eksplisit untuk REST API.
 // - CSP disable: API tidak render HTML, CSP dihandle di web-admin Next.js.
 // - crossOriginResourcePolicy = 'cross-origin': mengizinkan asset (foto
 //   absensi, dll) di-fetch oleh web-admin yang asal-domain berbeda.
@@ -72,8 +66,7 @@ app.use(helmet({
   permittedCrossDomainPolicies: false,
 }));
 
-// TAHAP 9 BUG #5 (P2-16): tambahkan header versi API + pastikan
-// X-Powered-By tidak ke-set ulang oleh middleware lain.
+// Tambahkan header versi API + pastikan X-Powered-By tidak ke-set ulang.
 const API_VERSION = process.env.npm_package_version || '13.0.0';
 app.use((req, res, next) => {
   res.setHeader('X-API-Version', API_VERSION);
@@ -84,14 +77,9 @@ app.use((req, res, next) => {
 // Gzip compression - reduce response size 60-80%
 app.use(compression({ threshold: 1024 }));
 
-// CORS - domain spesifik (bukan wildcard).
-// TAHAP 9 BUG #4 (P2-15): callback(new Error(...)) akan throw → ditangkap
-// error handler → return 500. Browser preflight yang ditolak harus
-// terima 403 (atau response tanpa CORS header), bukan 500. Fix:
-// callback(null, false) — beri tahu cors() bahwa origin DITOLAK tanpa
-// throw. cors() akan tidak set Access-Control-* header → browser tolak
-// request di sisi klien dengan pesan CORS yang jelas, dan response
-// server tetap 200/yang seharusnya untuk non-CORS endpoint.
+// CORS - domain spesifik (bukan wildcard). callback(null, false) memberitahu
+// cors() bahwa origin ditolak tanpa throw → browser tetap menolak request,
+// dan response server tidak jadi 500.
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
   .split(',')
   .map(s => s.trim())
@@ -123,22 +111,16 @@ app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 // Input sanitization - trim & clean all body/query params
 app.use(sanitizeMiddleware);
 
-// ===== RATE LIMITING PER USER =====
-// PENJELASAN:
-// Sebelumnya rate limit bersifat GLOBAL - semua user berbagi 200 req/menit.
-// Jika 50 anggota online bersamaan, masing-masing hanya dapat ~4 req/menit!
-// 
-// Sekarang rate limit PER USER:
-// - Login: 20 percobaan / 15 menit per IP (brute force protection)
-// - API authenticated: 120 request / menit PER USER (berdasarkan JWT user ID)
-// - API unauthenticated: 60 request / menit per IP
-//
-// Artinya 50 anggota online → masing-masing tetap dapat 120 req/menit.
-
-// Login rate limit - per IP (prevent brute force)
-// max 50 per 15 menit: cukup untuk development + testing, masih aman dari brute force
-// Untuk testing berulang: gunakan header X-Skip-Rate-Limit dengan secret
+// ===== RATE LIMITING =====
+// Login: 50 percobaan / 15 menit per IP (brute force protection).
+// Refresh: 10 / menit per IP (Tahap 10 Bug — dedicated, lebih ketat dari
+// rate limit umum karena refresh adalah endpoint yang sering jadi target
+// token-stuffing). Harus dipasang SEBELUM /api/ general limiter agar tidak
+// di-bypass oleh skip mechanism.
+// API authenticated: 200 request / menit PER USER (berdasarkan JWT user ID).
+// API unauthenticated: 200 / menit per IP (fallback).
 const RATE_LIMIT_SECRET = process.env.RATE_LIMIT_BYPASS_SECRET || '__test_bypass__';
+
 app.use('/api/auth/login', rateLimit({
   windowMs: 15 * 60 * 1000, // 15 menit
   max: 50, // 50 login attempts per 15 minutes per IP
@@ -149,29 +131,34 @@ app.use('/api/auth/login', rateLimit({
   skip: (req) => req.headers['x-skip-rate-limit'] === RATE_LIMIT_SECRET,
 }));
 
+// Tahap 10 (P3-6): dedicated rate limiter for refresh endpoint.
+// Refresh token endpoint adalah target umum untuk:
+//   - Token stuffing (mencoba refresh token curian secara bulk)
+//   - Race-condition exploit (paralel refresh untuk dapat banyak access token)
+// 10/min per IP cukup untuk user normal (refresh tiap 30 menit) tetapi
+// cukup ketat untuk menahan abuse. Skip-secret untuk testing tetap tersedia.
+app.use('/api/auth/refresh', rateLimit({
+  windowMs: 60 * 1000, // 1 menit
+  max: 10,
+  message: { error: 'Terlalu banyak refresh token. Coba lagi dalam 1 menit.' },
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => req.ip,
+  skip: (req) => req.headers['x-skip-rate-limit'] === RATE_LIMIT_SECRET,
+}));
+
 // General API rate limit - per user (authenticated) atau per IP (unauthenticated)
 app.use('/api/', rateLimit({
   windowMs: 1 * 60 * 1000, // 1 menit
-  max: 200, // 200 request per menit per user (lebih longgar untuk development)
+  max: 200, // 200 request per menit per user
   message: { error: 'Rate limit terlampaui. Coba lagi dalam 1 menit.' },
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    // P0-11: this used to call jwt.verify() on every request, which is
-    // a double-verification with the actual `auth` middleware that
-    // runs later in the chain. Two problems with that:
-    //   1. Cost — bcrypt-grade HMAC over every request, before any
-    //      meaningful work, including for malformed/expired tokens
-    //      that would have been rejected by `auth` anyway.
-    //   2. Boot-time side effect — `require('jsonwebtoken')` ran
-    //      inside the hot path. Cheap once cached but pointless.
-    // The keyGenerator only needs a stable identity to bucket
-    // rate-limit counts. We don't authorize anything here; the
-    // `auth` middleware that runs AFTER this is what gates access.
-    // So `jwt.decode` (no signature check) is sufficient — even a
-    // forged token can't get you past `auth`, the worst an attacker
-    // can do is share rate-limit bucket #id-of-someone-else, which
-    // doesn't grant them anything. Same security profile, lower cost.
+    // Pakai jwt.decode (tanpa verifikasi) supaya keyGenerator murah:
+    // bucket identity bukan authorization. Bahkan token palsu yang
+    // di-decode di sini paling banter hanya share bucket rate-limit
+    // dengan user lain — tidak ada akses yang granted.
     try {
       const authHeader = req.headers.authorization;
       if (authHeader && authHeader.startsWith('Bearer ')) {
@@ -190,9 +177,6 @@ app.use('/api/', rateLimit({
 app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 // Serve APK / installer downloads (was previously served by nginx).
-// Keep the URL prefix `/download` so the existing web-admin link
-// `<a href="/download/ptsss-latest.apk" download>` and any old QR codes still work.
-// Path resolves to /app/downloads inside the container.
 // Persisted via backend_downloads volume in docker-compose.yml.
 app.use('/download', express.static(path.join(__dirname, '..', 'downloads'), {
   maxAge: '30d',
@@ -249,29 +233,55 @@ app.use('/api/*', (req, res) => {
   res.status(404).json({ error: `Route not found: ${req.method} ${req.originalUrl}` });
 });
 
-// Error handler
+// Error handler.
+//
+// Tahap 10 Bug #12 (P3-8): di production, JANGAN bocorkan err.message ke
+// klien — bisa berisi internal detail (path file, query SQL, stack frame).
+// Log lengkap ke logger (untuk operator), kirim pesan generik ke klien.
+// MulterError tetap mengembalikan pesan asli karena itu validasi user input
+// (filesize too large, dst) yang aman untuk ditampilkan.
 app.use((err, req, res, next) => {
-  // TAHAP 9 BUG #4 (P2-15): defensive — kalau ada library lain yang masih
-  // throw CORS error, terjemahkan ke 403 (bukan 500). cors() kita sudah
-  // pakai callback(null, false) jadi seharusnya tidak sampai ke sini,
-  // tapi guard ini murah dan jaga kalau dependency ter-update.
+  // CORS error: defensive — kalau ada library lain yang masih throw CORS
+  // error, terjemahkan ke 403 (bukan 500). cors() kita sudah pakai
+  // callback(null, false) jadi seharusnya tidak sampai ke sini.
   if (err && (err.message === 'Not allowed by CORS' || err.name === 'CORSError')) {
     logger.warn(`[CORS] Rejected: ${req.headers.origin || 'no-origin'} -> ${req.path}`);
     return res.status(403).json({ error: 'Origin tidak diizinkan' });
   }
+
+  // Log ALWAYS (production atau development — sama-sama butuh log lengkap).
   logger.error(`[Error] ${err && err.message ? err.message : 'Unknown error'}`, {
     path: req.originalUrl,
     method: req.method,
     stack: err && err.stack ? err.stack : undefined,
   });
-  if (err.name === 'MulterError') return res.status(400).json({ error: `Upload error: ${err.message}` });
-  res.status(500).json({ error: 'Internal server error' });
+
+  // MulterError: user-facing validation message (filesize, mimetype, dst).
+  // Aman ditampilkan apa adanya — tidak ada info internal di dalamnya.
+  if (err.name === 'MulterError') {
+    return res.status(400).json({ error: `Upload error: ${err.message}` });
+  }
+
+  // P3-8: production response — generik, tidak bocor info internal.
+  if (IS_PRODUCTION) {
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+
+  // Development: bocorkan detail untuk debugging.
+  res.status(500).json({
+    error: err && err.message ? err.message : 'Internal server error',
+    stack: err && err.stack ? err.stack.split('\n').slice(0, 5) : undefined,
+  });
 });
 
 // ===== START =====
 async function start() {
   const dbOk = await testConnection();
   if (!dbOk) {
+    // FATAL pre-exit: console.error (sync) supaya operator lihat di
+    // docker logs sebelum container exit. logger.error async via
+    // write stream — bisa hilang kalau process.exit() lebih cepat
+    // dari stream flush.
     console.error('\n❌ Gagal konek ke PostgreSQL! Pastikan:');
     console.error('   1. PostgreSQL sudah berjalan');
     console.error('   2. Database ptsss_db sudah dibuat');
@@ -279,9 +289,10 @@ async function start() {
     process.exit(1);
   }
 
-  // Auto-init schema + seed default users (controlled by AUTO_BOOTSTRAP env).
-  // This handles the case where Coolify's persisted volume causes
-  // /docker-entrypoint-initdb.d/ to be skipped on subsequent boots.
+  // Auto-init schema + run migrations + seed default users
+  // (controlled by AUTO_BOOTSTRAP env). Handles Coolify's persisted
+  // volume causing /docker-entrypoint-initdb.d/ to be skipped on
+  // subsequent boots. Tahap 10 Bug #1: now also runs migrations.
   await bootstrap();
 
   // Initialize Firebase Cloud Messaging (optional, graceful fallback)
@@ -289,7 +300,7 @@ async function start() {
     const fcm = require('./services/fcm.service');
     fcm.initFirebase();
   } catch (err) {
-    console.log('[FCM] Firebase not configured (push notifications disabled)');
+    logger.info('[FCM] Firebase not configured (push notifications disabled)');
   }
 
   // Initialize Socket.io on the same HTTP server
@@ -299,7 +310,10 @@ async function start() {
   scheduleCleanup();
 
   server.listen(PORT, '0.0.0.0', () => {
-    // Show local network IP for mobile app connection
+    // STARTUP BANNER — intentionally console.log (not logger.info):
+    // operator-facing one-time output, equivalent to a CLI tool's startup
+    // greeting. Goes to stdout where Coolify/docker-logs captures it,
+    // doesn't pollute logs/app.log with multi-line ASCII art on every boot.
     const os = require('os');
     const nets = os.networkInterfaces();
     let lanIp = 'localhost';
@@ -321,6 +335,7 @@ async function start() {
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
+      // FATAL pre-exit: console.error sync — see note above.
       console.error(`\n❌ Port ${PORT} sudah dipakai! Solusi:`);
       console.error(`   1. Tutup aplikasi lain yang memakai port ${PORT}`);
       console.error(`   2. Atau kill proses: npx kill-port ${PORT}`);
@@ -335,6 +350,8 @@ start();
 
 // ===== GRACEFUL SHUTDOWN =====
 function gracefulShutdown(signal) {
+  // Note: graceful shutdown messages — use console (sync) because process.exit
+  // is imminent and logger write stream might not flush.
   console.log(`\n⚠️  ${signal} received. Shutting down gracefully...`);
   server.close(() => {
     console.log('[Server] HTTP server closed');

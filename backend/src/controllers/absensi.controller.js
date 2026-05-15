@@ -22,6 +22,7 @@ exports.create = async (req, res) => {
       // Step 1: Apply watermark to the uploaded photo
       try {
         const { applyWatermark } = require('../services/watermark.service');
+const { logger } = require('../utils/logger');
         const watermarkInfo = {
           nama: req.user.nama || 'Unknown',
           nrp: req.user.nrp || '-',
@@ -32,7 +33,7 @@ exports.create = async (req, res) => {
         };
         await applyWatermark(req.file.path, watermarkInfo);
       } catch (wmErr) {
-        console.log('[Absensi] Watermark skipped:', wmErr.message);
+        logger.info(`[Absensi] Watermark skipped: ${wmErr.message}`);
       }
 
       // Step 2: Upload to Google Drive (if enabled) or use local URL

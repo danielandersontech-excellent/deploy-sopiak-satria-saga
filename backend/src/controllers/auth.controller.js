@@ -27,6 +27,7 @@ const {
   rotateRefreshToken,
 } = require('../middleware/auth');
 const { queryOne } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 function buildCookieOptions(maxAgeMs, pathOverride) {
   const secure = process.env.COOKIE_SECURE === 'true';
@@ -168,7 +169,7 @@ exports.refreshToken = async (req, res) => {
     // Shouldn't reach here — rotateRefreshToken always sets subjectType.
     return res.status(500).json({ error: 'Refresh token rotation produced no subject' });
   } catch (e) {
-    console.error('[auth.controller] refreshToken error:', e.message);
+    logger.error(`[auth.controller] refreshToken error: ${e.message}`);
     res.status(500).json({ error: 'Refresh token failed' });
   }
 };

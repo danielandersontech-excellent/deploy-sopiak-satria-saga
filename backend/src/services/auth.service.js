@@ -6,7 +6,7 @@ const bcrypt = require('bcryptjs');
 const authRepo = require('../repositories/auth.repository');
 const { generateToken, generateRefreshToken } = require('../middleware/auth');
 const { logEvent } = require('../middleware/auditlog');
-const { queryOne, queryAll } = require('../config/database');
+const { queryOne } = require('../config/database');
 
 class AuthService {
   async login(nrp, pin) {

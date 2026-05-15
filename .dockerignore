@@ -1,11 +1,19 @@
-# Build context excludes for ALL Dockerfiles in this repo.
+# ============================================================================
+# .dockerignore — Build context excludes for ALL Dockerfiles in this repo.
 # We rely on per-Dockerfile COPY to pick what each image needs.
+#
+# Tahap 10 Bug #8: expanded to exclude verify/, LAPORAN_VERIFIKASI.md,
+# *.example.env, and other artifacts that were leaking into images and
+# bloating the build context.
+# ============================================================================
 
 # VCS / IDE
 .git
 .gitignore
 .vscode
 .idea
+*.swp
+*.swo
 
 # Mobile-only artifacts (never needed by backend / web-admin / website builds)
 android
@@ -13,6 +21,7 @@ ios
 .expo
 .expo-shared
 apk-output
+downloads/*.apk
 
 # Node deps — they're rebuilt inside each image
 **/node_modules
@@ -21,7 +30,10 @@ apk-output
 **/.next
 **/dist
 **/build
+**/out
 **/tsconfig.tsbuildinfo
+**/coverage
+**/.nyc_output
 
 # next-pwa generated files (regenerated on every build by next-pwa plugin)
 web-admin-next/public/sw.js
@@ -41,8 +53,25 @@ web-admin-next/public/icons
 .env
 .env.local
 .env.*.local
+.env.example
+*.example.env
+
+# Backup files from manual fix workflows
+*.backup
+*.bak
+*.tahap*-backup
+*.tahap*-fix.zip
+docker-compose.yml.tahap*
+sopiak-*-fix.zip
+sopiak-satria-saga.zip
 
 # Docs / packaging — not used at runtime
 *.zip
 PANDUAN_DEPLOY_COOLIFY.md
 README.md
+LAPORAN_VERIFIKASI.md
+TAHAP_*.md
+CHANGELOG.md
+
+# Tahap 10: verification scripts directory — used by dev, not deploy
+verify/

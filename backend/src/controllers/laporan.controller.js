@@ -16,13 +16,14 @@ async function processPhotos(files, user, customText) {
     // Apply watermark
     try {
       const { applyWatermark } = require('../services/watermark.service');
+const { logger } = require('../utils/logger');
       await applyWatermark(f.path, {
         nama: user.nama || 'Unknown',
         nrp: user.nrp || '-',
         customText: customText || 'LAPORAN',
       });
     } catch (wmErr) {
-      console.log('[Laporan] Watermark skipped:', wmErr.message);
+      logger.info(`[Laporan] Watermark skipped: ${wmErr.message}`);
     }
 
     // Upload to Drive or local
@@ -47,7 +48,7 @@ exports.createHarian = async (req, res) => {
     }
     const result = await laporanService.createHarian(req.user, req.body, fotos);
     fcm.sendLaporanNotif(req.user.nama, 'Harian', req.body.kondisi || 'aman')
-      .catch(err => console.error('[FCM] Laporan harian push error:', err));
+      .catch(err => logger.error(`[FCM] Laporan harian push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     res.status(201).json(result);
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
@@ -58,7 +59,7 @@ exports.validateHarian = async (req, res) => {
     if (result && result.user_id) {
       const isApproved = req.body.status === 'approved';
       fcm.sendLaporanValidation(result.user_id, isApproved, 'Laporan Harian', req.body.catatan)
-        .catch(err => console.error('[FCM] Validation push error:', err));
+        .catch(err => logger.error(`[FCM] Validation push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     }
     res.json(result);
   }
@@ -80,7 +81,7 @@ exports.createKejadian = async (req, res) => {
     }
     const result = await laporanService.createKejadian(req.user, req.body, bukti);
     fcm.sendLaporanNotif(req.user.nama, req.body.jenis || 'Kejadian', req.body.prioritas || 'sedang')
-      .catch(err => console.error('[FCM] Laporan kejadian push error:', err));
+      .catch(err => logger.error(`[FCM] Laporan kejadian push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     res.status(201).json(result);
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
@@ -91,7 +92,7 @@ exports.validateKejadian = async (req, res) => {
     if (result && result.user_id) {
       const isApproved = req.body.status === 'approved';
       fcm.sendLaporanValidation(result.user_id, isApproved, 'Laporan Kejadian', req.body.catatan)
-        .catch(err => console.error('[FCM] Validation push error:', err));
+        .catch(err => logger.error(`[FCM] Validation push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     }
     res.json(result);
   }

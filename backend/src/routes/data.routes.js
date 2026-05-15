@@ -3,7 +3,7 @@ const dataCtrl = require('../controllers/data.controller');
 const opCtrl = require('../controllers/operasional.controller');
 const dashCtrl = require('../controllers/dashboard.controller');
 const { auth, requireRole } = require('../middleware/auth');
-const { upload, setFolder, getFileUrl } = require('../middleware/upload');
+const { upload, getFileUrl } = require('../middleware/upload');
 // TAHAP 9 BUG #1 (P2-9): rate limit upload — max 30 file / 15 menit per IP.
 const { uploadLimiter } = require('../middleware/uploadLimit');
 const { logEvent } = require('../middleware/auditlog');

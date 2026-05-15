@@ -190,7 +190,7 @@ export default function CheckpointPage() {
                       data={r.qr_code || ""}
                       size={40}
                       alt="QR"
-                      style={{ borderRadius: 4, background: '#fff', padding: 2 }}
+                      style={{ borderRadius: 4, background: 'var(--card)', padding: 2 }}
                     />
                   </div>
                 </td>
@@ -374,7 +374,7 @@ export default function CheckpointPage() {
                   data={form.qr_code}
                   size={40}
                   alt="QR Preview"
-                  style={{ borderRadius: 4, background: '#fff', padding: 2, border: '1px solid var(--border)' }}
+                  style={{ borderRadius: 4, background: 'var(--card)', padding: 2, border: '1px solid var(--border)' }}
                 />
               )}
             </div>

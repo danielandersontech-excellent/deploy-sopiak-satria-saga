@@ -4,6 +4,7 @@
  */
 const opService = require('../services/operasional.service');
 const fcm = require('../services/fcm.service');
+const { logger } = require('../utils/logger');
 
 // Broadcasts
 exports.getBroadcasts = async (req, res) => {
@@ -15,7 +16,7 @@ exports.createBroadcast = async (req, res) => {
   try {
     const result = await opService.createBroadcast(req.user, req.body);
     fcm.sendBroadcast(req.body.judul, req.body.pesan, req.body.target || 'all', req.body.prioritas || 'normal')
-      .catch(err => console.error('[FCM] Broadcast push error:', err));
+      .catch(err => logger.error(`[FCM] Broadcast push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     res.status(201).json(result);
   }
   catch (e) { res.status(500).json({ error: e.message }); }
@@ -42,7 +43,7 @@ exports.createPanic = async (req, res) => {
   try {
     const result = await opService.createPanic(req.user, req.body);
     fcm.sendPanicAlert(req.user.nama, req.body.alamat, req.body.latitude, req.body.longitude)
-      .catch(err => console.error('[FCM] Panic push error:', err));
+      .catch(err => logger.error(`[FCM] Panic push error: ${err && err.message ? err.message : err}`, { stack: err && err.stack }));
     res.status(201).json(result);
   }
   catch (e) { res.status(500).json({ error: e.message }); }
