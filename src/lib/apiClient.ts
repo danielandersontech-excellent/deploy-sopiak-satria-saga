@@ -224,13 +224,31 @@ export async function api<T = any>(endpoint: string, opts: ApiOpts = {}): Promis
         const refreshed = await _refreshPromise;
         _isRefreshing = false; _refreshPromise = null;
         if (refreshed) {
-          // Retry with new token
+          // Retry with new token.
+          // BUG #3 (P2-12, Tahap 8): the previous version did
+          //   const retryTimer = setTimeout(...)
+          //   res = await fetch(...);
+          //   clearTimeout(retryTimer);
+          // The clearTimeout only ran on the happy path — if the retry
+          // fetch threw (network error, abort), the outer catch only
+          // cleared the OUTER `timer`, leaving `retryTimer` to fire on
+          // a controller nobody was listening to. Wrap in try/finally
+          // so the timer is reliably released on every exit path.
           const newToken = await getToken();
           const retryHeaders = { ...headers, 'Authorization': `Bearer ${newToken}` };
           const retryController = new AbortController();
-          const retryTimer = setTimeout(() => retryController.abort(), timeout);
-          res = await fetch(url, { ...config, headers: retryHeaders, signal: retryController.signal });
-          clearTimeout(retryTimer);
+          let retryTimer: ReturnType<typeof setTimeout> | null = setTimeout(
+            () => retryController.abort(),
+            timeout,
+          );
+          try {
+            res = await fetch(url, { ...config, headers: retryHeaders, signal: retryController.signal });
+          } finally {
+            if (retryTimer) {
+              clearTimeout(retryTimer);
+              retryTimer = null;
+            }
+          }
         } else {
           await clearToken();
           throw new Error('Session expired. Silakan login ulang.');

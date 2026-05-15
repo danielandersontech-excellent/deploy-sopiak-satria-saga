@@ -37,12 +37,44 @@ export default function AbsensiScreen({ navigation }: any) {
   const absensiRecords = useDataStore((s) => s.absensiRecords);
 
   const todayAbs = useMemo(() => {
-    // Use same format as fmtDate in dataStore: "15 Feb 2026"
-    const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
+    // BUG #1 (P2-8, Tahap 8): the previous implementation built a
+    // formatted Indonesian string ("15 Feb 2026") and used string
+    // equality against r.tanggal. That breaks if the formatter on
+    // either side ever changes — and "Mei"/"Agu"/"Okt"/"Des" are not
+    // recognized by V8's Date parser, so a naive `new Date(r.tanggal)`
+    // would also fail. We parse the Indonesian short-month format
+    // back to a real Date, then compare via getFullYear / getMonth /
+    // getDate which is fully locale-independent.
+    const ID_MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const parseIdShortDate = (s: string | undefined | null): Date | null => {
+      if (!s || typeof s !== 'string') return null;
+      // Match "DD MMM YYYY" with Indonesian short month names.
+      const m = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(s.trim());
+      if (m) {
+        const monIdx = ID_MONTH_SHORT.indexOf(m[2]);
+        if (monIdx >= 0) {
+          return new Date(parseInt(m[3], 10), monIdx, parseInt(m[1], 10));
+        }
+      }
+      // Fallback: try the native parser (handles ISO timestamps coming
+      // straight from the server, e.g. created_at).
+      const d = new Date(s);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const isSameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() &&
+      a.getMonth() === b.getMonth() &&
+      a.getDate() === b.getDate();
+
     const now = new Date();
-    const td = `${String(now.getDate()).padStart(2, '0')} ${months[now.getMonth()]} ${now.getFullYear()}`;
     const uid = user?.id || 'T1';
-    const recs = absensiRecords.filter((r) => r.userId === uid && r.tanggal === td);
+    const recs = absensiRecords.filter((r) => {
+      if (r.userId !== uid) return false;
+      // `r.tanggal` is the Indonesian short-format string; fall back to
+      // any `created_at` (ISO) the record may carry from offline sync.
+      const recDate = parseIdShortDate(r.tanggal) || parseIdShortDate((r as any).created_at);
+      return recDate ? isSameDay(recDate, now) : false;
+    });
     return { masuk: recs.find((r) => r.tipe === 'masuk'), keluar: recs.find((r) => r.tipe === 'keluar') };
   }, [absensiRecords, user?.id]);
 

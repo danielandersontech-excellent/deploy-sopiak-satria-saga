@@ -26,20 +26,49 @@
         "CAMERA",
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
+        "ACCESS_BACKGROUND_LOCATION",
+        "POST_NOTIFICATIONS",
+        "FOREGROUND_SERVICE",
+        "FOREGROUND_SERVICE_LOCATION",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
         "VIBRATE"
+      ],
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [{ "scheme": "https", "host": "sopiaksatriasaga.com" }],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
       ]
     },
     "web": {
       "favicon": "./assets/logo-ptsss.png"
     },
     "plugins": [
-      "expo-camera",
-      "expo-location",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "PT Sopiak Satria Saga memerlukan akses kamera untuk foto absensi, dokumentasi laporan, dan scan QR checkpoint."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "isAndroidBackgroundLocationEnabled": true,
+          "isAndroidForegroundServiceEnabled": true,
+          "locationAlwaysAndWhenInUsePermission": "PT Sopiak Satria Saga memerlukan akses lokasi untuk tracking patroli keamanan.",
+          "locationAlwaysPermission": "Diperlukan untuk tracking patroli saat aplikasi berjalan di background.",
+          "locationWhenInUsePermission": "Diperlukan untuk fitur absensi dan patroli."
+        }
+      ],
       [
         "expo-image-picker",
-        { "photosPermission": "Izinkan PT Sopiak Satria Saga mengakses foto." }
+        {
+          "photosPermission": "PT Sopiak Satria Saga memerlukan akses galeri untuk upload dokumentasi laporan.",
+          "cameraPermission": "PT Sopiak Satria Saga memerlukan akses kamera untuk foto dokumentasi."
+        }
       ],
       "expo-sqlite"
     ],
