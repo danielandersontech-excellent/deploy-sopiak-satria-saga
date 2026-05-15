@@ -21,6 +21,11 @@ const { scheduleCleanup } = require('./utils/fileCleanup');
 const { bootstrap } = require('./utils/bootstrap');
 
 const app = express();
+// TAHAP 9 BUG #5 (P2-16): hapus header X-Powered-By yang membocorkan
+// fingerprint "Express" — bantu attacker pilih payload yang spesifik
+// untuk versi Express tertentu. Harus dipanggil SEBELUM middleware lain
+// agar tidak ada response yang sempat ber-fingerprint.
+app.disable('x-powered-by');
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3000;
 
@@ -45,27 +50,71 @@ const PORT = process.env.PORT || 3000;
 app.set('trust proxy', 1);
 
 // ===== MIDDLEWARE =====
-app.use(helmet({ crossOriginResourcePolicy: false }));
+// TAHAP 9 BUG #5 (P2-16): konfigurasi helmet eksplisit untuk REST API.
+// - CSP disable: API tidak render HTML, CSP dihandle di web-admin Next.js.
+// - crossOriginResourcePolicy = 'cross-origin': mengizinkan asset (foto
+//   absensi, dll) di-fetch oleh web-admin yang asal-domain berbeda.
+// - HSTS 1 tahun + preload — domain sudah di-HTTPS via Traefik+Cloudflare.
+// - referrerPolicy strict-origin-when-cross-origin: minimal info bocor.
+app.use(helmet({
+  contentSecurityPolicy: false,
+  crossOriginEmbedderPolicy: false,
+  crossOriginOpenerPolicy: false,
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  hsts: {
+    maxAge: 31536000,
+    includeSubDomains: true,
+    preload: true,
+  },
+  noSniff: true,
+  xssFilter: true,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
+  permittedCrossDomainPolicies: false,
+}));
+
+// TAHAP 9 BUG #5 (P2-16): tambahkan header versi API + pastikan
+// X-Powered-By tidak ke-set ulang oleh middleware lain.
+const API_VERSION = process.env.npm_package_version || '13.0.0';
+app.use((req, res, next) => {
+  res.setHeader('X-API-Version', API_VERSION);
+  res.removeHeader('X-Powered-By');
+  next();
+});
 
 // Gzip compression - reduce response size 60-80%
 app.use(compression({ threshold: 1024 }));
 
-// CORS - domain spesifik (bukan wildcard)
+// CORS - domain spesifik (bukan wildcard).
+// TAHAP 9 BUG #4 (P2-15): callback(new Error(...)) akan throw → ditangkap
+// error handler → return 500. Browser preflight yang ditolak harus
+// terima 403 (atau response tanpa CORS header), bukan 500. Fix:
+// callback(null, false) — beri tahu cors() bahwa origin DITOLAK tanpa
+// throw. cors() akan tidak set Access-Control-* header → browser tolak
+// request di sisi klien dengan pesan CORS yang jelas, dan response
+// server tetap 200/yang seharusnya untuk non-CORS endpoint.
 const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
   .split(',')
-  .map(s => s.trim());
+  .map(s => s.trim())
+  .filter(Boolean);
 app.use(cors({
   origin: (origin, callback) => {
-    // Allow requests with no origin (mobile apps, Postman, curl)
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      console.log(`[CORS] Blocked: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+    // Allow requests with no origin (mobile apps, Postman, curl, server-to-server).
+    if (!origin) return callback(null, true);
+    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+      return callback(null, true);
     }
+    logger.warn(`[CORS] Blocked origin: ${origin}`);
+    return callback(null, false);
   },
   credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-Skip-Rate-Limit', 'X-Watermark-Info'],
+  optionsSuccessStatus: 200,
 }));
+// Explicit preflight handler — beberapa router middleware butuh OPTIONS
+// di-handle eksplisit supaya tidak nyangkut di rate-limit/auth chain.
+app.options('*', cors());
+
 app.use(morgan('short', { stream: morganStream }));
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
@@ -202,7 +251,19 @@ app.use('/api/*', (req, res) => {
 
 // Error handler
 app.use((err, req, res, next) => {
-  console.error('[Error]', err.message);
+  // TAHAP 9 BUG #4 (P2-15): defensive — kalau ada library lain yang masih
+  // throw CORS error, terjemahkan ke 403 (bukan 500). cors() kita sudah
+  // pakai callback(null, false) jadi seharusnya tidak sampai ke sini,
+  // tapi guard ini murah dan jaga kalau dependency ter-update.
+  if (err && (err.message === 'Not allowed by CORS' || err.name === 'CORSError')) {
+    logger.warn(`[CORS] Rejected: ${req.headers.origin || 'no-origin'} -> ${req.path}`);
+    return res.status(403).json({ error: 'Origin tidak diizinkan' });
+  }
+  logger.error(`[Error] ${err && err.message ? err.message : 'Unknown error'}`, {
+    path: req.originalUrl,
+    method: req.method,
+    stack: err && err.stack ? err.stack : undefined,
+  });
   if (err.name === 'MulterError') return res.status(400).json({ error: `Upload error: ${err.message}` });
   res.status(500).json({ error: 'Internal server error' });
 });

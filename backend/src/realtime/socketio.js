@@ -127,7 +127,16 @@ function initSocketIO(server) {
   // ===== CONNECTION HANDLER =====
   io.on('connection', (socket) => {
     const user = socket.user;
-    logger.info(`[Socket.io] Connected: ${user.nama || user.nrp || user.id} (${user.role}) - ${socket.id}`);
+    // TAHAP 9 BUG #3 (P2-14): batasi jumlah listener per socket. Default
+    // Node EventEmitter cap = 10. Kita listen ~5 event (join:lokasi,
+    // leave:lokasi, location:ping, disconnect, ...) plus internal Socket.io
+    // listeners. 15 memberi headroom tanpa melumpuhkan deteksi memory leak.
+    socket.setMaxListeners(15);
+
+    // Catat jumlah koneksi aktif sebagai sinyal monitoring sederhana —
+    // kalau angka ini terus naik tanpa pernah turun, ada leak.
+    const activeConnections = io.engine.clientsCount;
+    logger.info(`[Socket.io] Connected: ${user.nama || user.nrp || user.id} (${user.role}) - ${socket.id} - total: ${activeConnections}`);
 
     // Auto-join role + per-user rooms (we're guaranteed an authenticated
     // user at this point, so no anon guard is needed).
@@ -161,7 +170,15 @@ function initSocketIO(server) {
 
     // Disconnect
     socket.on('disconnect', (reason) => {
-      logger.info(`[Socket.io] Disconnected: ${user.nama || user.id} - ${reason}`);
+      // TAHAP 9 BUG #3 (P2-14): bersihkan SEMUA event listener yang sempat
+      // ditambahkan ke socket ini selama session-nya. Tanpa ini, socket
+      // object tidak bisa di-GC sampai Socket.io engine internal melepas
+      // referensinya — refresh berulang = listener menumpuk = memory leak.
+      // removeAllListeners() aman dipanggil di dalam disconnect handler
+      // karena Socket.io tidak akan emit event lagi ke socket ini.
+      const remaining = io.engine.clientsCount;
+      logger.info(`[Socket.io] Disconnected: ${user.nama || user.id} - ${reason} - remaining: ${remaining}`);
+      socket.removeAllListeners();
     });
   });
 

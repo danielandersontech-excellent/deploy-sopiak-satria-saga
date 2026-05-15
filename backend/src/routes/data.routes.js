@@ -4,6 +4,8 @@ const opCtrl = require('../controllers/operasional.controller');
 const dashCtrl = require('../controllers/dashboard.controller');
 const { auth, requireRole } = require('../middleware/auth');
 const { upload, setFolder, getFileUrl } = require('../middleware/upload');
+// TAHAP 9 BUG #1 (P2-9): rate limit upload — max 30 file / 15 menit per IP.
+const { uploadLimiter } = require('../middleware/uploadLimit');
 const { logEvent } = require('../middleware/auditlog');
 const { query, queryOne } = require('../config/database');
 const { logger } = require('../utils/logger');
@@ -163,13 +165,13 @@ router.get('/dashboard/stats', auth, dashCtrl.getStats);
 // File upload with watermark
 // SECURITY (P0-16): pickUploadFolder runs BEFORE multer parses the body, so
 // invalid folder values are rejected before any bytes hit the disk.
-router.post('/upload', auth, pickUploadFolder, upload.single('file'), async(req,res)=>{
+router.post('/upload', uploadLimiter, auth, pickUploadFolder, upload.single('file'), async(req,res)=>{
   if(!req.file) return res.status(400).json({error:'No file'});
   try{let fp=req.file.path;const wm=req.headers['x-watermark-info']||req.body.watermark;
   if(wm&&req.file.mimetype&&req.file.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');const info=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);fp=await applyWatermark(fp,info);}catch(e){logger.warn(`[Upload] WM skip: ${e.message}`);}}
   res.json({url:getFileUrl(fp)});}catch(e){res.json({url:getFileUrl(req.file.path)});}
 });
-router.post('/upload/multiple', auth, pickUploadFolder, upload.array('files',10), async(req,res)=>{
+router.post('/upload/multiple', uploadLimiter, auth, pickUploadFolder, upload.array('files',10), async(req,res)=>{
   if(!req.files||!req.files.length)return res.status(400).json({error:'No files'});
   try{const wm=req.headers['x-watermark-info']||req.body.watermark;let wi=null;if(wm)try{wi=JSON.parse(typeof wm==='string'?decodeURIComponent(wm):wm);}catch{}
   const urls=await Promise.all(req.files.map(async f=>{if(wi&&f.mimetype&&f.mimetype.startsWith('image/')){try{const{applyWatermark}=require('../services/watermark.service');await applyWatermark(f.path,wi);}catch{}}return getFileUrl(f.path);}));
