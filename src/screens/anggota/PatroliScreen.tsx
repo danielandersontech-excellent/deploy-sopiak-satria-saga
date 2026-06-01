@@ -571,4 +571,3 @@ const s = StyleSheet.create({
   cpNumCur: { backgroundColor: Colors.primary },
   cpNumTxt: { ...Typography.smallBold, color: Colors.textMuted },
 });
-============================================================

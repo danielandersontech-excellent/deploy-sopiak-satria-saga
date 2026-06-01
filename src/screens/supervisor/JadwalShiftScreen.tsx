@@ -587,4 +587,3 @@ const st = StyleSheet.create({
   modalRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   modalAvatar: { width: 40, height: 40, borderRadius: 20 },
 });
-============================================================

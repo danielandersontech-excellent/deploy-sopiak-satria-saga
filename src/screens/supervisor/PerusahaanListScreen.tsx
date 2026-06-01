@@ -364,4 +364,3 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   emptyText: { ...Typography.body },
 });
-============================================================

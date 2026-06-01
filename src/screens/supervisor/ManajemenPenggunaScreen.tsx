@@ -307,4 +307,3 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...Typography.body, textAlign: 'center' },
 });
-============================================================

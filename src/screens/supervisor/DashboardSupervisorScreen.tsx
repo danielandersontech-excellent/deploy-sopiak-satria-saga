@@ -673,4 +673,3 @@ const s = StyleSheet.create({
   scoreBox: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   scoreVal: { fontSize: 18, fontWeight: '800' },
 });
-============================================================

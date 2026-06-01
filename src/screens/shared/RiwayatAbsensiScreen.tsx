@@ -345,4 +345,3 @@ const st = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { ...Typography.body, textAlign: 'center', paddingHorizontal: 32 },
 });
-============================================================

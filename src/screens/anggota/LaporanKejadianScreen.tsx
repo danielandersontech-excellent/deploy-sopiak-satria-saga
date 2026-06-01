@@ -299,4 +299,3 @@ const styles = StyleSheet.create({
   modalDesc: { ...Typography.body, color: Colors.textMuted, marginBottom: 8, textAlign: 'center' },
   modalBukti: { ...Typography.small, color: Colors.success, marginBottom: 16 },
 });
-============================================================

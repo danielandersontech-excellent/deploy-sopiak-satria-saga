@@ -521,4 +521,3 @@ const st = StyleSheet.create({
   modalNote: { ...Typography.caption, textAlign: 'center', marginTop: 8 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
 });
-============================================================

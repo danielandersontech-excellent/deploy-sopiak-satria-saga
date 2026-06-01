@@ -91,4 +91,3 @@ const st = StyleSheet.create({
   cardMeta: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
   catatan: { ...Typography.caption, color: Colors.warning, marginTop: 6, fontStyle: 'italic' },
 });
-============================================================
