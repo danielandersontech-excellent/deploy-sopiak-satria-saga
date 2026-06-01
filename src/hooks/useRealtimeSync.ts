@@ -69,11 +69,21 @@ export function useRealtimeSync() {
 
   useEffect(() => {
     if (!user) return;
-    let cleanup = () => {};
+    // N-05c: cleanup tahan-race. Sebelumnya `cleanup` di-assign DI DALAM IIFE
+    // async, jadi bila komponen unmount / `user.id` berubah SEBELUM IIFE selesai
+    // (saat masih await getToken/getSocketClient), cleanup yang dijalankan masih
+    // versi no-op → socket/interval yang dibuat setelahnya BOCOR. Sekarang kita
+    // pakai flag `cancelled` + referensi lokal (localSocket/localInterval) yang
+    // SELALU dibersihkan di fungsi cleanup, plus early-return bila sudah
+    // dibatalkan sebelum setup. Tidak ada perubahan opsi koneksi/retry/AppState.
+    let cancelled = false;
+    let localSocket: any = null;
+    let localInterval: ReturnType<typeof setInterval> | null = null;
 
     (async () => {
       const token = await getToken();
       const io = await getSocketClient();
+      if (cancelled) return; // unmount sebelum siap → jangan setup apa pun
 
       if (io) {
         try {
@@ -93,6 +103,7 @@ export function useRealtimeSync() {
             // own the connection lifecycle cleanly.
             autoConnect: false,
           });
+          localSocket = socket;
 
           socket.on('connect', () => {
             socketConnected = true;
@@ -121,37 +132,39 @@ export function useRealtimeSync() {
           intervalRef.current = setInterval(() => {
             if (!socketConnected) loadAllData();
           }, 300000);
+          localInterval = intervalRef.current;
 
           // Start the first connection now that all listeners are wired.
           setupCompleteRef.current = true;
           try { socket.connect(); } catch { /* ignore */ }
-
-          cleanup = () => {
-            setupCompleteRef.current = false;
-            try { socket?.disconnect(); } catch { /* ignore */ }
-            socket = null;
-            socketConnected = false;
-            if (intervalRef.current) clearInterval(intervalRef.current);
-          };
         } catch {
           // Socket library available but instantiation threw — fall back
           // to plain polling.
           intervalRef.current = setInterval(loadAllData, 60000);
-          cleanup = () => {
-            if (intervalRef.current) clearInterval(intervalRef.current);
-          };
+          localInterval = intervalRef.current;
         }
       } else {
         // No socket.io-client available — pure polling.
         intervalRef.current = setInterval(loadAllData, 60000);
-        cleanup = () => {
-          if (intervalRef.current) clearInterval(intervalRef.current);
-        };
+        localInterval = intervalRef.current;
       }
     })();
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
-    return () => { cleanup(); sub.remove(); };
+    return () => {
+      // Tandai dibatalkan agar IIFE yang belum selesai berhenti sebelum setup,
+      // lalu bersihkan socket & interval yang BENAR-BENAR dibuat (lewat
+      // referensi lokal; fallback ke variabel modul/ref bila perlu). Ini
+      // menutup race lama tanpa mengubah perilaku koneksi.
+      cancelled = true;
+      setupCompleteRef.current = false;
+      try { (localSocket ?? socket)?.disconnect(); } catch { /* ignore */ }
+      socket = null;
+      socketConnected = false;
+      const iv = localInterval ?? intervalRef.current;
+      if (iv) clearInterval(iv);
+      sub.remove();
+    };
   }, [user?.id]);
 }
 

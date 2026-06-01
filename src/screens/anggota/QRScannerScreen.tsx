@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Animated, Alert, TextInput, Modal,
-  Platform, ActivityIndicator, StatusBar,
+  ActivityIndicator, StatusBar,
 } from 'react-native';
 import { CameraView, useCameraPermissions, BarcodeScanningResult } from 'expo-camera';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,6 +11,7 @@ import { useDataStore } from '../../stores/dataStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 type Phase = 'scanning' | 'success';
 
@@ -34,6 +35,11 @@ export default function QRScannerScreen({ navigation, route }: any) {
   const [matchedCp, setMatchedCp] = useState<any>(null);
   const scanLineY = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
+
+  const insets = useSafeAreaInsets();
+  // Math.max guards against useSafeAreaInsets() returning 0 inside an RN <Modal> on Android edge-to-edge.
+  const topPad = Math.max(insets.top, StatusBar.currentHeight ?? 0, 24);
+  const bottomPad = Math.max(insets.bottom, 16);
 
   const scannedCount = activePatrol?.checkpoints.filter((c) => c.scanned).length || 0;
   const totalCount = activePatrol?.checkpoints.length || 0;
@@ -255,7 +261,7 @@ export default function QRScannerScreen({ navigation, route }: any) {
       {/* Overlay UI */}
       <View style={s.overlays}>
         {/* Top Bar */}
-        <View style={s.topBar}>
+        <View style={[s.topBar, { paddingTop: topPad }]}>
           <TouchableOpacity style={s.topBtn} onPress={() => navigation.goBack()}>
             <Ionicons name="close" size={28} color="#fff" />
           </TouchableOpacity>
@@ -289,7 +295,7 @@ export default function QRScannerScreen({ navigation, route }: any) {
         </View>
 
         {/* Bottom Bar */}
-        <View style={s.bottomBar}>
+        <View style={[s.bottomBar, { paddingBottom: bottomPad }]}>
           <Text style={s.instruct}>Arahkan kamera ke QR Code checkpoint</Text>
           <View style={s.actions}>
             {/* Flash toggle */}
@@ -327,7 +333,7 @@ export default function QRScannerScreen({ navigation, route }: any) {
       {/* Manual Input Modal */}
       <Modal visible={showManual} transparent animationType="slide">
         <View style={s.modalOv}>
-          <View style={s.modalCard}>
+          <View style={[s.modalCard, { paddingBottom: bottomPad }]}>
             <View style={s.modalHeader}>
               <Ionicons name="keypad" size={24} color={Colors.primary} />
               <Text style={s.modalTitle}>Input Kode Manual</Text>
@@ -379,7 +385,6 @@ const s = StyleSheet.create({
   overlays: { ...StyleSheet.absoluteFillObject, justifyContent: 'space-between' },
   topBar: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingTop: Platform.OS === 'android' ? 40 : 54,
     paddingHorizontal: 16, paddingBottom: 12,
     backgroundColor: 'rgba(0,0,0,0.5)', zIndex: 10,
   },
@@ -396,7 +401,6 @@ const s = StyleSheet.create({
 
   // ===== Bottom Bar =====
   bottomBar: {
-    paddingBottom: Platform.OS === 'ios' ? 50 : 36,
     paddingHorizontal: 20, paddingTop: 16,
     backgroundColor: 'rgba(0,0,0,0.6)', alignItems: 'center',
   },
@@ -502,7 +506,7 @@ const s = StyleSheet.create({
   modalCard: {
     backgroundColor: '#fff',
     borderTopLeftRadius: 20, borderTopRightRadius: 20,
-    padding: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row', alignItems: 'center', gap: 10,

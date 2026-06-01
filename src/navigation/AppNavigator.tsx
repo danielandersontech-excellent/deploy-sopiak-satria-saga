@@ -3,20 +3,20 @@
  * Navigation - PT Sopiak Satria Saga v9 (FIXED)
  * ============================================
  * FIXES (v9 - May 2026):
- *  ✅ FIX Splash Terpotong: SplashScreen now uses SafeAreaView + proper flex layout
+ *  âœ… FIX Splash Terpotong: SplashScreen now uses SafeAreaView + proper flex layout
  *     - Removed conflicting double `flex: 1` between container & centerContent
  *     - Version label uses safe-area bottom inset, no longer hidden behind nav-gesture bar
  *     - StatusBar styled to match splash bg (no white bar at top)
- *  ✅ FIX usePushNotificationManager: now receives `navigationRef` (the ref itself,
+ *  âœ… FIX usePushNotificationManager: now receives `navigationRef` (the ref itself,
  *     not `.current` which was always null at hook-call time). Hook updated to
  *     dereference internally and react to ref readiness.
- *  ✅ FIX NavigationContainer: ref now properly attached so navigation from
+ *  âœ… FIX NavigationContainer: ref now properly attached so navigation from
  *     notifications, deep links, and auth flows actually works.
- *  ✅ FIX Splash: ActivityIndicator + loadingText placed in normal flow (not
+ *  âœ… FIX Splash: ActivityIndicator + loadingText placed in normal flow (not
  *     overlapping bottom-absolute version), so on small screens nothing clips.
- *  ✅ Splash now respects insets — content centered between safe top & safe bottom.
- *  ✅ Dark mode fully integrated in navigation theme
- *  ✅ i18n tab labels reactive to language changes
+ *  âœ… Splash now respects insets â€” content centered between safe top & safe bottom.
+ *  âœ… Dark mode fully integrated in navigation theme
+ *  âœ… i18n tab labels reactive to language changes
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, StatusBar, Platform } from 'react-native';
@@ -106,7 +106,7 @@ function TabIcon({ route, focused, color }: { route: any; focused: boolean; colo
     Analytics: ['bar-chart', 'bar-chart-outline'],
     Insiden: ['alert-circle', 'alert-circle-outline'],
     Laporan: ['document-text', 'document-text-outline'],
-    DownloadLaporan: ['download', 'download-outline'],
+    LaporanKlien: ['download', 'download-outline'],
   };
   const pair = ICONS[route.name] || ['ellipse', 'ellipse-outline'];
   const iconName = focused ? pair[0] : pair[1];
@@ -129,6 +129,7 @@ const BADGE_STYLE = { backgroundColor: Colors.danger, fontSize: 10, fontWeight: 
 // ========== ANGGOTA TABS ==========
 function AnggotaTabs() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const unreadCount = useDataStore((s) => s.unreadCountForRole('anggota'));
 
@@ -139,8 +140,8 @@ function AnggotaTabs() {
         backgroundColor: theme.tabBg,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        height: 64,
-        paddingBottom: 8,
+        height: 64 + insets.bottom,
+        paddingBottom: 8 + insets.bottom,
         paddingTop: 6,
         ...(isDark ? {} : Shadows.sm),
       },
@@ -164,6 +165,7 @@ function AnggotaTabs() {
 // ========== KOMANDAN TABS ==========
 function KomandanTabs() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const unreadCount = useDataStore((s) => s.unreadCountForRole('komandan'));
   const laporanHarian = useDataStore((s) => s.laporanHarian);
@@ -178,8 +180,8 @@ function KomandanTabs() {
         backgroundColor: theme.tabBg,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        height: 64,
-        paddingBottom: 8,
+        height: 64 + insets.bottom,
+        paddingBottom: 8 + insets.bottom,
         paddingTop: 6,
         ...(isDark ? {} : Shadows.sm),
       },
@@ -207,6 +209,7 @@ function KomandanTabs() {
 // ========== SUPERVISOR / ADMIN TABS ==========
 function SupervisorTabs() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const unreadCount = useDataStore((s) => s.unreadCountForRole('supervisor'));
 
@@ -217,8 +220,8 @@ function SupervisorTabs() {
         backgroundColor: theme.tabBg,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        height: 64,
-        paddingBottom: 8,
+        height: 64 + insets.bottom,
+        paddingBottom: 8 + insets.bottom,
         paddingTop: 6,
         ...(isDark ? {} : Shadows.sm),
       },
@@ -242,6 +245,7 @@ function SupervisorTabs() {
 // ========== KLIEN TABS ==========
 function KlienTabs() {
   const { theme, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
 
   return (
@@ -251,8 +255,8 @@ function KlienTabs() {
         backgroundColor: theme.tabBg,
         borderTopWidth: 1,
         borderTopColor: theme.border,
-        height: 64,
-        paddingBottom: 8,
+        height: 64 + insets.bottom,
+        paddingBottom: 8 + insets.bottom,
         paddingTop: 6,
         ...(isDark ? {} : Shadows.sm),
       },
@@ -264,7 +268,7 @@ function KlienTabs() {
       <Tab.Screen name="Dashboard" component={DashboardKlienScreen} options={{ tabBarLabel: t('nav.home') }} />
       <Tab.Screen name="Laporan" component={AktivitasKlienScreen} options={{ tabBarLabel: 'Aktivitas' }} />
       <Tab.Screen name="Insiden" component={InsidenKlienScreen} options={{ tabBarLabel: 'Insiden' }} />
-      <Tab.Screen name="DownloadLaporan" component={DownloadLaporanScreen} options={{ tabBarLabel: 'Laporan' }} />
+      <Tab.Screen name="LaporanKlien" component={DownloadLaporanScreen} options={{ tabBarLabel: 'Laporan' }} />
       <Tab.Screen name="Profil" component={ProfilScreen} options={{ tabBarLabel: t('nav.profile') }} />
     </Tab.Navigator>
   );

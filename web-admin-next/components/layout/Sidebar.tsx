@@ -6,7 +6,13 @@ import { authApi, getUser, laporanHarianApi, laporanKejadianApi, panicApi, ROLE_
 import { onRealtimeEvent } from "@/lib/socketClient";
 import { useSettings } from "@/hooks/useSettings";
 
-export function Sidebar() {
+export function Sidebar({
+  open = false,
+  onClose,
+}: {
+  open?: boolean;
+  onClose?: () => void;
+}) {
   const pathname = usePathname();
   const { isDark, toggleDark, lang, setLang, t } = useSettings();
   const [counts, setCounts] = useState({ pending: 0, panic: 0 });
@@ -146,7 +152,7 @@ export function Sidebar() {
     }))
     .filter((section) => section.items.length > 0);
   return (
-    <aside className="sidebar">
+    <aside className={`sidebar${open ? " sidebar--open" : ""}`}>
       <div className="sidebar-logo">
         <div className="logo-icon">
           <img
@@ -172,6 +178,7 @@ export function Sidebar() {
               key={i.p}
               href={i.p}
               className={`nav-item ${isActive ? "active" : ""}`}
+              onClick={() => onClose?.()}
             >
               <i className={`fas ${i.i}`} />
               <span>{i.l}</span>

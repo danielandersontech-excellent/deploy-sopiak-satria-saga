@@ -6,6 +6,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Image, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
@@ -27,6 +28,7 @@ const PRIORITAS = [
 ] as const;
 
 export default function LaporanKejadianScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -118,7 +120,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Laporan Kejadian</Text>
         <View style={{ width: 40 }} />
@@ -172,7 +174,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
         <Text style={styles.fieldLabel}>Kronologi Kejadian *</Text>
         <View>
           <TextInput style={styles.textarea} multiline numberOfLines={8} textAlignVertical="top" placeholder="Deskripsikan kronologi kejadian secara detail... (min 100 karakter)" placeholderTextColor={Colors.textMuted} value={kronologi} onChangeText={setKronologi} maxLength={1000} />
-          <Text style={[styles.charCount, kronologi.length < 100 && { color: Colors.danger }]}>{kronologi.length}/1000 {kronologi.length < 100 ? `(min ${100 - kronologi.length} lagi)` : '✓'}</Text>
+          <Text style={[styles.charCount, kronologi.length < 100 && { color: Colors.danger }]}>{kronologi.length}/1000 {kronologi.length < 100 ? `(min ${100 - kronologi.length} lagi)` : 'âœ“'}</Text>
         </View>
 
         {/* Bukti Media - Real Camera & Gallery */}
@@ -259,7 +261,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   content: { padding: Spacing.base },
@@ -297,3 +299,4 @@ const styles = StyleSheet.create({
   modalDesc: { ...Typography.body, color: Colors.textMuted, marginBottom: 8, textAlign: 'center' },
   modalBukti: { ...Typography.small, color: Colors.success, marginBottom: 16 },
 });
+============================================================

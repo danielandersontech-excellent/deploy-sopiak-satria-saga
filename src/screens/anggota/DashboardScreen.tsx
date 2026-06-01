@@ -6,6 +6,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   Image, Animated, Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge, CountBadge, MenuCard } from '../../components';
@@ -19,6 +20,7 @@ import { useTheme } from '../../lib/theme';
 const { width } = Dimensions.get('window');
 
 export default function DashboardScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -61,7 +63,7 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   const absenStep = todayAbs.keluar ? 2 : todayAbs.masuk ? 1 : 0;
-  const absenLabel = [t('absensi.not_done'), `${t('absensi.clock_in')} ✓`, `${t('general.done')} ✓✓`][absenStep];
+  const absenLabel = [t('absensi.not_done'), `${t('absensi.clock_in')} âœ“`, `${t('general.done')} âœ“âœ“`][absenStep];
   const absenVariant: ('warning' | 'info' | 'success') = (['warning', 'info', 'success'] as const)[absenStep];
 
   const getBadge = (key: string): string | undefined => {
@@ -73,11 +75,11 @@ export default function DashboardScreen({ navigation }: any) {
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[s.header, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         <View style={s.headerContent}>
           <Image source={{ uri: user?.foto || 'https://via.placeholder.com/50' }} style={s.avatar} />
           <View style={s.headerInfo}>
-            <Text style={s.greeting}>{t('dash.greeting')} 👋</Text>
+            <Text style={s.greeting}>{t('dash.greeting')} ðŸ‘‹</Text>
             <Text style={s.userName}>{user?.nama || 'Security'}</Text>
             <Text style={s.userPos}>{user?.posJaga}</Text>
           </View>
@@ -88,7 +90,7 @@ export default function DashboardScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={s.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 16 }]} showsVerticalScrollIndicator={false}>
         {/* Status Card */}
         <View style={[s.statusCard, { backgroundColor: theme.bgCard }, isDark ? { borderWidth: 1, borderColor: theme.border } : Shadows.sm]}>
           <View style={s.statusLeft}>
@@ -147,7 +149,7 @@ export default function DashboardScreen({ navigation }: any) {
             <View style={s.patrolIcon}><Ionicons name="navigate" size={20} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.patrolTitle}>{t('patrol.patrol_active')}</Text>
-              <Text style={s.patrolSub}>{activePatrol.routeName} • {activePatrol.checkpoints.filter(c => c.scanned).length}/{activePatrol.checkpoints.length} checkpoint</Text>
+              <Text style={s.patrolSub}>{activePatrol.routeName} â€¢ {activePatrol.checkpoints.filter(c => c.scanned).length}/{activePatrol.checkpoints.length} checkpoint</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.success} />
           </TouchableOpacity>
@@ -157,7 +159,7 @@ export default function DashboardScreen({ navigation }: any) {
       </ScrollView>
 
       {/* Floating Panic Button */}
-      <TouchableOpacity style={s.panicBtn} onPress={() => navigation.navigate('PanicButton')} activeOpacity={0.8}>
+      <TouchableOpacity style={[s.panicBtn, { bottom: 22 + insets.bottom }]} onPress={() => navigation.navigate('PanicButton')} activeOpacity={0.8}>
         <Animated.View style={[s.panicInner, { transform: [{ scale: pulseAnim }] }]}>
           <Ionicons name="warning" size={22} color="#fff" />
           <Text style={s.panicText}>SOS</Text>
@@ -169,7 +171,7 @@ export default function DashboardScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  header: { paddingBottom: 20, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg },
   avatar: { width: 52, height: 52, borderRadius: 26, borderWidth: 2.5, borderColor: 'rgba(255,255,255,0.35)' },
   headerInfo: { flex: 1, marginLeft: 14 },
@@ -198,7 +200,8 @@ const s = StyleSheet.create({
   patrolIcon: { width: 38, height: 38, borderRadius: 10, backgroundColor: Colors.success, alignItems: 'center', justifyContent: 'center' },
   patrolTitle: { ...Typography.bodyBold, color: Colors.successDark },
   patrolSub: { ...Typography.caption, color: Colors.success },
-  panicBtn: { position: 'absolute', bottom: 22, right: 18, zIndex: 10 },
+  panicBtn: { position: 'absolute', right: 18, zIndex: 10 },
   panicInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center', ...Shadows.lg },
   panicText: { color: '#fff', fontSize: 10, fontWeight: '800', marginTop: -2 },
 });
+============================================================

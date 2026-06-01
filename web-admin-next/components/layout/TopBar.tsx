@@ -30,7 +30,7 @@ const BREADCRUMB_MAP: Record<string, string> = {
   "/qr-generator": "QR Generator",
 };
 
-export function TopBar() {
+export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
   const { isDark, toggleDark, lang, setLang, t } = useSettings();
   const pathname = usePathname();
   const [time, setTime] = useState(new Date());
@@ -74,6 +74,13 @@ export function TopBar() {
   return (
     <div className="topbar">
       <div className="topbar-left">
+        <button
+          className="btn-hamburger"
+          aria-label="Menu"
+          onClick={onMenuClick}
+        >
+          <i className="fas fa-bars" />
+        </button>
         <div className="topbar-breadcrumb">
           <span style={{ color: "var(--text-muted)", fontSize: 12 }}>PT Sopiak Satria Saga</span>
           <i className="fas fa-chevron-right" style={{ fontSize: 8, color: "var(--text-muted)", margin: "0 8px" }} />

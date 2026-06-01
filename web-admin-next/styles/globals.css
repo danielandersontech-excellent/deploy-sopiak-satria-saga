@@ -1150,6 +1150,17 @@ tbody tr:last-child td {
 .lang-toggle .lang-active { background: var(--primary); color: #fff; padding: 2px 8px; border-radius: 4px; }
 .lang-toggle .lang-inactive { padding: 2px 8px; opacity: 0.5; }
 
+/* Mobile menu button — hidden on desktop; shown by the ≤768px drawer rules below. */
+.btn-hamburger {
+  display: none;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  font-size: 18px;
+  cursor: pointer;
+  padding: 6px 8px;
+}
+
 /* ============ RESPONSIVE ============ */
 @media (min-width: 1440px) {
   .main-content { padding: 32px 48px; max-width: 1600px; }
@@ -1183,7 +1194,23 @@ tbody tr:last-child td {
 }
 
 @media (max-width: 768px) {
-  .sidebar { display: none; }
+  /* --- Mobile navigation: the sidebar becomes an off-canvas drawer --- */
+  .btn-hamburger { display: inline-flex; align-items: center; }
+  .sidebar {
+    display: flex;                 /* stays in the DOM, just slid off-screen */
+    width: 264px;
+    transform: translateX(-100%);
+    transition: transform .25s ease;
+    z-index: 70;                   /* above backdrop (60) and topbar (40) */
+    box-shadow: 0 0 24px rgba(0, 0, 0, .35);
+  }
+  .sidebar.sidebar--open { transform: translateX(0); }
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .5);
+    z-index: 60;
+  }
   .main-wrapper { margin-left: 0; }
   .main-content { padding: 16px; }
   .topbar { padding: 10px 16px; }
@@ -1193,6 +1220,10 @@ tbody tr:last-child td {
   .kpi-grid { grid-template-columns: 1fr 1fr; }
   .page-title { font-size: 18px; }
   .login-card { width: 90vw; padding: 32px 24px; }
+  /* --- Table safety net: long tables scroll inside their .section-card
+         instead of forcing the whole page to widen. --- */
+  .section-card table { min-width: 560px; }
+  table { max-width: 100%; }
 }
 
 @media (max-width: 480px) {

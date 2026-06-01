@@ -1,10 +1,11 @@
 /**
  * TAMBAH/EDIT USER - Express.js Backend
- * CREATE: POST /api/auth/register → creates user with default PIN 123456
- * EDIT: PUT /api/users/:id → updates user data
+ * CREATE: POST /api/auth/register â†’ creates user with default PIN 123456
+ * EDIT: PUT /api/users/:id â†’ updates user data
  */
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -19,6 +20,7 @@ const SHIFTS = ['06:00-14:00', '14:00-22:00', '22:00-06:00'] as const;
 const DEFAULT_PIN = '123456';
 
 export default function TambahEditUserScreen({ navigation, route }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const { userId } = route.params || {};
@@ -94,7 +96,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
 
     setSaving(false);
     Alert.alert(
-      '✅ Berhasil',
+      'âœ… Berhasil',
       `Pengguna baru berhasil ditambahkan:\n\nNama: ${nama.trim()}\nNRP: ${nrp.trim()}\nPIN: 123456\n\nUser dapat login dan ubah PIN sendiri.`,
       [{ text: 'OK', onPress: () => navigation.goBack() }]
     );
@@ -118,14 +120,14 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
     });
 
     setSaving(false);
-    Alert.alert('✅ Berhasil', 'Data pengguna berhasil diperbarui', [
+    Alert.alert('âœ… Berhasil', 'Data pengguna berhasil diperbarui', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
 
   return (
     <View style={st.container}>
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
@@ -227,7 +229,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   content: { padding: Spacing.base },
@@ -242,3 +244,4 @@ const st = StyleSheet.create({
   saveInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   saveInfoText: { ...Typography.caption, color: Colors.textMuted },
 });
+============================================================

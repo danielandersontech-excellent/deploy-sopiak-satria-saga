@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -11,6 +12,7 @@ import { useTheme } from '../../lib/theme';
 const TABS = ['Semua', 'Absensi', 'Patroli', 'Laporan'];
 
 export default function AktivitasScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const [tab, setTab] = useState('Semua');
@@ -38,7 +40,7 @@ export default function AktivitasScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}><Text style={styles.headerTitle}>Aktivitas</Text></View>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}><Text style={styles.headerTitle}>Aktivitas</Text></View>
       <View style={styles.tabsRow}>
         {TABS.map((t) => (
           <TouchableOpacity key={t} style={[styles.tab, tab === t && styles.tabActive]} onPress={() => setTab(t)}>
@@ -74,7 +76,7 @@ export default function AktivitasScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite },
+  header: { paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite },
   headerTitle: { ...Typography.h2, color: Colors.textPrimary },
   tabsRow: { flexDirection: 'row', backgroundColor: Colors.bgWhite, paddingHorizontal: Spacing.base, paddingBottom: 12, gap: 6, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   tab: { paddingHorizontal: 16, paddingVertical: 8, borderRadius: Radius.full, backgroundColor: Colors.bgGray },
@@ -92,3 +94,4 @@ const styles = StyleSheet.create({
   cardRight: { alignItems: 'flex-end', gap: 4 },
   cardTime: { ...Typography.caption, color: Colors.textMuted },
 });
+============================================================

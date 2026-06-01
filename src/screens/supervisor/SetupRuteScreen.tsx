@@ -2,23 +2,24 @@
  * SETUP RUTE - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  🚨 Edit button was "(simulasi)" — never actually edited routes!
+ *  ðŸš¨ Edit button was "(simulasi)" â€” never actually edited routes!
  *     Now opens modal with route data and persists via updateRoute().
- *  ✅ Dark mode + i18n (was importing both but using neither).
- *  ✅ Modal `onRequestClose` for Android back button.
- *  ✅ Waktu Estimasi input (was hardcoded `selectedCps.length * 6`).
- *  ✅ Assigned Shift selector from shifts in store (was hardcoded 'Semua').
- *  ✅ Search filter for routes.
- *  ✅ Empty state for routes and checkpoints in modal.
- *  ✅ Submitting state to prevent double-tap.
- *  ✅ Confirmation dialog uses dual-language text.
- *  ✅ Pull-to-refresh.
+ *  âœ… Dark mode + i18n (was importing both but using neither).
+ *  âœ… Modal `onRequestClose` for Android back button.
+ *  âœ… Waktu Estimasi input (was hardcoded `selectedCps.length * 6`).
+ *  âœ… Assigned Shift selector from shifts in store (was hardcoded 'Semua').
+ *  âœ… Search filter for routes.
+ *  âœ… Empty state for routes and checkpoints in modal.
+ *  âœ… Submitting state to prevent double-tap.
+ *  âœ… Confirmation dialog uses dual-language text.
+ *  âœ… Pull-to-refresh.
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
   Modal, KeyboardAvoidingView, Platform, RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -27,6 +28,7 @@ import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 export default function SetupRuteScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const routes = useDataStore((s) => s.routes);
@@ -120,7 +122,7 @@ export default function SetupRuteScreen({ navigation }: any) {
           waktuEstimasi: finalEstimasi,
           assignedShift: fShift,
         } as any);
-        Alert.alert('✅', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
+        Alert.alert('âœ…', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
       } else {
         addRoute({
           nama: fName.trim(),
@@ -129,7 +131,7 @@ export default function SetupRuteScreen({ navigation }: any) {
           assignedShift: fShift,
           status: 'active',
         });
-        Alert.alert('✅', lang === 'en' ? 'Route added' : 'Rute baru ditambahkan');
+        Alert.alert('âœ…', lang === 'en' ? 'Route added' : 'Rute baru ditambahkan');
       }
       setShowModal(false);
     } catch (e: any) {
@@ -150,7 +152,7 @@ export default function SetupRuteScreen({ navigation }: any) {
         assignedShift: r.assignedShift,
         status: r.status === 'active' ? 'active' : 'inactive',
       });
-      Alert.alert('✅', lang === 'en' ? 'Route duplicated' : 'Rute berhasil diduplikat');
+      Alert.alert('âœ…', lang === 'en' ? 'Route duplicated' : 'Rute berhasil diduplikat');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed');
     } finally {
@@ -175,7 +177,7 @@ export default function SetupRuteScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -222,9 +224,9 @@ export default function SetupRuteScreen({ navigation }: any) {
                 />
               </View>
               <Text style={[st.routeMeta, { color: theme.textMuted }]}>
-                {r.checkpointIds.length} checkpoint • ~{r.waktuEstimasi} {lang === 'en' ? 'min' : 'menit'} • {r.assignedShift || '-'}
+                {r.checkpointIds.length} checkpoint â€¢ ~{r.waktuEstimasi} {lang === 'en' ? 'min' : 'menit'} â€¢ {r.assignedShift || '-'}
               </Text>
-              <Text style={[st.routeCps, { color: Colors.primary }]}>{cpNames.join(' → ')}</Text>
+              <Text style={[st.routeCps, { color: Colors.primary }]}>{cpNames.join(' â†’ ')}</Text>
               <View style={st.cardActions}>
                 <Button
                   title={lang === 'en' ? 'Edit' : 'Edit'}
@@ -456,7 +458,6 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -511,3 +512,4 @@ const st = StyleSheet.create({
   shiftChipText: { ...Typography.caption, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
 });
+============================================================

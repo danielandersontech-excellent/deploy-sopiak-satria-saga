@@ -2,20 +2,21 @@
  * MANAJEMEN PENGGUNA - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ✅ Back button added in header (was missing — supervisor stuck on this screen).
- *  ✅ Dark mode support (was importing useTheme but using Colors directly).
- *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  ✅ Role filter chips (All / Anggota / Komandan) — was no way to filter by role.
- *  ✅ Empty state when no users match filter.
- *  ✅ Submitting state on delete to prevent double-tap.
- *  ✅ Case-insensitive NRP search.
- *  ✅ Pull-to-refresh added.
+ *  âœ… Back button added in header (was missing â€” supervisor stuck on this screen).
+ *  âœ… Dark mode support (was importing useTheme but using Colors directly).
+ *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  âœ… Role filter chips (All / Anggota / Komandan) â€” was no way to filter by role.
+ *  âœ… Empty state when no users match filter.
+ *  âœ… Submitting state on delete to prevent double-tap.
+ *  âœ… Case-insensitive NRP search.
+ *  âœ… Pull-to-refresh added.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput, Alert,
   RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -26,6 +27,7 @@ import { useTheme } from '../../lib/theme';
 type RoleFilter = 'all' | 'anggota' | 'komandan';
 
 export default function ManajemenPenggunaScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const team = useDataStore((s) => s.team);
@@ -70,7 +72,7 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
             try {
               removeTeamMember(id);
               Alert.alert(
-                '✅',
+                'âœ…',
                 lang === 'en' ? 'User deleted' : 'Anggota berhasil dihapus'
               );
             } catch (e: any) {
@@ -89,7 +91,7 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -180,7 +182,7 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
       </Text>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {filtered.map((m) => (
@@ -190,10 +192,10 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.userName, { color: theme.text }]}>{m.nama}</Text>
                 <Text style={[styles.userNrp, { color: Colors.primary }]}>
-                  NRP: {m.nrp} • {m.role}
+                  NRP: {m.nrp} â€¢ {m.role}
                 </Text>
                 <Text style={[styles.userPos, { color: theme.textMuted }]}>
-                  {m.pos || '-'} • {m.shift || '-'}
+                  {m.pos || '-'} â€¢ {m.shift || '-'}
                 </Text>
               </View>
               <Badge
@@ -256,7 +258,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -306,3 +307,4 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...Typography.body, textAlign: 'center' },
 });
+============================================================

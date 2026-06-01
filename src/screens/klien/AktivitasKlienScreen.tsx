@@ -2,31 +2,32 @@
  * AKTIVITAS KLIEN - v25 (Bug-Fix Pass on top of v24)
  *
  * FIXES (v25):
- *  🚨 PATROLI TAB ALWAYS SHOWED 0! `patroliApi.list()` returns paginated
+ *  ðŸš¨ PATROLI TAB ALWAYS SHOWED 0! `patroliApi.list()` returns paginated
  *     `{data: [...], pagination}` but the original code did `data.filter(...)`
- *     on the wrapper object — which threw "data.filter is not a function" and
+ *     on the wrapper object â€” which threw "data.filter is not a function" and
  *     was caught by `try/catch`, leaving `patroliData = []` forever. Now uses
  *     extractArray() helper (same pattern as supervisor's AnalyticsScreen fix).
- *  🚨 `getField(p.user, ...)` CRASHED when `p.user` was undefined (backend may
+ *  ðŸš¨ `getField(p.user, ...)` CRASHED when `p.user` was undefined (backend may
  *     not always JOIN). Now guards with `p.user || {}`.
- *  🚨 PRIVACY LEAK — klien with no `lokasi_id` saw ALL companies' activity.
+ *  ðŸš¨ PRIVACY LEAK â€” klien with no `lokasi_id` saw ALL companies' activity.
  *     Now shows empty state with explanation instead.
  *
- *  ✅ TAB labels now i18n'd (constants are still string literals for routing,
+ *  âœ… TAB labels now i18n'd (constants are still string literals for routing,
  *     but display labels use t() / lang switch).
- *  ✅ Status badge labels translated ('Hadir' → 'Present', etc.).
- *  ✅ `useEffect` dep array now includes `loadPatroli` for proper re-fetch.
- *  ✅ Patroli sort uses real start_time instead of fragile `now - idx`.
- *  ✅ `tabBadge` hardcoded `#ddd`/`#666` → theme-aware bg/text.
- *  ✅ Locale-aware date formatting (id-ID vs en-US).
- *  ✅ `p.status === 'cancelled'` badge text properly shows 'Cancelled'/'Batal'.
- *  ✅ Empty state desc fully translated for all 4 tabs.
+ *  âœ… Status badge labels translated ('Hadir' â†’ 'Present', etc.).
+ *  âœ… `useEffect` dep array now includes `loadPatroli` for proper re-fetch.
+ *  âœ… Patroli sort uses real start_time instead of fragile `now - idx`.
+ *  âœ… `tabBadge` hardcoded `#ddd`/`#666` â†’ theme-aware bg/text.
+ *  âœ… Locale-aware date formatting (id-ID vs en-US).
+ *  âœ… `p.status === 'cancelled'` badge text properly shows 'Cancelled'/'Batal'.
+ *  âœ… Empty state desc fully translated for all 4 tabs.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, ActivityIndicator,
   RefreshControl, Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Badge } from '../../components';
@@ -54,7 +55,7 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
-// 🚨 CRITICAL: handles BOTH raw arrays AND paginated {data: [...]} responses.
+// ðŸš¨ CRITICAL: handles BOTH raw arrays AND paginated {data: [...]} responses.
 function extractArray(result: any): any[] {
   if (Array.isArray(result)) return result;
   if (result && Array.isArray(result.data)) return result.data;
@@ -83,6 +84,7 @@ interface AktivitasItem {
 }
 
 export default function AktivitasKlienScreen() {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -97,7 +99,7 @@ export default function AktivitasKlienScreen() {
   const rawLaporanH = useDataStore((s) => s.laporanHarian);
   const rawLaporanK = useDataStore((s) => s.laporanKejadian);
 
-  // Filter by lokasi_id; if klien without lokasi → empty for privacy
+  // Filter by lokasi_id; if klien without lokasi â†’ empty for privacy
   const absensi = useMemo(() => {
     if (hideAll) return [];
     if (!myLokasiId) return rawAbsensi;
@@ -127,7 +129,7 @@ export default function AktivitasKlienScreen() {
 
   const dateLocale = lang === 'en' ? 'en-US' : 'id-ID';
 
-  // 🚨 CRITICAL FIX: extractArray() unwraps the paginated response
+  // ðŸš¨ CRITICAL FIX: extractArray() unwraps the paginated response
   const loadPatroli = useCallback(async () => {
     if (hideAll) {
       setPatroliData([]);
@@ -136,7 +138,7 @@ export default function AktivitasKlienScreen() {
     setLoadingPatroli(true);
     try {
       const result = await patroliApi.list('limit=30');
-      const arr = extractArray(result); // ← fixes "data.filter is not a function"
+      const arr = extractArray(result); // â† fixes "data.filter is not a function"
 
       let filtered = arr;
       if (myLokasiId) {
@@ -266,7 +268,7 @@ export default function AktivitasKlienScreen() {
           time: p.endTime ? `${p.startTime} - ${p.endTime}` : `${p.startTime} - ${labelActive}`,
           badge: badgeTxt,
           variant,
-          sortTime: p.startEpoch, // 🚨 real time, not "now - idx"
+          sortTime: p.startEpoch, // ðŸš¨ real time, not "now - idx"
         });
       });
     }
@@ -377,7 +379,7 @@ export default function AktivitasKlienScreen() {
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[st.header, { backgroundColor: isDark ? theme.bgCard : '#fff', borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : '#fff', borderBottomColor: theme.border }]}>
         <View style={st.headerRow}>
           <View style={[st.headerIcon, { backgroundColor: isDark ? `${theme.primary}15` : Colors.primaryBg }]}>
             <Ionicons name="pulse" size={20} color={theme.primary} />
@@ -448,7 +450,7 @@ export default function AktivitasKlienScreen() {
       </View>
 
       <ScrollView
-        contentContainerStyle={st.content}
+        contentContainerStyle={[st.content, { paddingBottom: insets.bottom + 16 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
@@ -501,7 +503,7 @@ export default function AktivitasKlienScreen() {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomWidth: 1 },
+  header: { paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomWidth: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 14 },
   headerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '800' },
@@ -529,3 +531,4 @@ const st = StyleSheet.create({
   cardDetail: { fontSize: 11, marginTop: 1 },
   cardTime: { fontSize: 10 },
 });
+============================================================

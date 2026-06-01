@@ -2,25 +2,26 @@
  * JADWAL SHIFT - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  🚨 Hardcoded DATES = ['02'..'08'] never updated! Today indicator was static.
+ *  ðŸš¨ Hardcoded DATES = ['02'..'08'] never updated! Today indicator was static.
  *     Now generates current week dynamically (Mon-Sun based on today's date).
  *
- *  🚨 Assignment was FAKE — "(simulasi)" alerts only. No real backend integration.
+ *  ðŸš¨ Assignment was FAKE â€” "(simulasi)" alerts only. No real backend integration.
  *     Now uses dataApi.shiftAssignments.create() and .delete() with optimistic
  *     local state that survives screen reloads.
  *
- *  ✅ Dark mode + i18n support (was importing both but using neither).
- *  ✅ Modal `onRequestClose` for Android back button.
- *  ✅ Full team list in assignment modal (was arbitrarily slice(0, 5)).
- *  ✅ Filter team list in modal to only unassigned members.
- *  ✅ Loading state while fetching assignments.
- *  ✅ Pull-to-refresh.
+ *  âœ… Dark mode + i18n support (was importing both but using neither).
+ *  âœ… Modal `onRequestClose` for Android back button.
+ *  âœ… Full team list in assignment modal (was arbitrarily slice(0, 5)).
+ *  âœ… Filter team list in modal to only unassigned members.
+ *  âœ… Loading state while fetching assignments.
+ *  âœ… Pull-to-refresh.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert, Modal,
   RefreshControl, ActivityIndicator, TextInput,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -77,6 +78,7 @@ interface ShiftAssignment {
 }
 
 export default function JadwalShiftScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const shifts = useDataStore((s) => s.shifts);
@@ -197,7 +199,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
 
       const member = team.find((m) => m.id === memberId);
       Alert.alert(
-        '✅',
+        'âœ…',
         lang === 'en'
           ? `${member?.nama || 'User'} assigned to shift`
           : `${member?.nama || 'Anggota'} berhasil di-assign ke shift`
@@ -257,7 +259,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -370,7 +372,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
                       <View style={{ flex: 1 }}>
                         <Text style={[st.memberName, { color: theme.text }]}>{a.nama}</Text>
                         <Text style={[st.memberPos, { color: theme.textMuted }]}>
-                          {a.pos || '-'} • NRP: {a.nrp}
+                          {a.pos || '-'} â€¢ NRP: {a.nrp}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -463,7 +465,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
             </View>
 
             <Text style={[st.modalSubtitle, { color: theme.textMuted }]}>
-              {lang === 'en' ? 'Shift:' : 'Shift:'} {shifts.find((s) => s.id === assignShiftId)?.nama || '-'} •{' '}
+              {lang === 'en' ? 'Shift:' : 'Shift:'} {shifts.find((s) => s.id === assignShiftId)?.nama || '-'} â€¢{' '}
               {lang === 'en' ? 'Date:' : 'Tanggal:'} {selectedDateStr}
             </Text>
 
@@ -495,7 +497,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
                     <View style={{ flex: 1 }}>
                       <Text style={[st.memberName, { color: theme.text }]}>{m.nama}</Text>
                       <Text style={[st.memberPos, { color: theme.textMuted }]}>
-                        {m.nrp} • {m.role}
+                        {m.nrp} â€¢ {m.role}
                       </Text>
                     </View>
                     <Ionicons name="add-circle" size={22} color={Colors.primary} />
@@ -525,7 +527,6 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -586,3 +587,4 @@ const st = StyleSheet.create({
   modalRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   modalAvatar: { width: 40, height: 40, borderRadius: 20 },
 });
+============================================================

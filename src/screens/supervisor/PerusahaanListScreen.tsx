@@ -2,22 +2,23 @@
  * PERUSAHAAN LIST SCREEN - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ✅ Conditional back button — shows when reached via stack push (e.g. dashboard
+ *  âœ… Conditional back button â€” shows when reached via stack push (e.g. dashboard
  *     "View All" link), hidden when used as bottom tab.
- *  ✅ Dark mode support (was importing useTheme but using Colors directly).
- *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  ✅ Members matched by `lokasiId` first (more reliable than name), with name
+ *  âœ… Dark mode support (was importing useTheme but using Colors directly).
+ *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  âœ… Members matched by `lokasiId` first (more reliable than name), with name
  *     fallback. Same fix as komandan/dashboard screens.
- *  ✅ "Today's absen" now filters by actual today's date (was misleading label
+ *  âœ… "Today's absen" now filters by actual today's date (was misleading label
  *     showing ALL absen across all dates).
- *  ✅ Foto URI filter for member avatars (avoid empty/broken image).
- *  ✅ Pull-to-refresh.
+ *  âœ… Foto URI filter for member avatars (avoid empty/broken image).
+ *  âœ… Pull-to-refresh.
  */
 import React, { useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, TextInput,
   RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Badge } from '../../components';
@@ -39,6 +40,7 @@ function todayLabelId(): string {
 }
 
 export default function PerusahaanListScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const lokasi = useDataStore((s) => s.lokasi);
@@ -98,7 +100,7 @@ export default function PerusahaanListScreen({ navigation }: any) {
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[s.header, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         {canGoBack && (
           <TouchableOpacity
             onPress={() => navigation.goBack()}
@@ -113,7 +115,7 @@ export default function PerusahaanListScreen({ navigation }: any) {
             {lang === 'en' ? 'Client Companies' : 'Perusahaan Klien'}
           </Text>
           <Text style={s.headerSub}>
-            {lokasi.length} {lang === 'en' ? 'companies' : 'perusahaan'} • {totalPersonil} {lang === 'en' ? 'personnel' : 'personil'} ({totalOnDuty} {lang === 'en' ? 'active' : 'aktif'})
+            {lokasi.length} {lang === 'en' ? 'companies' : 'perusahaan'} â€¢ {totalPersonil} {lang === 'en' ? 'personnel' : 'personil'} ({totalOnDuty} {lang === 'en' ? 'active' : 'aktif'})
           </Text>
         </View>
       </View>
@@ -312,7 +314,6 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 52,
     paddingBottom: 18,
     paddingHorizontal: Spacing.lg,
     borderBottomLeftRadius: 24,
@@ -363,3 +364,4 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   emptyText: { ...Typography.body },
 });
+============================================================

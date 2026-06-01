@@ -2,26 +2,26 @@
  * DASHBOARD KLIEN - v25 (Bug-Fix Pass on top of v24)
  *
  * FIXES (v25):
- *  🚨 PRIVACY LEAK — when klien user had no `lokasi_id`, all `!myLokasiId`
+ *  Ã°Å¸Å¡Â¨ PRIVACY LEAK Ã¢â‚¬â€ when klien user had no `lokasi_id`, all `!myLokasiId`
  *     branches returned the FULL data set (every company's team, attendance,
- *     reports). Now: klien-role + no-lokasi → show empty state with a clear
+ *     reports). Now: klien-role + no-lokasi Ã¢â€ â€™ show empty state with a clear
  *     "ask admin to assign your company" message, no data leaked.
- *  🚨 MAP MARKER FILTER — `lat && lng` excluded valid coordinate `0` (equator
+ *  Ã°Å¸Å¡Â¨ MAP MARKER FILTER Ã¢â‚¬â€ `lat && lng` excluded valid coordinate `0` (equator
  *     or prime meridian). Now uses `!= null` so 0 is allowed.
- *  🚨 onRefresh swallowed errors silently. Now try/catch + finally for guaranteed
+ *  Ã°Å¸Å¡Â¨ onRefresh swallowed errors silently. Now try/catch + finally for guaranteed
  *     `refreshing = false` reset even on failure.
  *
- *  ✅ STATUS_CONFIG labels now i18n-aware (was hardcoded English: "On Duty",
+ *  Ã¢Å“â€¦ STATUS_CONFIG labels now i18n-aware (was hardcoded English: "On Duty",
  *     "Patroli", "Istirahat", "Off Duty").
- *  ✅ unreadNotif badge clamps to "99+" for large counts (was overflowing).
- *  ✅ Hardcoded `#ecf0f1` colors in scoreBar / mapLegend / companyStats
+ *  Ã¢Å“â€¦ unreadNotif badge clamps to "99+" for large counts (was overflowing).
+ *  Ã¢Å“â€¦ Hardcoded `#ecf0f1` colors in scoreBar / mapLegend / companyStats
  *     replaced with `theme.border` so they look right in dark mode.
- *  ✅ Empty roster state added when `myTeam.length === 0`.
- *  ✅ Date locale follows `lang` (id-ID vs en-US) for "Insiden Terbaru" timestamps.
- *  ✅ KPI sub-labels properly translated (was mixing 'dari N' with EN tags).
- *  ✅ securityScore floor removed (was Math.max(60,...) which made the score
- *     never fall below 60 even with many incidents — misleading).
- *  ✅ Guard image placeholder uses theme.bgInput (was Colors.bgGray which is
+ *  Ã¢Å“â€¦ Empty roster state added when `myTeam.length === 0`.
+ *  Ã¢Å“â€¦ Date locale follows `lang` (id-ID vs en-US) for "Insiden Terbaru" timestamps.
+ *  Ã¢Å“â€¦ KPI sub-labels properly translated (was mixing 'dari N' with EN tags).
+ *  Ã¢Å“â€¦ securityScore floor removed (was Math.max(60,...) which made the score
+ *     never fall below 60 even with many incidents Ã¢â‚¬â€ misleading).
+ *  Ã¢Å“â€¦ Guard image placeholder uses theme.bgInput (was Colors.bgGray which is
  *     bright white in dark mode).
  */
 import React, { useMemo, useState, useCallback } from 'react';
@@ -29,6 +29,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Image,
   Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Badge } from '../../components';
@@ -71,6 +72,7 @@ const statusLabel = (key: string, lang: string) => {
 };
 
 export default function DashboardKlienScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -87,7 +89,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
 
   const myLokasiId = getField(user, 'lokasi_id', 'lokasiId') || null;
   const isKlien = user?.role === 'klien';
-  // 🚨 PRIVACY: a klien with no lokasi_id is a misconfigured account — show no data.
+  // Ã°Å¸Å¡Â¨ PRIVACY: a klien with no lokasi_id is a misconfigured account Ã¢â‚¬â€ show no data.
   const hideAll = isKlien && !myLokasiId;
 
   const myLokasi = useMemo(() => {
@@ -159,7 +161,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
     }
   }, []);
 
-  // Map markers — 🚨 use `!= null` not `&&` (so latitude=0 is valid)
+  // Map markers Ã¢â‚¬â€ Ã°Å¸Å¡Â¨ use `!= null` not `&&` (so latitude=0 is valid)
   const mapMarkers: MapMarker[] = useMemo(() => {
     return myTeam
       .filter((m) => {
@@ -179,7 +181,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
           latitude: lat,
           longitude: lng,
           title: nama,
-          description: `${pos} • ${statusLabel(status, lang)}`,
+          description: `${pos} Ã¢â‚¬Â¢ ${statusLabel(status, lang)}`,
           type: status === 'patroli' ? ('patrol' as const) : ('person' as const),
           color: cfg.color,
           status,
@@ -204,7 +206,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
   const posList = useMemo(() => myLokasi.flatMap((l) => l.posList || []), [myLokasi]);
   const displayedGuards = showAllGuards ? myTeam : myTeam.slice(0, 5);
 
-  // Security score — floor removed (allow 0–100 full range)
+  // Security score Ã¢â‚¬â€ floor removed (allow 0Ã¢â‚¬â€œ100 full range)
   const securityScore = useMemo(() => {
     const base = 100;
     const penalty = openInsiden * 5 + terlambatCount * 2;
@@ -226,7 +228,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       {/* Premium Header */}
-      <View style={[s.header, { backgroundColor: isDark ? '#1a2332' : Colors.primaryDark }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? '#1a2332' : Colors.primaryDark }]}>
         <View style={s.headerTop}>
           <View style={s.headerLeft}>
             <View style={s.companyBadge}>
@@ -262,7 +264,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 16 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
@@ -452,7 +454,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={[s.guardName, { color: theme.text }]}>{mNama}</Text>
-                      <Text style={[s.guardMeta, { color: theme.textMuted }]}>{mNrp} • {mPos} • {mShift}</Text>
+                      <Text style={[s.guardMeta, { color: theme.textMuted }]}>{mNrp} Ã¢â‚¬Â¢ {mPos} Ã¢â‚¬Â¢ {mShift}</Text>
                     </View>
                     <Badge
                       text={statusLabel(mStatus, lang)}
@@ -544,7 +546,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
           <View style={s.menuGrid}>
             <TouchableOpacity
               style={[s.menuItem, { backgroundColor: isDark ? `${Colors.primary}15` : Colors.primaryBg }]}
-              onPress={() => navigation.navigate('DownloadLaporan')}
+              onPress={() => navigation.navigate('LaporanKlien')}
             >
               <Ionicons name="download-outline" size={24} color={Colors.primary} />
               <Text style={[s.menuItemText, { color: theme.text }]}>
@@ -598,7 +600,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
               <View style={{ flex: 1 }} />
               <TouchableOpacity onPress={() => navigation.navigate('Insiden')}>
                 <Text style={[s.viewAll, { color: theme.primary }]}>
-                  {lang === 'en' ? 'View All' : 'Lihat Semua'} →
+                  {lang === 'en' ? 'View All' : 'Lihat Semua'} Ã¢â€ â€™
                 </Text>
               </TouchableOpacity>
             </View>
@@ -629,11 +631,11 @@ export default function DashboardKlienScreen({ navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={[s.incidentTitle, { color: theme.text }]}>{jenis}</Text>
                     <Text style={[s.incidentMeta, { color: theme.textMuted }]}>
-                      {nama} • {displayWaktu}
+                      {nama} Ã¢â‚¬Â¢ {displayWaktu}
                     </Text>
                   </View>
                   <Badge
-                    text={status === 'approved' ? '✓' : '●'}
+                    text={status === 'approved' ? 'Ã¢Å“â€œ' : 'Ã¢â€”Â'}
                     variant={status === 'approved' ? 'success' : 'warning'}
                   />
                 </View>
@@ -694,7 +696,7 @@ export default function DashboardKlienScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 16, paddingHorizontal: Spacing.base, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  header: { paddingBottom: 16, paddingHorizontal: Spacing.base, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   headerLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
   companyBadge: { width: 36, height: 36, borderRadius: 10, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
@@ -780,3 +782,4 @@ const s = StyleSheet.create({
   footerBrand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16 },
   footerText: { fontSize: 10 },
 });
+============================================================

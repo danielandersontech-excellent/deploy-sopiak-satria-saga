@@ -3,20 +3,20 @@
  * Komandan hanya bisa broadcast ke anggota di perusahaan klien yang sama
  *
  * CRITICAL FIXES (v10):
- *  🚨 Removed DUPLICATE API call. Previously:
- *      1) handleSend → dataApi.broadcasts.create({...lokasi_id})  (with scope)
- *      2) addBroadcast() in dataStore → dataApi.broadcasts.create({...}) AGAIN
+ *  ðŸš¨ Removed DUPLICATE API call. Previously:
+ *      1) handleSend â†’ dataApi.broadcasts.create({...lokasi_id})  (with scope)
+ *      2) addBroadcast() in dataStore â†’ dataApi.broadcasts.create({...}) AGAIN
  *         (WITHOUT lokasi_id - so the duplicate copy is visible to everyone!)
  *     Result: 2 broadcasts created per send, second one not scope-restricted.
  *     New flow: API call once (with lokasi_id), then update local Zustand
  *     state directly via useDataStore.setState - no second API request.
  *
- *  ✅ setSubmitting moved to try/finally for guaranteed cleanup
- *  ✅ getField() used consistently for user fields (snake_case + camelCase)
- *  ✅ Disabled inputs while submitting (prevents double-tap submission)
- *  ✅ Error message localized
- *  ✅ Team count filter uses getField fallback (handles both casing)
- *  ✅ Defensive null-checks for user data
+ *  âœ… setSubmitting moved to try/finally for guaranteed cleanup
+ *  âœ… getField() used consistently for user fields (snake_case + camelCase)
+ *  âœ… Disabled inputs while submitting (prevents double-tap submission)
+ *  âœ… Error message localized
+ *  âœ… Team count filter uses getField fallback (handles both casing)
+ *  âœ… Defensive null-checks for user data
  *
  * PRIOR FIXES:
  *  - Komandan scoped to their lokasi_id only
@@ -35,6 +35,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -59,6 +60,7 @@ const BASE_TARGETS_ID = ['Semua Anggota', 'Shift Pagi', 'Shift Siang', 'Shift Ma
 const BASE_TARGETS_EN = ['All Members', 'Morning Shift', 'Day Shift', 'Night Shift'];
 
 export default function BroadcastPesanScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -151,7 +153,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
       }));
 
       Alert.alert(
-        '✅ ' + (lang === 'en' ? 'Message Sent' : 'Pesan Terkirim'),
+        'âœ… ' + (lang === 'en' ? 'Message Sent' : 'Pesan Terkirim'),
         lang === 'en'
           ? `Broadcast to ${target} sent successfully`
           : `Broadcast ke ${target} berhasil dikirim`,
@@ -182,7 +184,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
     >
-      <View style={[s.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={s.backBtn} disabled={submitting}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -368,7 +370,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
                 <Text style={[s.histMsg, { color: theme.textSecondary }]} numberOfLines={2}>
                   {b.pesan}
                 </Text>
-                <Text style={[s.histTarget, { color: theme.primary }]}>→ {b.target}</Text>
+                <Text style={[s.histTarget, { color: theme.primary }]}>â†’ {b.target}</Text>
               </Card>
             ))}
           </>
@@ -384,7 +386,6 @@ const s = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -440,3 +441,4 @@ const s = StyleSheet.create({
   histMsg: { ...Typography.small, marginTop: 2 },
   histTarget: { ...Typography.caption, marginTop: 4 },
 });
+============================================================

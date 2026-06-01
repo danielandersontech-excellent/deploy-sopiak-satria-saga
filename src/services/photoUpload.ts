@@ -1,4 +1,4 @@
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as ImageManipulator from 'expo-image-manipulator';
 import { API_URL, getToken } from '../lib/apiClient';
 export interface UploadResult { success: boolean; publicUrl: string | null; error: string | null; }
@@ -32,7 +32,7 @@ async function uploadToBackend(localUri: string, folder: string, watermarkInfo?:
     if (token) headers['Authorization'] = 'Bearer '+token;
     if (watermarkInfo) headers['X-Watermark-Info'] = encodeURIComponent(JSON.stringify(watermarkInfo));
     const response = await fetch(API_URL+'/api/data/upload?folder='+folder, { method: 'POST', headers, body: formData });
-    if (response.ok) { const data = await response.json(); const url = fixUploadUrl(data.url); console.log('[Upload] ✅ '+url); return { success: true, publicUrl: url, error: null }; }
+    if (response.ok) { const data = await response.json(); const url = fixUploadUrl(data.url); console.log('[Upload] âœ… '+url); return { success: true, publicUrl: url, error: null }; }
     else { let msg = 'HTTP '+response.status; try { const d = await response.json(); msg = d.error || msg; } catch {} return { success: false, publicUrl: localUri, error: msg }; }
   } catch (e: any) { console.log('[Upload] Error: '+e.message); return { success: false, publicUrl: localUri, error: e.message }; }
 }

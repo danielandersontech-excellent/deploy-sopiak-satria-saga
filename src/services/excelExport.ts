@@ -4,7 +4,7 @@
  * For actual .xlsx, the backend generates it (TODO: backend endpoint)
  */
 // Use legacy import to avoid deprecation warnings on SDK 54+
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 
 interface ExportColumn {

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -11,12 +12,13 @@ import { useI18n } from '../../lib/i18n';
 
 const INVENTARIS_ITEMS = ['Radio HT', 'Senter', 'Kunci Pos Jaga', 'Buku Log', 'P3K Kit'];
 const KONDISI = [
-  { key: 'aman', label: '✅ Aman', color: Colors.success },
-  { key: 'masalah', label: '⚠️ Masalah', color: Colors.warning },
-  { key: 'perhatian', label: '🔴 Perhatian', color: Colors.danger },
+  { key: 'aman', label: 'âœ… Aman', color: Colors.success },
+  { key: 'masalah', label: 'âš ï¸ Masalah', color: Colors.warning },
+  { key: 'perhatian', label: 'ðŸ”´ Perhatian', color: Colors.danger },
 ] as const;
 
 export default function SerahTerimaScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const user = useAuthStore((s) => s.user);
   const addSerahTerima = useDataStore((s) => s.addSerahTerima);
   const [kondisi, setKondisi] = useState<'aman' | 'masalah' | 'perhatian'>('aman');
@@ -40,14 +42,14 @@ export default function SerahTerimaScreen({ navigation }: any) {
       catatan, waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     });
     setSubmitting(false);
-    Alert.alert('✅ Serah Terima Berhasil', 'Shift berikutnya akan menerima notifikasi.', [
+    Alert.alert('âœ… Serah Terima Berhasil', 'Shift berikutnya akan menerima notifikasi.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Serah Terima</Text>
         <View style={{ width: 40 }} />
@@ -98,7 +100,7 @@ export default function SerahTerimaScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   content: { padding: Spacing.base },
@@ -111,3 +113,4 @@ const styles = StyleSheet.create({
   invText: { ...Typography.body, color: Colors.textPrimary, flex: 1 },
   textarea: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, padding: 14, ...Typography.body, color: Colors.textPrimary, height: 100, backgroundColor: Colors.bgWhite },
 });
+============================================================

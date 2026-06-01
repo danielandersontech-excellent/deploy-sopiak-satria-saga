@@ -20,7 +20,6 @@ import {
   Modal,
   Image,
   ActivityIndicator,
-  Platform,
   Dimensions,
   StatusBar,
   Alert,
@@ -30,6 +29,7 @@ import type { CameraType, FlashMode } from 'expo-camera';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Radius } from '../../constants';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const CAMERA_INIT_TIMEOUT = 8000; // 8 seconds to initialize camera
@@ -55,6 +55,11 @@ export default function CameraModal({
   allowFlip = true,
   allowGallery = true,
 }: CameraModalProps) {
+  const insets = useSafeAreaInsets();
+  // Math.max guards against useSafeAreaInsets() returning 0 inside an RN <Modal> on Android edge-to-edge.
+  const topPad = Math.max(insets.top, StatusBar.currentHeight ?? 0, 24);
+  const bottomPad = Math.max(insets.bottom, 16);
+
   const [permission, requestPermission] = useCameraPermissions();
   const [facing, setFacing] = useState<'front' | 'back'>(initialFacing);
   const [flash, setFlash] = useState<'off' | 'on'>('off');
@@ -265,7 +270,7 @@ export default function CameraModal({
   // Render preview screen
   const renderPreview = () => (
     <View style={styles.previewContainer}>
-      <View style={styles.previewHeader}>
+      <View style={[styles.previewHeader, { paddingTop: topPad }]}>
         <Text style={styles.previewTitle}>Preview Foto</Text>
       </View>
       {showFaceGuide && faceWarning && (
@@ -277,7 +282,7 @@ export default function CameraModal({
       <View style={{ flex: 1, backgroundColor: '#000' }}>
         <Image source={{ uri: previewUri! }} style={styles.previewImage} resizeMode="contain" />
       </View>
-      <View style={styles.previewActions}>
+      <View style={[styles.previewActions, { paddingBottom: bottomPad }]}>
         <TouchableOpacity style={styles.previewActionBtn} onPress={handleRetake}>
           <Ionicons name="refresh-outline" size={28} color="#fff" />
           <Text style={styles.previewActionText}>Ulangi</Text>
@@ -326,7 +331,7 @@ export default function CameraModal({
       />
 
       {/* Top Bar */}
-      <View style={styles.topBar}>
+      <View style={[styles.topBar, { paddingTop: topPad }]}>
         <TouchableOpacity style={styles.topBtn} onPress={onClose}>
           <Ionicons name="close" size={28} color="#fff" />
         </TouchableOpacity>
@@ -363,7 +368,7 @@ export default function CameraModal({
       )}
 
       {/* Bottom Controls */}
-      <View style={styles.bottomBar}>
+      <View style={[styles.bottomBar, { paddingBottom: bottomPad }]}>
         <View style={styles.sideBtn}>
           {allowGallery && (
             <TouchableOpacity style={styles.galleryBtn} onPress={handlePickImage}>
@@ -447,7 +452,7 @@ const styles = StyleSheet.create({
   topBar: {
     position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? 40 : 54, paddingBottom: 12,
+    paddingHorizontal: 16, paddingBottom: 12,
     backgroundColor: 'rgba(0,0,0,0.4)',
   },
   topBtn: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
@@ -476,7 +481,7 @@ const styles = StyleSheet.create({
   bottomBar: {
     position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 10,
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-    paddingHorizontal: 32, paddingVertical: 24, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+    paddingHorizontal: 32, paddingVertical: 24,
     backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sideBtn: { width: 50, alignItems: 'center' },
@@ -492,12 +497,12 @@ const styles = StyleSheet.create({
 
   // Preview
   previewContainer: { flex: 1, backgroundColor: '#000' },
-  previewHeader: { alignItems: 'center', paddingTop: Platform.OS === 'android' ? 40 : 54, paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)' },
+  previewHeader: { alignItems: 'center', paddingBottom: 12, backgroundColor: 'rgba(0,0,0,0.7)' },
   previewTitle: { ...Typography.bodyBold, color: '#fff' },
   previewImage: { flex: 1, width: SCREEN_WIDTH, backgroundColor: '#000' },
   previewActions: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-around',
-    paddingVertical: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 20, backgroundColor: 'rgba(0,0,0,0.85)',
+    paddingVertical: 20, backgroundColor: 'rgba(0,0,0,0.85)',
   },
   previewActionBtn: { alignItems: 'center', gap: 4, paddingHorizontal: 20, paddingVertical: 10 },
   previewActionText: { ...Typography.small, color: '#fff' },

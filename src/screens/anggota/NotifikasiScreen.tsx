@@ -14,6 +14,7 @@ import React, { useMemo, useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, Alert,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card } from '../../components';
@@ -41,6 +42,7 @@ const ICON_MAP: Record<string, { name: string; color: string; bg: string }> = {
 const FILTER_TABS = ['Semua', 'Belum Dibaca', 'Penting'] as const;
 
 export default function NotifikasiScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -127,13 +129,13 @@ export default function NotifikasiScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Notifikasi</Text>
-          <Text style={[styles.headerRole, { color: theme.textMuted }]}>{getRoleLabel()} • {unread} belum dibaca</Text>
+          <Text style={[styles.headerRole, { color: theme.textMuted }]}>{getRoleLabel()} â€¢ {unread} belum dibaca</Text>
         </View>
         {unread > 0 ? (
           <TouchableOpacity onPress={markAllRead}>
@@ -168,7 +170,7 @@ export default function NotifikasiScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.content}
+        contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[Colors.primary]} />}
       >
         {filteredNotifs.length === 0 ? (
@@ -221,7 +223,7 @@ export default function NotifikasiScreen({ navigation }: any) {
                         )}
                         {!isPersonal && Array.isArray(targetRole) && targetRole.length > 0 && !targetRole.includes('all') && (
                           <Text style={[styles.notifTarget, { color: theme.primary }]}>
-                            → {targetRole.join(', ')}
+                            â†’ {targetRole.join(', ')}
                           </Text>
                         )}
                       </View>
@@ -242,7 +244,7 @@ export default function NotifikasiScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', paddingBottom: 12,
     paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite,
     borderBottomWidth: 1, borderBottomColor: Colors.borderLight,
   },
@@ -289,3 +291,4 @@ const styles = StyleSheet.create({
   personalText: { fontSize: 9, fontWeight: '700', color: Colors.primary },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary, marginTop: 6 },
 });
+============================================================

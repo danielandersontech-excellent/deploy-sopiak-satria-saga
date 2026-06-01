@@ -1,5 +1,5 @@
 "use client";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useIdleTimeout } from "@/hooks/useIdleTimeout";
@@ -28,6 +28,8 @@ function RoleGate({ children }: { children: React.ReactNode }) {
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   useIdleTimeout();
 
   useEffect(() => {
@@ -35,6 +37,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       router.replace("/login");
     }
   }, [user, loading, router]);
+
+  // Mobile drawer: auto-close after navigating to a new page.
+  useEffect(() => {
+    setSidebarOpen(false);
+  }, [pathname]);
 
   if (loading) {
     return (
@@ -54,9 +61,15 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
       <ToastProvider>
         <PanicAlertBanner />
         <div className="app-layout">
-          <Sidebar />
+          {sidebarOpen && (
+            <div
+              className="sidebar-backdrop"
+              onClick={() => setSidebarOpen(false)}
+            />
+          )}
+          <Sidebar open={sidebarOpen} onClose={() => setSidebarOpen(false)} />
           <div className="main-wrapper">
-            <TopBar />
+            <TopBar onMenuClick={() => setSidebarOpen(true)} />
             <main className="main-content">
               <RoleGate>{children}</RoleGate>
             </main>

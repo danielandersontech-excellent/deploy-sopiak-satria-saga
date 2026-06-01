@@ -2,7 +2,7 @@
   "expo": {
     "name": "PT Sopiak Satria Saga",
     "slug": "sopiak-satria-saga",
-    "version": "2.0.0",
+    "version": "3.0.0",
     "orientation": "portrait",
     "icon": "./assets/logo-ptsss.png",
     "userInterfaceStyle": "automatic",
@@ -32,6 +32,7 @@
         "FOREGROUND_SERVICE_LOCATION",
         "READ_EXTERNAL_STORAGE",
         "WRITE_EXTERNAL_STORAGE",
+        "READ_MEDIA_IMAGES",
         "VIBRATE"
       ],
       "intentFilters": [
@@ -68,6 +69,13 @@
         {
           "photosPermission": "PT Sopiak Satria Saga memerlukan akses galeri untuk upload dokumentasi laporan.",
           "cameraPermission": "PT Sopiak Satria Saga memerlukan akses kamera untuk foto dokumentasi."
+        }
+      ],
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/logo-ptsss.png",
+          "color": "#1a5276"
         }
       ],
       "expo-sqlite"

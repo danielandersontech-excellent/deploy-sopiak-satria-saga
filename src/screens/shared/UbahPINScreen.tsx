@@ -2,27 +2,28 @@
  * UBAH PIN - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  🚨 PINField was defined INSIDE the render function — React recreates the
+ *  ðŸš¨ PINField was defined INSIDE the render function â€” React recreates the
  *     component on every render, causing the TextInput to LOSE FOCUS on every
  *     keystroke. User couldn't type a 6-digit PIN! Moved PINField OUTSIDE the
  *     component to fix focus retention.
- *  🚨 Dead code removed — `nrp` and `email` variables were leftover from legacy
+ *  ðŸš¨ Dead code removed â€” `nrp` and `email` variables were leftover from legacy
  *     Supabase email-auth flow; the actual call is `authApi.changePin(old, new)`.
  *
- *  ✅ Dark mode support (was importing useTheme but using Colors directly).
- *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian).
- *  ✅ Unsaved-changes warning when navigating back (prevents losing typed PIN).
- *  ✅ KeyboardAvoidingView so keyboard doesn't cover input fields.
- *  ✅ Submitting state on save button to prevent double-tap.
- *  ✅ Empty error state when user starts typing again.
- *  ✅ Visual indicator when PIN is being shown (eye toggle).
- *  ✅ Live validation feedback.
+ *  âœ… Dark mode support (was importing useTheme but using Colors directly).
+ *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian).
+ *  âœ… Unsaved-changes warning when navigating back (prevents losing typed PIN).
+ *  âœ… KeyboardAvoidingView so keyboard doesn't cover input fields.
+ *  âœ… Submitting state on save button to prevent double-tap.
+ *  âœ… Empty error state when user starts typing again.
+ *  âœ… Visual indicator when PIN is being shown (eye toggle).
+ *  âœ… Live validation feedback.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Button } from '../../components';
@@ -63,7 +64,7 @@ function PINField({ label, value, onChangeText, show, toggle, editable = true, t
           secureTextEntry={!show}
           keyboardType="number-pad"
           maxLength={6}
-          placeholder="••••••"
+          placeholder="â€¢â€¢â€¢â€¢â€¢â€¢"
           placeholderTextColor={theme.textMuted}
           editable={editable}
         />
@@ -76,6 +77,7 @@ function PINField({ label, value, onChangeText, show, toggle, editable = true, t
 }
 
 export default function UbahPINScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const [pinLama, setPinLama] = useState('');
@@ -152,7 +154,7 @@ export default function UbahPINScreen({ navigation }: any) {
       setPinBaru('');
       setKonfirmasi('');
       Alert.alert(
-        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en'
           ? 'PIN changed successfully. Use the new PIN for your next login.'
           : 'PIN berhasil diubah. Gunakan PIN baru untuk login berikutnya.',
@@ -176,7 +178,7 @@ export default function UbahPINScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -300,7 +302,6 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -324,3 +325,4 @@ const st = StyleSheet.create({
   eyeBtn: { position: 'absolute', right: 12 },
   feedbackRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
 });
+============================================================

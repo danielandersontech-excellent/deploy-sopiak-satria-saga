@@ -2,29 +2,29 @@
  * ANALYTICS SCREEN - v3 (Bug-Fix Pass)
  *
  * CRITICAL FIXES (v3):
- *  🚨 patroliApi.list() and absensiApi.list() return PAGINATED response
+ *  Ã°Å¸Å¡Â¨ patroliApi.list() and absensiApi.list() return PAGINATED response
  *     { data: [...], pagination: {...} }. Previously:
- *       - `(totalRows as any[])?.length` → undefined (object has no length)
- *         → patroliStats was ALWAYS { total: 0, completed: 0 }
- *       - `Array.isArray(aRows)` → ALWAYS false for paginated
- *         → weeklyData was ALWAYS { attendance: [0,0,0,0,0,0,0], late: [0,...], patrol: [0,...] }
+ *       - `(totalRows as any[])?.length` Ã¢â€ â€™ undefined (object has no length)
+ *         Ã¢â€ â€™ patroliStats was ALWAYS { total: 0, completed: 0 }
+ *       - `Array.isArray(aRows)` Ã¢â€ â€™ ALWAYS false for paginated
+ *         Ã¢â€ â€™ weeklyData was ALWAYS { attendance: [0,0,0,0,0,0,0], late: [0,...], patrol: [0,...] }
  *     Fixed with extractArray() helper. Charts now show real data.
  *
- *  🚨 weeklyData.patrol fetched ALL patroli rows in EVERY day loop iteration
+ *  Ã°Å¸Å¡Â¨ weeklyData.patrol fetched ALL patroli rows in EVERY day loop iteration
  *     (7x duplicate work). Now fetched ONCE outside the loop and filtered.
  *
  * MEDIUM FIXES:
- *  ✅ weeklyLoading state was set but never used in JSX. Now drives spinner
+ *  Ã¢Å“â€¦ weeklyLoading state was set but never used in JSX. Now drives spinner
  *     in Mingguan tab so user sees loading state on slow networks.
- *  ✅ `tab` state was initialized from `lang` but didn't react to language
+ *  Ã¢Å“â€¦ `tab` state was initialized from `lang` but didn't react to language
  *     switches. Migrated to tab index (0/1/2) - language-agnostic.
- *  ✅ saveExportRecord race condition: uses functional setState now to avoid
+ *  Ã¢Å“â€¦ saveExportRecord race condition: uses functional setState now to avoid
  *     stale closure when multiple records arrive in rapid succession.
- *  ✅ handleGenerateWeeklyReport useCallback no longer depends on
+ *  Ã¢Å“â€¦ handleGenerateWeeklyReport useCallback no longer depends on
  *     `exportHistory` (which would invalidate ref on every export).
- *  ✅ Print errors now show user-friendly alerts instead of silent failure.
- *  ✅ Date format parsing made resilient to non-ISO `created_at` values.
- *  ✅ Generate button disabled while generating (was technically already, now
+ *  Ã¢Å“â€¦ Print errors now show user-friendly alerts instead of silent failure.
+ *  Ã¢Å“â€¦ Date format parsing made resilient to non-ISO `created_at` values.
+ *  Ã¢Å“â€¦ Generate button disabled while generating (was technically already, now
  *     also wraps the whole UI in disabled-styled state).
  */
 import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
@@ -32,10 +32,11 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions,
   Alert, Switch, ActivityIndicator as RNActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
-import * as FileSystem from 'expo-file-system';
+import * as FileSystem from 'expo-file-system/legacy';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -203,14 +204,14 @@ function generateWeeklyReportHTML(data: {
   .badge-danger { background:#f8d7da; color:#721c24; }
 </style></head><body>
   <div class="header">
-    <h1>📊 Laporan Mingguan</h1>
+    <h1>Ã°Å¸â€œÅ  Laporan Mingguan</h1>
     <p>${escapeHtml(companyName)}</p>
     <p>Periode: ${escapeHtml(periodeStart)} - ${escapeHtml(periodeEnd)}</p>
-    <p>Digenerate oleh: ${escapeHtml(generatedBy)} • ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
+    <p>Digenerate oleh: ${escapeHtml(generatedBy)} Ã¢â‚¬Â¢ ${new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</p>
   </div>
 
   <div class="section">
-    <h2>📈 Ringkasan KPI</h2>
+    <h2>Ã°Å¸â€œË† Ringkasan KPI</h2>
     <div class="kpi-grid">
       <div class="kpi-box"><div class="value" style="color:#2980b9">${team.length}</div><div class="label">Total Personil</div></div>
       <div class="kpi-box"><div class="value" style="color:#27ae60">${stats.kehadiranPct}%</div><div class="label">Kehadiran</div></div>
@@ -222,7 +223,7 @@ function generateWeeklyReportHTML(data: {
   </div>
 
   <div class="section">
-    <h2>👥 Status Personil</h2>
+    <h2>Ã°Å¸â€˜Â¥ Status Personil</h2>
     <div class="bar-container">
       <span class="bar-label">On Duty</span>
       <div class="bar-bg"><div class="bar-fill" style="width:${team.length > 0 ? (stats.onDuty / team.length * 100) : 0}%;background:#27ae60"></div></div>
@@ -241,7 +242,7 @@ function generateWeeklyReportHTML(data: {
   </div>
 
   <div class="section">
-    <h2>📋 Statistik Absensi</h2>
+    <h2>Ã°Å¸â€œâ€¹ Statistik Absensi</h2>
     <div class="bar-container">
       <span class="bar-label">Hadir</span>
       <div class="bar-bg"><div class="bar-fill" style="width:${stats.totalMasuk > 0 ? (stats.hadir / stats.totalMasuk * 100) : 0}%;background:#27ae60"></div></div>
@@ -261,7 +262,7 @@ function generateWeeklyReportHTML(data: {
   </div>
 
   <div class="section">
-    <h2>📝 Laporan</h2>
+    <h2>Ã°Å¸â€œÂ Laporan</h2>
     <table>
       <tr><th>Kategori</th><th>Jumlah</th><th>Status</th></tr>
       <tr><td>Laporan Harian</td><td>${stats.lhTotal}</td><td><span class="badge badge-success">${stats.lhApproved} disetujui</span> <span class="badge badge-warning">${stats.lhPending} pending</span></td></tr>
@@ -270,7 +271,7 @@ function generateWeeklyReportHTML(data: {
   </div>
 
   <div class="section">
-    <h2>🏆 Top Performers</h2>
+    <h2>Ã°Å¸Ââ€  Top Performers</h2>
     <table>
       <tr><th>#</th><th>Nama</th><th>Pos / Shift</th><th>Skor</th></tr>
       ${topPerformerRows || '<tr><td colspan="4" style="text-align:center;color:#888">Belum ada data</td></tr>'}
@@ -279,13 +280,14 @@ function generateWeeklyReportHTML(data: {
 
   <div class="footer">
     <p>Laporan ini digenerate otomatis oleh sistem PTSSS (PT Sopiak Satria Saga)</p>
-    <p>© ${new Date().getFullYear()} - Dokumen ini bersifat rahasia</p>
+    <p>Ã‚Â© ${new Date().getFullYear()} - Dokumen ini bersifat rahasia</p>
   </div>
 </body></html>`;
 }
 
 // ===== MAIN COMPONENT =====
 export default function AnalyticsScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -337,7 +339,7 @@ export default function AnalyticsScreen({ navigation }: any) {
     }
   };
 
-  // 🚨 CRITICAL FIX: Use extractArray() for paginated API responses
+  // Ã°Å¸Å¡Â¨ CRITICAL FIX: Use extractArray() for paginated API responses
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -468,7 +470,7 @@ export default function AnalyticsScreen({ navigation }: any) {
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
       const fileName = `Laporan_Mingguan_${now.toISOString().split('T')[0]}.pdf`;
-      const docDir = (FileSystem as any).documentDirectory || (FileSystem as any).cacheDirectory;
+      const docDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
       if (!docDir) throw new Error('Storage directory not available');
       const newUri = docDir.endsWith('/') ? `${docDir}${fileName}` : `${docDir}/${fileName}`;
 
@@ -496,7 +498,7 @@ export default function AnalyticsScreen({ navigation }: any) {
       setGenerating(false);
 
       Alert.alert(
-        '✅ ' + (lang === 'en' ? 'Report Generated' : 'Laporan Berhasil Dibuat'),
+        'Ã¢Å“â€¦ ' + (lang === 'en' ? 'Report Generated' : 'Laporan Berhasil Dibuat'),
         lang === 'en'
           ? `Weekly report (${periodeStart} - ${periodeEnd}) has been generated as PDF.`
           : `Laporan mingguan (${periodeStart} - ${periodeEnd}) berhasil digenerate sebagai PDF.`,
@@ -549,7 +551,7 @@ export default function AnalyticsScreen({ navigation }: any) {
       await saveExportRecord(record);
 
       Alert.alert(
-        '❌ Error',
+        'Ã¢ÂÅ’ Error',
         lang === 'en'
           ? `Failed to generate report: ${err?.message || 'Unknown error'}`
           : `Gagal membuat laporan: ${err?.message || 'Error tidak diketahui'}`
@@ -568,7 +570,7 @@ export default function AnalyticsScreen({ navigation }: any) {
 
     if (val) {
       Alert.alert(
-        lang === 'en' ? '✅ Weekly Reminder Active' : '✅ Pengingat Mingguan Aktif',
+        lang === 'en' ? 'Ã¢Å“â€¦ Weekly Reminder Active' : 'Ã¢Å“â€¦ Pengingat Mingguan Aktif',
         lang === 'en'
           ? 'You will receive a reminder every Monday morning to generate and review the weekly report. The report will include attendance, patrol, and incident data from the past week.'
           : 'Anda akan menerima pengingat setiap Senin pagi untuk membuat dan mereview laporan mingguan. Laporan mencakup data kehadiran, patroli, dan insiden selama seminggu terakhir.'
@@ -660,7 +662,7 @@ export default function AnalyticsScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -692,7 +694,7 @@ export default function AnalyticsScreen({ navigation }: any) {
         ))}
       </View>
 
-      <ScrollView contentContainerStyle={st.content}>
+      <ScrollView contentContainerStyle={[st.content, { paddingBottom: insets.bottom + 16 }]}>
         {/* ===== TAB: RINGKASAN ===== */}
         {tabIndex === 0 && (
           <>
@@ -772,7 +774,7 @@ export default function AnalyticsScreen({ navigation }: any) {
                     <View style={{ flex: 1 }}>
                       <Text style={[st.perfName, { color: theme.text }]}>{m.nama}</Text>
                       <Text style={[st.perfMeta, { color: theme.textMuted }]}>
-                        {m.pos || '-'} • {m.shift || '-'}
+                        {m.pos || '-'} Ã¢â‚¬Â¢ {m.shift || '-'}
                       </Text>
                     </View>
                     <View style={st.perfScoreBox}>
@@ -1089,7 +1091,7 @@ export default function AnalyticsScreen({ navigation }: any) {
 const st = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', paddingBottom: 12,
     paddingHorizontal: Spacing.base, borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },

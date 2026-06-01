@@ -7,6 +7,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Image,
   KeyboardAvoidingView, Platform,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
@@ -19,12 +20,13 @@ import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 const KONDISI_OPTIONS = [
-  { key: 'aman', label: 'Aman', color: Colors.success, icon: '✅' },
-  { key: 'ada_masalah', label: 'Ada Masalah', color: Colors.warning, icon: '⚠️' },
-  { key: 'perhatian_khusus', label: 'Perhatian Khusus', color: Colors.danger, icon: '🔴' },
+  { key: 'aman', label: 'Aman', color: Colors.success, icon: 'âœ…' },
+  { key: 'ada_masalah', label: 'Ada Masalah', color: Colors.warning, icon: 'âš ï¸' },
+  { key: 'perhatian_khusus', label: 'Perhatian Khusus', color: Colors.danger, icon: 'ðŸ”´' },
 ] as const;
 
 export default function LaporanHarianScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -109,7 +111,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
 
   return (
     <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
-      <View style={styles.header}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
         </TouchableOpacity>
@@ -153,7 +155,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
             maxLength={500}
           />
           <Text style={[styles.charCount, aktivitas.length < 50 && { color: Colors.danger }]}>
-            {aktivitas.length}/500 {aktivitas.length < 50 ? `(min ${50 - aktivitas.length} lagi)` : '✓'}
+            {aktivitas.length}/500 {aktivitas.length < 50 ? `(min ${50 - aktivitas.length} lagi)` : 'âœ“'}
           </Text>
         </View>
 
@@ -240,7 +242,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.successCircle}><Ionicons name="checkmark" size={40} color="#fff" /></View>
-            <Text style={styles.modalTitle}>Laporan Terkirim! ✅</Text>
+            <Text style={styles.modalTitle}>Laporan Terkirim! âœ…</Text>
             <Text style={styles.modalDesc}>Menunggu validasi dari Komandan</Text>
             {fotoUris.length > 0 && (
               <Text style={styles.modalFoto}>{fotoUris.length} foto dokumentasi terlampir</Text>
@@ -255,7 +257,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   content: { padding: Spacing.base },
@@ -286,3 +288,4 @@ const styles = StyleSheet.create({
   modalDesc: { ...Typography.body, color: Colors.textMuted, marginBottom: 8 },
   modalFoto: { ...Typography.small, color: Colors.success, marginBottom: 16 },
 });
+============================================================

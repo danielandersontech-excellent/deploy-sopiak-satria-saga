@@ -5,6 +5,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Alert } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -21,6 +22,7 @@ const STATUS_MAP: Record<string, { label: string; color: string; variant: 'succe
 };
 
 export default function DetailPerusahaanScreen({ route, navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const { lokasiId } = route.params;
@@ -57,7 +59,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
   return (
     <View style={st.container}>
       {/* Header */}
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity style={st.backBtn} onPress={() => navigation.goBack()}>
           <Ionicons name="arrow-back" size={22} color="#fff" />
         </TouchableOpacity>
@@ -118,11 +120,11 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
                       <Text style={st.memberName}>{m.nama}</Text>
                       {m.role === 'komandan' && <Badge text="Komandan" variant="purple" />}
                     </View>
-                    <Text style={st.memberSub}>{m.pos} • {m.shift}</Text>
+                    <Text style={st.memberSub}>{m.pos} â€¢ {m.shift}</Text>
                     <View style={st.memberMeta}>
-                      <Text style={st.metaText}>🎯 {m.kehadiran}</Text>
-                      <Text style={st.metaText}>🛡️ {m.totalPatroli} patroli</Text>
-                      <Text style={st.metaText}>⭐ {m.skor}</Text>
+                      <Text style={st.metaText}>ðŸŽ¯ {m.kehadiran}</Text>
+                      <Text style={st.metaText}>ðŸ›¡ï¸ {m.totalPatroli} patroli</Text>
+                      <Text style={st.metaText}>â­ {m.skor}</Text>
                     </View>
                   </View>
                   <View style={st.memberRight}>
@@ -162,7 +164,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={st.absenName}>{a.nama}</Text>
-                  <Text style={st.absenDetail}>{a.posJaga} • {a.waktu}</Text>
+                  <Text style={st.absenDetail}>{a.posJaga} â€¢ {a.waktu}</Text>
                 </View>
                 <Badge text={a.status === 'hadir' ? 'Tepat' : 'Terlambat'} variant={a.status === 'hadir' ? 'success' : 'warning'} />
               </View>
@@ -177,14 +179,14 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
           <>
             {compLaporanK.length > 0 && (
               <>
-                <Text style={st.subSection}>🚨 Laporan Kejadian ({compLaporanK.length})</Text>
+                <Text style={st.subSection}>ðŸš¨ Laporan Kejadian ({compLaporanK.length})</Text>
                 {compLaporanK.map((l) => (
                   <Card key={l.id} style={st.laporanCard} variant="bordered" borderColor={l.prioritas === 'kritis' ? Colors.danger : l.prioritas === 'tinggi' ? Colors.warning : Colors.primary}>
                     <View style={st.laporanRow}>
                       <Ionicons name="alert-circle" size={20} color={l.prioritas === 'kritis' ? Colors.danger : Colors.warning} />
                       <View style={{ flex: 1 }}>
                         <Text style={st.laporanTitle}>{l.jenis}</Text>
-                        <Text style={st.laporanSub}>{l.nama} • {(l as any).tanggal || (l as any).waktuKejadian || '-'}</Text>
+                        <Text style={st.laporanSub}>{l.nama} â€¢ {(l as any).tanggal || (l as any).waktuKejadian || '-'}</Text>
                       </View>
                       <View style={{ alignItems: 'flex-end', gap: 4 }}>
                         <Badge text={l.prioritas} variant={l.prioritas === 'kritis' ? 'danger' : l.prioritas === 'tinggi' ? 'warning' : 'info'} />
@@ -197,16 +199,16 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
             )}
             {compLaporanH.length > 0 && (
               <>
-                <Text style={st.subSection}>📋 Laporan Harian ({compLaporanH.length})</Text>
+                <Text style={st.subSection}>ðŸ“‹ Laporan Harian ({compLaporanH.length})</Text>
                 {compLaporanH.map((l) => (
                   <Card key={l.id} style={st.laporanCard}>
                     <View style={st.laporanRow}>
                       <Ionicons name="document-text" size={20} color={Colors.warning} />
                       <View style={{ flex: 1 }}>
                         <Text style={st.laporanTitle}>Laporan {l.kondisi === 'aman' ? 'Aman' : l.kondisi === 'ada_masalah' ? 'Ada Masalah' : 'Perhatian Khusus'}</Text>
-                        <Text style={st.laporanSub}>{l.nama} • {l.tanggal} • {l.shift}</Text>
+                        <Text style={st.laporanSub}>{l.nama} â€¢ {l.tanggal} â€¢ {l.shift}</Text>
                       </View>
-                      <Badge text={l.status === 'approved' ? '✓' : l.status === 'pending' ? '⏳' : '↻'} variant={l.status === 'approved' ? 'success' : 'warning'} />
+                      <Badge text={l.status === 'approved' ? 'âœ“' : l.status === 'pending' ? 'â³' : 'â†»'} variant={l.status === 'approved' ? 'success' : 'warning'} />
                     </View>
                   </Card>
                 ))}
@@ -221,7 +223,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
         {/* === TAB: POS === */}
         {tab === 'Pos' && (
           <>
-            <Text style={st.posHeader}>{company.posList.length} Pos Jaga • {compCheckpoints.length} Checkpoint</Text>
+            <Text style={st.posHeader}>{company.posList.length} Pos Jaga â€¢ {compCheckpoints.length} Checkpoint</Text>
             {company.posList.map((p) => {
               const posMembers = members.filter((m) => m.pos === p.nama);
               return (
@@ -232,7 +234,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={st.posName}>{p.nama}</Text>
-                      <Text style={st.posRadius}>Radius: {p.radius}m • {posMembers.length} anggota</Text>
+                      <Text style={st.posRadius}>Radius: {p.radius}m â€¢ {posMembers.length} anggota</Text>
                     </View>
                     <Badge text={p.status === 'active' ? 'Aktif' : 'Nonaktif'} variant={p.status === 'active' ? 'success' : 'default'} />
                   </View>
@@ -257,13 +259,13 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
             {/* Checkpoints */}
             {compCheckpoints.length > 0 && (
               <>
-                <Text style={st.subSection}>📍 Checkpoint Patroli</Text>
+                <Text style={st.subSection}>ðŸ“ Checkpoint Patroli</Text>
                 {compCheckpoints.map((c) => (
                   <View key={c.id} style={st.checkpointCard}>
                     <View style={st.cpIcon}><Ionicons name="qr-code" size={18} color={Colors.purple} /></View>
                     <View style={{ flex: 1 }}>
                       <Text style={st.cpName}>{c.nama}</Text>
-                      <Text style={st.cpArea}>{c.area} • Radius {c.radius}m</Text>
+                      <Text style={st.cpArea}>{c.area} â€¢ Radius {c.radius}m</Text>
                     </View>
                     <Badge text={c.status === 'active' ? 'Aktif' : 'Off'} variant={c.status === 'active' ? 'success' : 'default'} />
                   </View>
@@ -283,7 +285,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
             <Ionicons name="checkmark-done" size={18} color="#fff" />
             <Text style={st.actionText}>Validasi</Text>
           </TouchableOpacity>
-          {/* <TouchableOpacity style={[st.actionBtn, { backgroundColor: Colors.warning }]} onPress={() => Alert.alert('📊', 'Membuka analitik untuk ' + company.nama)}>
+          {/* <TouchableOpacity style={[st.actionBtn, { backgroundColor: Colors.warning }]} onPress={() => Alert.alert('ðŸ“Š', 'Membuka analitik untuk ' + company.nama)}>
             <Ionicons name="bar-chart" size={18} color="#fff" />
             <Text style={st.actionText}>Analytics</Text>
           </TouchableOpacity> */}
@@ -297,7 +299,7 @@ export default function DetailPerusahaanScreen({ route, navigation }: any) {
 
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { backgroundColor: Colors.primaryDark, paddingTop: 48, paddingBottom: 16, paddingHorizontal: Spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  header: { backgroundColor: Colors.primaryDark, paddingBottom: 16, paddingHorizontal: Spacing.lg, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   backBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.12)', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   headerInfo: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   companyIconBg: { width: 48, height: 48, borderRadius: 14, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
@@ -366,3 +368,4 @@ const st = StyleSheet.create({
   empty: { alignItems: 'center', paddingVertical: 32, gap: 8 },
   emptyText: { fontSize: 13, color: Colors.textMuted },
 });
+============================================================

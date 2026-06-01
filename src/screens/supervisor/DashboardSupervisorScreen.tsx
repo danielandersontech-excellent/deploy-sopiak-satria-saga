@@ -2,28 +2,29 @@
  * DASHBOARD SUPERVISOR - v9 (Bug-Fix Pass)
  *
  * FIXES (v9):
- *  ✅ Unread badge now uses `unreadCountForRole('supervisor')` instead of raw
+ *  âœ… Unread badge now uses `unreadCountForRole('supervisor')` instead of raw
  *     `notifikasi.filter(!dibaca).length`. Previously counted ALL unread
  *     notifications including those targeted at anggota/komandan only.
- *  ✅ Bell badge clamped to "99+" (was overflowing UI for large counts).
- *  ✅ Map markers: lat/lng null/NaN check (was `m.lastLatitude && m.lastLongitude`
+ *  âœ… Bell badge clamped to "99+" (was overflowing UI for large counts).
+ *  âœ… Map markers: lat/lng null/NaN check (was `m.lastLatitude && m.lastLongitude`
  *     which excludes 0,0 even though they could be valid Atlantic coordinates).
- *  ✅ Off-duty status grouped correctly: `m.status !== 'off_duty'` counts
+ *  âœ… Off-duty status grouped correctly: `m.status !== 'off_duty'` counts
  *     `break` as on-duty (consistent with status meaning).
- *  ✅ Companies use `lokasiId` matching as primary (more reliable than name),
+ *  âœ… Companies use `lokasiId` matching as primary (more reliable than name),
  *     `lokasi` name as fallback. Same fix as komandan screens.
- *  ✅ Top performers: stable sort with id tiebreaker (avoids reorder churn).
- *  ✅ MapMarker uses proper `MapMarker['type']` union (no `as const` mix).
- *  ✅ Cleanup: removed unused `width` Dimensions extraction.
- *  ✅ Interval clears properly on unmount (no leak).
- *  ✅ Pull-to-refresh on dashboard scroll view.
- *  ✅ Safer `mapMarkers.id` to string for navigation comparison.
+ *  âœ… Top performers: stable sort with id tiebreaker (avoids reorder churn).
+ *  âœ… MapMarker uses proper `MapMarker['type']` union (no `as const` mix).
+ *  âœ… Cleanup: removed unused `width` Dimensions extraction.
+ *  âœ… Interval clears properly on unmount (no leak).
+ *  âœ… Pull-to-refresh on dashboard scroll view.
+ *  âœ… Safer `mapMarkers.id` to string for navigation comparison.
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Image,
   ActivityIndicator, RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -56,6 +57,7 @@ function isValidLatLng(lat: any, lng: any): boolean {
 }
 
 export default function DashboardSupervisorScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -128,7 +130,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
         latitude: Number(m.lastLatitude),
         longitude: Number(m.lastLongitude),
         title: m.nama,
-        description: `${m.pos || '-'} • ${m.shift || '-'}`,
+        description: `${m.pos || '-'} â€¢ ${m.shift || '-'}`,
         type: (m.status === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
         color: m.status === 'on_duty' ? Colors.success
           : m.status === 'patroli' ? Colors.primary
@@ -218,7 +220,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[s.header, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         <View style={s.headerTop}>
           <View>
             <Text style={s.greeting}>{t('dash.supervisor_dashboard')}</Text>
@@ -241,7 +243,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={s.scroll}
+        contentContainerStyle={[s.scroll, { paddingBottom: insets.bottom + 16 }]}
         showsVerticalScrollIndicator={false}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
@@ -404,7 +406,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
         <View style={s.sectionRow}>
           <Text style={[s.sectionTitle, { color: theme.text }]}>{t('dash.companies')}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('PerusahaanList')}>
-            <Text style={[s.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
+            <Text style={[s.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
           </TouchableOpacity>
         </View>
         {companies.map((c) => (
@@ -544,7 +546,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={[s.perfName, { color: theme.text }]}>{m.nama}</Text>
               <Text style={[s.perfSub, { color: theme.textMuted }]}>
-                {m.lokasi || '-'} • {m.pos || '-'}
+                {m.lokasi || '-'} â€¢ {m.pos || '-'}
               </Text>
             </View>
             <View style={s.scoreBox}>
@@ -571,7 +573,6 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
 const s = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    paddingTop: 48,
     paddingBottom: 16,
     paddingHorizontal: Spacing.lg,
     borderBottomLeftRadius: 24,
@@ -672,3 +673,4 @@ const s = StyleSheet.create({
   scoreBox: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   scoreVal: { fontSize: 18, fontWeight: '800' },
 });
+============================================================

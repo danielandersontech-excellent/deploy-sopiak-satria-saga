@@ -2,20 +2,21 @@
  * QR GENERATOR - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ✅ Dark mode support (was importing useTheme but using Colors directly).
- *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  ✅ Print/share errors no longer silently swallowed — proper alerts shown.
- *  ✅ HTML escape for cp.nama, cp.area, cp.lokasi, cp.qrCode (prevents XSS via
+ *  âœ… Dark mode support (was importing useTheme but using Colors directly).
+ *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  âœ… Print/share errors no longer silently swallowed â€” proper alerts shown.
+ *  âœ… HTML escape for cp.nama, cp.area, cp.lokasi, cp.qrCode (prevents XSS via
  *     names with HTML-like characters in printed output).
- *  ✅ Empty state when checkpoints list is empty.
- *  ✅ Generated count badge in action bar.
- *  ✅ Modal onRequestClose properly handles back button.
- *  ✅ Resilient default values when fields are missing.
+ *  âœ… Empty state when checkpoints list is empty.
+ *  âœ… Generated count badge in action bar.
+ *  âœ… Modal onRequestClose properly handles back button.
+ *  âœ… Resilient default values when fields are missing.
  */
 import React, { useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, Modal,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -191,6 +192,7 @@ function generateSingleQRHTML(cp: any) {
 
 // ======== MAIN COMPONENT ========
 export default function QRGeneratorScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const checkpoints = useDataStore((s) => s.checkpoints);
@@ -209,7 +211,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
   const handleGenerateAll = () => {
     setGenerated(checkpoints.map((c) => c.id));
     Alert.alert(
-      '✅ ' + (lang === 'en' ? 'Done' : 'Berhasil'),
+      'âœ… ' + (lang === 'en' ? 'Done' : 'Berhasil'),
       lang === 'en'
         ? `${checkpoints.length} QR Codes generated successfully`
         : `${checkpoints.length} QR Code berhasil digenerate`
@@ -286,7 +288,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -378,7 +380,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
                 <View style={{ flex: 1 }}>
                   <Text style={[st.cpName, { color: theme.text }]}>{cp.nama}</Text>
                   <Text style={[st.cpMeta, { color: theme.textMuted }]}>
-                    {cp.area || '-'} • {cp.lokasi || '-'}
+                    {cp.area || '-'} â€¢ {cp.lokasi || '-'}
                   </Text>
                   <Text style={[st.cpCode, { color: Colors.primary }]}>{cp.qrCode}</Text>
                 </View>
@@ -424,7 +426,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
           <View style={[st.modalContent, { backgroundColor: theme.bgCard }]}>
             <Text style={[st.modalTitle, { color: theme.text }]}>{previewCp?.nama}</Text>
             <Text style={[st.modalArea, { color: theme.textMuted }]}>
-              {previewCp?.area || '-'} • {previewCp?.lokasi || '-'}
+              {previewCp?.area || '-'} â€¢ {previewCp?.lokasi || '-'}
             </Text>
 
             <View style={{ marginVertical: 16, alignItems: 'center' }}>
@@ -472,7 +474,6 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -520,3 +521,4 @@ const st = StyleSheet.create({
   modalNote: { ...Typography.caption, textAlign: 'center', marginTop: 8 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
 });
+============================================================

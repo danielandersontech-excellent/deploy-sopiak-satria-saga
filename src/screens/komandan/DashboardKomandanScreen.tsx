@@ -9,12 +9,12 @@
  *   notifikasi: dibaca, target_lokasi_id
  *
  * FIXES (v10):
- *  ✅ getField() now also checks `pos_nama` and `lokasi_nama` (server fields)
- *  ✅ Bell badge clamped to '99+' when unreadCount > 99 (overflow safe)
- *  ✅ pulseAnim dependency made explicit (stable ref, lint-safe)
- *  ✅ Safer uid comparison (won't match anything if user.id is missing)
- *  ✅ MapMarker type assertion uses `as const` instead of `as any`
- *  ✅ Defensive fallbacks for all displayed values
+ *  âœ… getField() now also checks `pos_nama` and `lokasi_nama` (server fields)
+ *  âœ… Bell badge clamped to '99+' when unreadCount > 99 (overflow safe)
+ *  âœ… pulseAnim dependency made explicit (stable ref, lint-safe)
+ *  âœ… Safer uid comparison (won't match anything if user.id is missing)
+ *  âœ… MapMarker type assertion uses `as const` instead of `as any`
+ *  âœ… Defensive fallbacks for all displayed values
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -27,6 +27,7 @@
  */
 import React, { useEffect, useRef, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Animated } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge, MenuCard } from '../../components';
@@ -56,6 +57,7 @@ const STATUS_MAP: Record<string, { label: string; color: string }> = {
 };
 
 export default function DashboardKomandanScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -148,7 +150,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
           latitude: Number(lat),
           longitude: Number(lng),
           title: getField(m, 'nama', 'name') || 'Anggota',
-          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} â€¢ ${getField(m, 'shift') || '-'}`,
           type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
           color: (STATUS_MAP[mStatus] || STATUS_MAP.off_duty).color,
           status: mStatus,
@@ -187,13 +189,13 @@ export default function DashboardKomandanScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         <View style={st.headerContent}>
           <Image source={{ uri: userFoto }} style={st.avatar} />
           <View style={st.headerInfo}>
             <Text style={st.greeting}>{t('dash.komandan_dashboard')}</Text>
             <Text style={st.userName}>{userName}</Text>
-            <Text style={st.userPos}>{userPosJaga} • {userShift}</Text>
+            <Text style={st.userPos}>{userPosJaga} â€¢ {userShift}</Text>
           </View>
           <TouchableOpacity style={st.bellBtn} onPress={() => navigation.navigate('Notifikasi')}>
             <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -211,7 +213,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
         </View>
       </View>
 
-      <ScrollView contentContainerStyle={st.scroll} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[st.scroll, { paddingBottom: insets.bottom + 16 }]} showsVerticalScrollIndicator={false}>
         {panicActive && (
           <TouchableOpacity style={st.panicBanner} onPress={() => navigation.navigate('PanicButton')}>
             <Ionicons name="warning" size={22} color="#fff" />
@@ -279,7 +281,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
             <View style={st.sectionRow}>
               <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Pending Validation' : 'Menunggu Validasi'}</Text>
               <TouchableOpacity onPress={() => navigation.navigate('ValidasiLaporan')}>
-                <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
+                <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
               </TouchableOpacity>
             </View>
             {[...pendingH.slice(0, 2), ...pendingK.slice(0, 1)].map((item: any, idx) => {
@@ -309,7 +311,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
         <View style={st.sectionRow}>
           <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'My Team' : 'Tim Saya'}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('MonitorRealtime')}>
-            <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
+            <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
           </TouchableOpacity>
         </View>
         {myTeam.slice(0, 4).map((m: any) => {
@@ -327,7 +329,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
               <View style={[st.memberDot, { backgroundColor: ms.color }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[st.memberName, { color: theme.text }]}>{mNama}</Text>
-                <Text style={[st.memberPos, { color: theme.textMuted }]}>{mPos} • {mShift}</Text>
+                <Text style={[st.memberPos, { color: theme.textMuted }]}>{mPos} â€¢ {mShift}</Text>
               </View>
               <Badge
                 text={ms.label}
@@ -345,7 +347,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
         <View style={{ height: 100 }} />
       </ScrollView>
 
-      <TouchableOpacity style={st.panicFab} onPress={() => navigation.navigate('PanicButton')} activeOpacity={0.8}>
+      <TouchableOpacity style={[st.panicFab, { bottom: 22 + insets.bottom }]} onPress={() => navigation.navigate('PanicButton')} activeOpacity={0.8}>
         <Animated.View style={[st.panicInner, { transform: [{ scale: pulseAnim }] }]}>
           <Ionicons name="warning" size={20} color="#fff" />
           <Text style={st.panicFabText}>SOS</Text>
@@ -357,7 +359,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 46, paddingBottom: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
+  header: { paddingBottom: 16, borderBottomLeftRadius: 24, borderBottomRightRadius: 24 },
   headerContent: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: Spacing.lg },
   avatar: { width: 50, height: 50, borderRadius: 25, borderWidth: 2, borderColor: 'rgba(255,255,255,0.3)' },
   headerInfo: { flex: 1, marginLeft: 12 },
@@ -395,7 +397,8 @@ const st = StyleSheet.create({
   memberPos: { ...Typography.caption },
   broadcastBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderRadius: Radius.lg, padding: 14, marginTop: 16 },
   broadcastText: { ...Typography.bodyBold, color: '#fff' },
-  panicFab: { position: 'absolute', bottom: 22, right: 18, zIndex: 10 },
+  panicFab: { position: 'absolute', right: 18, zIndex: 10 },
   panicInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center', ...Shadows.lg },
   panicFabText: { color: '#fff', fontSize: 9, fontWeight: '800', marginTop: -2 },
 });
+============================================================

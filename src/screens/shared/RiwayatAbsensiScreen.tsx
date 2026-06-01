@@ -2,31 +2,32 @@
  * RIWAYAT ABSENSI - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  🚨 HARDCODED DUMMY DATA REMOVED — original had hardcoded Feb 2026 records
+ *  ðŸš¨ HARDCODED DUMMY DATA REMOVED â€” original had hardcoded Feb 2026 records
  *     (lines 31-36) mixed into the history list, making real records show
  *     alongside fake ones.
- *  🚨 STATS FIXED — original added "+4" to hadir and "+1" to terlambat, and
+ *  ðŸš¨ STATS FIXED â€” original added "+4" to hadir and "+1" to terlambat, and
  *     fallback to hardcoded "92%". Now uses pure real data.
- *  🚨 MONTH NAVIGATION FIXED — original changed `monthIdx` state but the
+ *  ðŸš¨ MONTH NAVIGATION FIXED â€” original changed `monthIdx` state but the
  *     records filter ignored it. Now filters by selected month.
- *  🚨 YEAR HARDCODED "2026" FIXED — now uses current year, with prev/next-year
+ *  ðŸš¨ YEAR HARDCODED "2026" FIXED â€” now uses current year, with prev/next-year
  *     navigation when month rolls over.
- *  🚨 RECORD GROUPING FIXED — original treated each absensi entry as a "day",
+ *  ðŸš¨ RECORD GROUPING FIXED â€” original treated each absensi entry as a "day",
  *     but each user has 2 entries per day (masuk + keluar). Now groups by
  *     `tanggal` so each day shows masuk AND keluar times in one card.
- *  🚨 `uid = 'T1'` fallback removed — was a dev demo fallback that bypassed
+ *  ðŸš¨ `uid = 'T1'` fallback removed â€” was a dev demo fallback that bypassed
  *     auth. Now properly handles no-user state.
  *
- *  ✅ Dark mode support (was importing useTheme but using Colors).
- *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian).
- *  ✅ Pull-to-refresh added.
- *  ✅ Empty state when no records exist for the selected month.
- *  ✅ Real day-of-week computation per record.
- *  ✅ Future months disabled (can't navigate to future).
- *  ✅ Records sorted newest first.
+ *  âœ… Dark mode support (was importing useTheme but using Colors).
+ *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian).
+ *  âœ… Pull-to-refresh added.
+ *  âœ… Empty state when no records exist for the selected month.
+ *  âœ… Real day-of-week computation per record.
+ *  âœ… Future months disabled (can't navigate to future).
+ *  âœ… Records sorted newest first.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -76,6 +77,7 @@ function parseStoredDate(tanggal: string): Date | null {
 }
 
 export default function RiwayatAbsensiScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -191,7 +193,7 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -220,7 +222,7 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Stats — REAL DATA, no fake +4/+1 */}
+      {/* Stats â€” REAL DATA, no fake +4/+1 */}
       <View style={[st.statsRow, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <View style={st.statItem}>
           <Text style={[st.statVal, { color: Colors.success }]}>{hadir}</Text>
@@ -308,7 +310,6 @@ const st = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -344,3 +345,4 @@ const st = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { ...Typography.body, textAlign: 'center', paddingHorizontal: 32 },
 });
+============================================================

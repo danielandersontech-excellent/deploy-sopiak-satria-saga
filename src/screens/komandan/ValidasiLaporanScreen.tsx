@@ -6,23 +6,23 @@
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, kronologi, status, lokasi_id, created_at
  *
  * CRITICAL FIXES (v4):
- *  🚨 Removed DUPLICATE API call in handleApprove/submitRevision.
+ *  ðŸš¨ Removed DUPLICATE API call in handleApprove/submitRevision.
  *     The store's updateLaporanHarianStatus / updateLaporanKejadianStatus
  *     already calls laporanApi.harianValidate / kejadianValidate internally.
  *     The screen was calling it AGAIN, causing duplicate audit logs &
  *     duplicate "Laporan Disetujui" notifications to the anggota.
- *     New flow: call API directly → on success update store via setState
+ *     New flow: call API directly â†’ on success update store via setState
  *     (avoids duplicate call AND keeps the optimistic UI update).
  *
- *  🚨 Fixed kronologi/aktivitas priority for Kejadian items:
+ *  ðŸš¨ Fixed kronologi/aktivitas priority for Kejadian items:
  *     - Card preview: Kejadian shows kronologi (was: aktivitas first)
  *     - Detail modal: same fix
  *
- *  ✅ Card preview now also shows pos_jaga / lokasi correctly per type
- *  ✅ Server failure now blocks optimistic update (was silent before)
- *  ✅ Defensive fallbacks for all displayed values
- *  ✅ Removed unused 'Approved' dead branch in filterStatus
- *  ✅ "Refresh Data" button localized
+ *  âœ… Card preview now also shows pos_jaga / lokasi correctly per type
+ *  âœ… Server failure now blocks optimistic update (was silent before)
+ *  âœ… Defensive fallbacks for all displayed values
+ *  âœ… Removed unused 'Approved' dead branch in filterStatus
+ *  âœ… "Refresh Data" button localized
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -39,6 +39,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal,
   RefreshControl, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -74,6 +75,7 @@ const TABS_ID = ['Pending', 'Disetujui', 'Revisi'];
 const TABS_EN = ['Pending', 'Approved', 'Revision'];
 
 export default function ValidasiLaporanScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -340,7 +342,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
             // Refetch to sync with server state
             await fetchLaporan();
 
-            Alert.alert('✅', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
+            Alert.alert('âœ…', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
             setShowDetail(null);
           } catch (err: any) {
             console.log('[Validasi] Approve error:', err);
@@ -387,7 +389,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       setShowDetail(null);
       setRevisionTarget(null);
       Alert.alert(
-        '⚠️',
+        'âš ï¸',
         lang === 'en'
           ? 'Revision requested. Member will be notified.'
           : 'Revisi diminta. Anggota akan menerima notifikasi revisi.'
@@ -445,7 +447,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[styles.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -505,7 +507,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         </View>
       ) : (
         <ScrollView
-          contentContainerStyle={styles.content}
+          contentContainerStyle={[styles.content, { paddingBottom: insets.bottom + 16 }]}
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
         >
           {filteredLaporan.length === 0 ? (
@@ -581,7 +583,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                       {itemNarrative}
                     </Text>
                     <Text style={[styles.cardDate, { color: theme.textMuted }]}>
-                      {itemTanggal} • {getLokasiDisplay(item)} {itemShift ? `• ${itemShift}` : ''}
+                      {itemTanggal} â€¢ {getLokasiDisplay(item)} {itemShift ? `â€¢ ${itemShift}` : ''}
                     </Text>
 
                     {itemCatatan ? (
@@ -666,8 +668,8 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                     label: lang === 'en' ? 'Date / Time' : 'Tanggal / Waktu',
                     value:
                       getField(showDetail, 'tipe') === 'Kejadian'
-                        ? `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktu_kejadian', 'waktuKejadian') || getField(showDetail, 'waktuSubmit') || '-'}`
-                        : `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktuSubmit') || '-'}`,
+                        ? `${getField(showDetail, 'tanggal') || '-'} â€¢ ${getField(showDetail, 'waktu_kejadian', 'waktuKejadian') || getField(showDetail, 'waktuSubmit') || '-'}`
+                        : `${getField(showDetail, 'tanggal') || '-'} â€¢ ${getField(showDetail, 'waktuSubmit') || '-'}`,
                   },
                   {
                     label:
@@ -844,7 +846,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -892,3 +893,4 @@ const styles = StyleSheet.create({
   modalInput: { borderWidth: 1.5, borderRadius: Radius.md, padding: 14, ...Typography.body, height: 100, marginBottom: 16 },
   modalActionsRow: { flexDirection: 'row', gap: 10 },
 });
+============================================================

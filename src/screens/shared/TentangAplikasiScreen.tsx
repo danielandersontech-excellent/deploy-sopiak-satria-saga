@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -7,11 +8,12 @@ import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 export default function TentangAplikasiScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   return (
     <View style={st.container}>
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={st.headerTitle}>Tentang Aplikasi</Text>
         <View style={{ width: 40 }} />
@@ -49,7 +51,7 @@ export default function TentangAplikasiScreen({ navigation }: any) {
             </View>
           ))}
         </Card>
-        <Text style={st.copyright}>© 2026 PT Sopiak Satria Saga{'\n'}All rights reserved.</Text>
+        <Text style={st.copyright}>Â© 2026 PT Sopiak Satria Saga{'\n'}All rights reserved.</Text>
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>
@@ -57,7 +59,7 @@ export default function TentangAplikasiScreen({ navigation }: any) {
 }
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   content: { padding: Spacing.base },
@@ -74,3 +76,4 @@ const st = StyleSheet.create({
   contactValue: { ...Typography.smallBold, color: Colors.textPrimary },
   copyright: { ...Typography.caption, color: Colors.textMuted, textAlign: 'center', marginTop: 24 },
 });
+============================================================

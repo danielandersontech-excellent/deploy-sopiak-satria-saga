@@ -2,7 +2,7 @@
  * MANAJEMEN LOKASI - v3 (Bug-Fix Pass)
  *
  * CRITICAL FIXES (v3):
- *  🚨 Pos Jaga add/edit/delete were SILENTLY LOST on refresh!
+ *  ðŸš¨ Pos Jaga add/edit/delete were SILENTLY LOST on refresh!
  *     The store's `updateLokasi(id, { posList })` only updates LOCAL state and
  *     calls `dataApi.lokasi.update()` which does NOT accept posList field.
  *     Backend has separate /api/data/pos-jaga endpoints. Pos changes vanished
@@ -12,21 +12,22 @@
  *     update Zustand state via setState to keep UI in sync. After refresh
  *     posList is rebuilt by store mapping pos_jaga + lokasi tables.
  *
- *  ✅ Add Pos: include lokasi_id in payload (was missing - pos created without lokasi).
- *  ✅ Edit Pos: full update with all fields (was only updating name+radius+status locally).
- *  ✅ Delete Pos: backend delete + local state sync.
- *  ✅ Submitting state on all mutations to prevent double-tap.
- *  ✅ Error messages localized; backend errors shown to user instead of silently failing.
- *  ✅ Pull-to-refresh added.
- *  ✅ Modal `onRequestClose` for Android back button.
- *  ✅ Lat/Lng validation: range checks (-90..90, -180..180).
- *  ✅ Radius validation: integer, 10-500m range.
+ *  âœ… Add Pos: include lokasi_id in payload (was missing - pos created without lokasi).
+ *  âœ… Edit Pos: full update with all fields (was only updating name+radius+status locally).
+ *  âœ… Delete Pos: backend delete + local state sync.
+ *  âœ… Submitting state on all mutations to prevent double-tap.
+ *  âœ… Error messages localized; backend errors shown to user instead of silently failing.
+ *  âœ… Pull-to-refresh added.
+ *  âœ… Modal `onRequestClose` for Android back button.
+ *  âœ… Lat/Lng validation: range checks (-90..90, -180..180).
+ *  âœ… Radius validation: integer, 10-500m range.
  */
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
   Modal, KeyboardAvoidingView, Platform, RefreshControl, ActivityIndicator,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -45,6 +46,7 @@ function getField(obj: any, ...keys: string[]): any {
 }
 
 export default function ManajemenLokasiScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const lokasi = useDataStore((s) => s.lokasi);
@@ -111,7 +113,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setShowAddPos(true);
   };
 
-  // 🚨 CRITICAL FIX: Call posJaga API directly + sync local state
+  // ðŸš¨ CRITICAL FIX: Call posJaga API directly + sync local state
   const handleAddPos = async () => {
     if (submitting) return;
     if (!newPosNama.trim()) {
@@ -163,7 +165,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 
       setShowAddPos(false);
       Alert.alert(
-        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en'
           ? `Post "${newPosNama.trim()}" has been added to ${lok.nama}`
           : `Pos "${newPosNama.trim()}" berhasil ditambahkan ke ${lok.nama}`
@@ -209,7 +211,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       });
       setShowEditLokasi(false);
       Alert.alert(
-        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en' ? 'Location updated successfully' : 'Lokasi berhasil diperbarui'
       );
     } catch (e: any) {
@@ -235,7 +237,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setShowEditPos(true);
   };
 
-  // 🚨 CRITICAL FIX: Edit Pos persists to backend via posJaga API
+  // ðŸš¨ CRITICAL FIX: Edit Pos persists to backend via posJaga API
   const handleEditPos = async () => {
     if (submitting) return;
     if (!editPosNama.trim()) {
@@ -280,7 +282,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       }));
 
       setShowEditPos(false);
-      Alert.alert('✅', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
+      Alert.alert('âœ…', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
     } catch (e: any) {
       console.log('[Lokasi] edit pos err:', e);
       Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to update post' : 'Gagal memperbarui pos'));
@@ -289,7 +291,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     }
   };
 
-  // 🚨 CRITICAL FIX: Delete Pos persists to backend
+  // ðŸš¨ CRITICAL FIX: Delete Pos persists to backend
   const handleDeletePos = (lokId: string, posId: string, posName: string) => {
     Alert.alert(
       lang === 'en' ? 'Delete Post?' : 'Hapus Pos?',
@@ -324,7 +326,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[st.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -371,7 +373,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       </View>
 
       <ScrollView
-        contentContainerStyle={st.content}
+        contentContainerStyle={[st.content, { paddingBottom: insets.bottom + 16 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {filtered.map((l) => (
@@ -385,7 +387,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                   <Text style={[st.locName, { color: theme.text }]}>{l.nama}</Text>
                   <Text style={[st.locAddr, { color: theme.textMuted }]}>{l.alamat || '-'}</Text>
                   <Text style={[st.locMeta, { color: theme.textMuted }]}>
-                    {l.posList.length} pos • {l.totalAnggota} {lang === 'en' ? 'members' : 'anggota'}
+                    {l.posList.length} pos â€¢ {l.totalAnggota} {lang === 'en' ? 'members' : 'anggota'}
                   </Text>
                 </View>
                 <Badge
@@ -414,7 +416,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                       <Text style={[st.posDetail, { color: theme.textMuted }]}>
                         Radius: {p.radius}m
                         {p.latitude != null && p.longitude != null
-                          ? ` • ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}`
+                          ? ` â€¢ ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}`
                           : ''}
                       </Text>
                     </View>
@@ -805,7 +807,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 const st = StyleSheet.create({
   container: { flex: 1 },
   header: {
-    flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12,
+    flexDirection: 'row', alignItems: 'center', paddingBottom: 12,
     paddingHorizontal: Spacing.base, borderBottomWidth: 1,
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
@@ -863,3 +865,4 @@ const st = StyleSheet.create({
   statusChipText: { ...Typography.smallBold },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
 });
+============================================================

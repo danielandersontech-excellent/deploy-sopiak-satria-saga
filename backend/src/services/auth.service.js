@@ -1,8 +1,10 @@
 /**
  * AUTH SERVICE - Authentication business logic
  * v18 - Added klien (client) login support
+ * v19 - Hardening N-06: register() kini membuat PIN awal acak (bukan '123456')
  */
 const bcrypt = require('bcryptjs');
+const crypto = require('crypto');
 const authRepo = require('../repositories/auth.repository');
 const { generateToken, generateRefreshToken } = require('../middleware/auth');
 const { logEvent } = require('../middleware/auditlog');
@@ -137,7 +139,15 @@ class AuthService {
     const exists = await authRepo.nrpExists(data.nrp);
     if (exists) throw { status: 409, message: 'NRP sudah terdaftar' };
 
-    const pin_hash = await bcrypt.hash('123456', parseInt(process.env.BCRYPT_ROUNDS || '12'));
+    // Hardening (N-06): PIN awal acak 6 digit, bukan '123456' yang bisa
+    // ditebak. Selaras pola reset-PIN klien (data.routes.js) & client.create()
+    // (data.service.js): crypto.randomInt memberi distribusi seragam di
+    // 100000..999999 (Math.random bisa diprediksi); padStart adalah jaring
+    // pengaman bila rentang diperlebar. Cost factor tetap mengikuti
+    // BCRYPT_ROUNDS (default 12). must_change_pin (default DB TRUE — createUser
+    // tidak menulis kolom ini) tetap memaksa rotasi saat login pertama.
+    const plainPin = String(crypto.randomInt(100000, 1000000)).padStart(6, '0');
+    const pin_hash = await bcrypt.hash(plainPin, parseInt(process.env.BCRYPT_ROUNDS || '12'));
     const user = await authRepo.createUser({
       ...data,
       no_hp: data.no_hp || null,
@@ -159,7 +169,14 @@ class AuthService {
       skor: data.skor || 80,
     });
     delete user.pin_hash;
-    return user;
+
+    // Kembalikan PIN plaintext SEKALI sebagai field tambahan. Bentuk respons
+    // tetap objek user (flat) + `initial_pin`, sehingga pemanggil yang membaca
+    // field user (mis. mobile TambahEditUserScreen) tidak rusak. Controller
+    // (auth.controller.js exports.register) meneruskan apa adanya ke res.json,
+    // jadi field ini otomatis sampai ke front-end untuk ditampilkan sekali.
+    // PENTING: JANGAN menulis `plainPin`/`initial_pin` ke logger mana pun.
+    return { ...user, initial_pin: plainPin };
   }
 }
 

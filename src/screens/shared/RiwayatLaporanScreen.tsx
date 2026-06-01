@@ -1,5 +1,6 @@
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -11,6 +12,7 @@ import { useTheme } from '../../lib/theme';
 const TABS = ['Semua', 'Harian', 'Kejadian'];
 
 export default function RiwayatLaporanScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -37,7 +39,7 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
 
   return (
     <View style={st.container}>
-      <View style={st.header}>
+      <View style={[st.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={st.headerTitle}>Riwayat Laporan</Text>
         <View style={{ width: 40 }} />
@@ -60,7 +62,7 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
               <Text style={st.cardId}>{l.id}</Text>
             </View>
             <Text style={st.cardDesc}>{l.desc}</Text>
-            <Text style={st.cardMeta}>{(l as any).tanggal || '-'} • {l.waktuSubmit}</Text>
+            <Text style={st.cardMeta}>{(l as any).tanggal || '-'} â€¢ {l.waktuSubmit}</Text>
             {l.catatanKomandan ? <Text style={st.catatan}>Catatan: {l.catatanKomandan}</Text> : null}
           </Card>
         ))}
@@ -71,7 +73,7 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
 }
 const st = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.bgLight },
-  header: { flexDirection: 'row', alignItems: 'center', paddingTop: 50, paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
+  header: { flexDirection: 'row', alignItems: 'center', paddingBottom: 12, paddingHorizontal: Spacing.base, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary, flex: 1, textAlign: 'center' },
   tabsRow: { flexDirection: 'row', gap: 8, paddingHorizontal: Spacing.base, paddingVertical: 10, backgroundColor: Colors.bgWhite, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
@@ -89,3 +91,4 @@ const st = StyleSheet.create({
   cardMeta: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
   catatan: { ...Typography.caption, color: Colors.warning, marginTop: 6, fontStyle: 'italic' },
 });
+============================================================

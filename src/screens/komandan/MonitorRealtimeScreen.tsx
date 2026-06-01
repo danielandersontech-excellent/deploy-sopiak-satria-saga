@@ -6,15 +6,15 @@
  *   lokasi: id, nama, alamat, posList (JSON with pos details)
  *
  * CRITICAL FIX (v11):
- *  🚨 fetchLiveLocations now uses extractArray() to handle paginated
+ *  ðŸš¨ fetchLiveLocations now uses extractArray() to handle paginated
  *     backend response { data: [...], pagination: {...} }.
- *     Previously Array.isArray(data) was ALWAYS FALSE → liveData was
- *     always empty → map markers never updated from live API.
- *  ✅ useEffect deps include fetchLiveLocations (lint-safe)
- *  ✅ Filtered list is memoized to avoid recomputation each render
- *  ✅ `filtered.map` uses stable key (id || nrp) instead of random
- *  ✅ MapMarker.id coerced to string for safe comparison
- *  ✅ Lat/Lng validity check (rejects NaN values)
+ *     Previously Array.isArray(data) was ALWAYS FALSE â†’ liveData was
+ *     always empty â†’ map markers never updated from live API.
+ *  âœ… useEffect deps include fetchLiveLocations (lint-safe)
+ *  âœ… Filtered list is memoized to avoid recomputation each render
+ *  âœ… `filtered.map` uses stable key (id || nrp) instead of random
+ *  âœ… MapMarker.id coerced to string for safe comparison
+ *  âœ… Lat/Lng validity check (rejects NaN values)
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -26,6 +26,7 @@
  */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, RefreshControl, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
@@ -78,6 +79,7 @@ const STATUS_MAP: Record<
 type ViewMode = 'map' | 'list';
 
 export default function MonitorRealtimeScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -229,7 +231,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
           latitude: loc.lat,
           longitude: loc.lng,
           title: getField(m, 'nama', 'name') || 'Anggota',
-          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} â€¢ ${getField(m, 'shift') || '-'}`,
           type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
           color: st2.color,
           status: mStatus,
@@ -268,7 +270,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       {/* Header */}
-      <View style={[s.header, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
+      <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
           <View style={{ flex: 1 }}>
             <Text style={s.headerSub}>{companyName}</Text>
@@ -348,7 +350,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
 
       {/* List */}
       <ScrollView
-        contentContainerStyle={s.content}
+        contentContainerStyle={[s.content, { paddingBottom: insets.bottom + 16 }]}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
       >
         {filtered.map((m: any) => {
@@ -376,7 +378,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={[s.memberName, { color: theme.text }]}>{mNama}</Text>
                     <Text style={[s.memberMeta, { color: theme.textMuted }]}>
-                      {mPos} • {mShift}
+                      {mPos} â€¢ {mShift}
                     </Text>
                     {loc ? (
                       <View style={s.locRow}>
@@ -384,7 +386,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
                         <Text style={s.locText}>
                           {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
                         </Text>
-                        {loc.seen ? <Text style={[s.locTime, { color: theme.textMuted }]}>• {timeAgo(loc.seen)}</Text> : null}
+                        {loc.seen ? <Text style={[s.locTime, { color: theme.textMuted }]}>â€¢ {timeAgo(loc.seen)}</Text> : null}
                       </View>
                     ) : (
                       <View style={s.locRow}>
@@ -423,7 +425,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
 
 const s = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
+  header: { paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomLeftRadius: 20, borderBottomRightRadius: 20 },
   headerSub: { fontSize: 11, color: 'rgba(255,255,255,0.6)', marginBottom: 2 },
   headerTitle: { fontSize: 20, fontWeight: '800', color: '#fff' },
   trackedBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
@@ -453,3 +455,4 @@ const s = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...Typography.body, marginTop: 8 },
 });
+============================================================

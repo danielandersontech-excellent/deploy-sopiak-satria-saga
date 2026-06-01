@@ -2,29 +2,30 @@
  * SETUP CHECKPOINT - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  🚨 Hardcoded latitude: 0.5071, longitude: 101.4478 (Pekanbaru!) for ALL new
- *     checkpoints — now uses user-entered values with validation.
- *  🚨 No lokasi_id assigned — checkpoint had no foreign key to lokasi.
+ *  ðŸš¨ Hardcoded latitude: 0.5071, longitude: 101.4478 (Pekanbaru!) for ALL new
+ *     checkpoints â€” now uses user-entered values with validation.
+ *  ðŸš¨ No lokasi_id assigned â€” checkpoint had no foreign key to lokasi.
  *     Now requires lokasi selection from dropdown and passes lokasi_id to API.
- *  🚨 Used store.addCheckpoint which doesn't pass lokasi_id. Now calls
+ *  ðŸš¨ Used store.addCheckpoint which doesn't pass lokasi_id. Now calls
  *     dataApi.checkpoints.create() directly + syncs local state.
  *
- *  ✅ Dark mode + i18n (was importing both but using neither).
- *  ✅ Modal `onRequestClose` for Android back button.
- *  ✅ Lat/lng/radius input fields added.
- *  ✅ Coordinate range validation (-90..90, -180..180).
- *  ✅ Radius validation (5-200m).
- *  ✅ QR code uniqueness via timestamp suffix.
- *  ✅ Edit mode for checkpoint (was only status toggle).
- *  ✅ Empty state.
- *  ✅ Pull-to-refresh.
- *  ✅ Submitting state.
+ *  âœ… Dark mode + i18n (was importing both but using neither).
+ *  âœ… Modal `onRequestClose` for Android back button.
+ *  âœ… Lat/lng/radius input fields added.
+ *  âœ… Coordinate range validation (-90..90, -180..180).
+ *  âœ… Radius validation (5-200m).
+ *  âœ… QR code uniqueness via timestamp suffix.
+ *  âœ… Edit mode for checkpoint (was only status toggle).
+ *  âœ… Empty state.
+ *  âœ… Pull-to-refresh.
+ *  âœ… Submitting state.
  */
 import React, { useState, useCallback } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert,
   Modal, KeyboardAvoidingView, Platform, RefreshControl,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge, Button } from '../../components';
@@ -45,6 +46,7 @@ function isValidLatLng(lat: number, lng: number): boolean {
 }
 
 export default function SetupCheckpointScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const checkpoints = useDataStore((s) => s.checkpoints);
@@ -119,7 +121,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
     setShowModal(true);
   };
 
-  // 🚨 CRITICAL FIX: Call API directly with lokasi_id + sync local state
+  // ðŸš¨ CRITICAL FIX: Call API directly with lokasi_id + sync local state
   const handleSave = async () => {
     if (submitting) return;
 
@@ -179,7 +181,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
           ),
         }));
 
-        Alert.alert('✅', lang === 'en' ? 'Checkpoint updated' : 'Checkpoint berhasil diperbarui');
+        Alert.alert('âœ…', lang === 'en' ? 'Checkpoint updated' : 'Checkpoint berhasil diperbarui');
       } else {
         // === CREATE ===
         const qrCode = `QR-${fName.trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '')}-${Date.now().toString(36).toUpperCase()}`;
@@ -213,7 +215,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
         }));
 
         Alert.alert(
-          '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+          'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
           lang === 'en' ? 'Checkpoint created' : 'Checkpoint baru ditambahkan'
         );
       }
@@ -250,7 +252,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
 
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
-      <View style={[styles.header, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
           <Ionicons name="arrow-back" size={24} color={theme.text} />
         </TouchableOpacity>
@@ -292,11 +294,11 @@ export default function SetupCheckpointScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cpName, { color: theme.text }]}>{cp.nama}</Text>
                 <Text style={[styles.cpMeta, { color: theme.textMuted }]}>
-                  {cp.area || '-'} • {cp.lokasi || '-'}
+                  {cp.area || '-'} â€¢ {cp.lokasi || '-'}
                 </Text>
                 <Text style={[styles.cpDetail, { color: theme.textMuted }]}>
                   {cp.latitude != null && cp.longitude != null
-                    ? `${Number(cp.latitude).toFixed(4)}, ${Number(cp.longitude).toFixed(4)} • ${cp.radius || 15}m`
+                    ? `${Number(cp.latitude).toFixed(4)}, ${Number(cp.longitude).toFixed(4)} â€¢ ${cp.radius || 15}m`
                     : `Radius ${cp.radius || 15}m`}
                 </Text>
                 <Text style={[styles.cpCode, { color: Colors.primary }]}>QR: {cp.qrCode}</Text>
@@ -549,7 +551,6 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingTop: 50,
     paddingBottom: 12,
     paddingHorizontal: Spacing.base,
     borderBottomWidth: 1,
@@ -604,3 +605,4 @@ const styles = StyleSheet.create({
   statusChipText: { ...Typography.smallBold },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
 });
+============================================================

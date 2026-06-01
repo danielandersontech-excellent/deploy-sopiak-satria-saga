@@ -2,27 +2,27 @@
  * DOWNLOAD LAPORAN KLIEN - v25 (Bug-Fix Pass on top of v24)
  *
  * FIXES (v25):
- *  🚨 XSS PREVENTION — buildHTML interpolated `nama`, `nrp`, `posJaga`,
+ *  ðŸš¨ XSS PREVENTION â€” buildHTML interpolated `nama`, `nrp`, `posJaga`,
  *     `kondisi`, `aktivitas`, `kronologi`, `lokasiText`, `jenis` directly into
  *     HTML. Fields with `<` or HTML-like content would break the template or
  *     execute scripts. Now every field passes through escapeHtml().
- *  🚨 EMPTY CATCH BLOCKS — Print/Share errors silently swallowed. User taps
+ *  ðŸš¨ EMPTY CATCH BLOCKS â€” Print/Share errors silently swallowed. User taps
  *     button, nothing happens, no error message. Now errors surface via Alert.
- *  🚨 PATROLI COUNT ALWAYS 0 — original hardcoded `count: 0` even when there
+ *  ðŸš¨ PATROLI COUNT ALWAYS 0 â€” original hardcoded `count: 0` even when there
  *     were patrol records. Now fetches via `patroliApi.list()` + extractArray()
  *     and renders an actual patrol table when generating the report.
- *  🚨 NO BACK BUTTON — DownloadLaporanScreen is registered BOTH as a tab AND
+ *  ðŸš¨ NO BACK BUTTON â€” DownloadLaporanScreen is registered BOTH as a tab AND
  *     as a stack screen. When reached via stack push (e.g. from Dashboard menu),
  *     user had no way back. Now uses navigation.canGoBack() to conditionally
  *     render a back arrow.
- *  🚨 PRIVACY LEAK — klien user with no `lokasi_id` saw EVERY company's data.
- *     Now hideAll → empty + notice.
+ *  ðŸš¨ PRIVACY LEAK â€” klien user with no `lokasi_id` saw EVERY company's data.
+ *     Now hideAll â†’ empty + notice.
  *
- *  ✅ Filter chips ('Semua', 'Harian', etc.) labels now i18n'd.
- *  ✅ Locale-aware date formatting (id-ID vs en-US) in HTML and UI.
- *  ✅ Stat label `textTransform: capitalize` removed (couldn't handle ID/EN
- *     multi-word) — labels are now pre-translated.
- *  ✅ `aktivitas.substring(0,80)` truncation now appends "…" instead of
+ *  âœ… Filter chips ('Semua', 'Harian', etc.) labels now i18n'd.
+ *  âœ… Locale-aware date formatting (id-ID vs en-US) in HTML and UI.
+ *  âœ… Stat label `textTransform: capitalize` removed (couldn't handle ID/EN
+ *     multi-word) â€” labels are now pre-translated.
+ *  âœ… `aktivitas.substring(0,80)` truncation now appends "â€¦" instead of
  *     cutting mid-word silently.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -30,6 +30,7 @@ import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert,
   ActivityIndicator, Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
@@ -60,7 +61,7 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
-// 🚨 XSS prevention
+// ðŸš¨ XSS prevention
 function escapeHtml(s: any): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -74,7 +75,7 @@ function escapeHtml(s: any): string {
 function truncate(s: string, max: number): string {
   if (!s) return '';
   if (s.length <= max) return s;
-  return s.substring(0, max - 1).trimEnd() + '…';
+  return s.substring(0, max - 1).trimEnd() + 'â€¦';
 }
 
 function extractArray(result: any): any[] {
@@ -86,6 +87,7 @@ function extractArray(result: any): any[] {
 }
 
 export default function DownloadLaporanScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
@@ -98,7 +100,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
   const rawLK = useDataStore((s) => s.laporanKejadian);
   const rawAbs = useDataStore((s) => s.absensiRecords);
 
-  // 🚨 Privacy filter — hideAll if klien without lokasi
+  // ðŸš¨ Privacy filter â€” hideAll if klien without lokasi
   const laporanH = useMemo(() => {
     if (hideAll) return [];
     if (!myLokasiId) return rawLH;
@@ -130,7 +132,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
 
   const dateLocale = lang === 'en' ? 'en-US' : 'id-ID';
 
-  // 🚨 Fetch real patroli data instead of always showing count=0
+  // ðŸš¨ Fetch real patroli data instead of always showing count=0
   useEffect(() => {
     let alive = true;
     if (hideAll) {
@@ -309,7 +311,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
     }
 
     if (type === 'Patroli') {
-      // 🚨 Build actual patroli table now (was always empty)
+      // ðŸš¨ Build actual patroli table now (was always empty)
       const rows = patroli.map((p) => {
         const userName = escapeHtml(getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas'));
         const routeName = escapeHtml(getField(p, 'route_name', 'routeName') || '-');
@@ -382,7 +384,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
     {
       id: 'P', type: 'Patroli' as const,
       title: lang === 'en' ? 'Patrol Reports' : 'Laporan Patroli',
-      count: patroli.length, // 🚨 real count from fetched data
+      count: patroli.length, // ðŸš¨ real count from fetched data
       desc: loadingPatroli
         ? (lang === 'en' ? 'Loading patrol data...' : 'Memuat data patroli...')
         : `${patroli.length} ${lang === 'en' ? 'records' : 'record'}`,
@@ -452,8 +454,8 @@ export default function DownloadLaporanScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      {/* Header — conditional back button (this screen is both Tab AND Stack) */}
-      <View style={[st.header, { backgroundColor: isDark ? theme.bgCard : '#fff', borderBottomColor: theme.border }]}>
+      {/* Header â€” conditional back button (this screen is both Tab AND Stack) */}
+      <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : '#fff', borderBottomColor: theme.border }]}>
         <View style={st.headerRow}>
           {canGoBack && (
             <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn} hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}>
@@ -507,7 +509,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
         </ScrollView>
       </View>
 
-      <ScrollView contentContainerStyle={st.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={[st.content, { paddingBottom: insets.bottom + 16 }]} showsVerticalScrollIndicator={false}>
         {hideAll && (
           <View style={[st.noticeCard, { backgroundColor: isDark ? `${Colors.warning}15` : Colors.warningBg, borderColor: Colors.warning }]}>
             <Ionicons name="alert-circle" size={18} color={Colors.warning} />
@@ -629,7 +631,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
 
 const st = StyleSheet.create({
   container: { flex: 1 },
-  header: { paddingTop: 48, paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomWidth: 1 },
+  header: { paddingBottom: 14, paddingHorizontal: Spacing.base, borderBottomWidth: 1 },
   headerRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   backBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
@@ -661,3 +663,4 @@ const st = StyleSheet.create({
   infoTitle: { fontSize: 12, fontWeight: '700' },
   infoDesc: { fontSize: 11, marginTop: 2, lineHeight: 16 },
 });
+============================================================

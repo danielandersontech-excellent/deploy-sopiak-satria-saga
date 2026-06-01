@@ -1,19 +1,36 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, Vibration } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, Animated, Alert, Vibration, Linking } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Button } from '../../components';
 import { useDataStore } from '../../stores/dataStore';
+import { useAuthStore } from '../../stores/authStore';
 import { getCurrentLocation } from '../../services/locationService';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 export default function PanicButtonScreen({ navigation }: any) {
+  const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const panicActive = useDataStore((s) => s.panicActive);
   const activatePanic = useDataStore((s) => s.activatePanic);
   const deactivatePanic = useDataStore((s) => s.deactivatePanic);
+  const team = useDataStore((s) => s.team);
+  const user = useAuthStore((s) => s.user);
+  // Kontak darurat nyata: komandan/supervisor (utamakan lokasi yang sama dgn user)
+  const myLokasi = user?.lokasi_nama || user?.lokasi;
+  const emergencyContacts = React.useMemo(() => {
+    const isCmdOrSpv = (r?: string) => r === 'komandan' || r === 'supervisor';
+    const sameLoc = team.filter((m) => isCmdOrSpv(m.role) && m.noHp && (!myLokasi || m.lokasi === myLokasi));
+    const anyLoc = team.filter((m) => isCmdOrSpv(m.role) && m.noHp);
+    const picked = (sameLoc.length ? sameLoc : anyLoc).slice(0, 3);
+    return picked.map((m) => ({
+      nama: `${m.nama} (${m.role === 'komandan' ? 'Komandan' : 'Supervisor'})`,
+      hp: m.noHp,
+    }));
+  }, [team, myLokasi]);
 
   const [phase, setPhase] = useState<'confirm' | 'activating' | 'active'>(panicActive ? 'active' : 'confirm');
   const [holdProgress, setHoldProgress] = useState(0);
@@ -87,7 +104,7 @@ export default function PanicButtonScreen({ navigation }: any) {
   if (phase === 'active') {
     return (
       <View style={styles.container}>
-        <View style={styles.activeHeader}>
+        <View style={[styles.activeHeader, { paddingTop: insets.top + 12 }]}>
           <Animated.View style={{ transform: [{ scale: pulseAnim }] }}>
             <Ionicons name="warning" size={28} color="#fff" />
           </Animated.View>
@@ -104,18 +121,17 @@ export default function PanicButtonScreen({ navigation }: any) {
             <Ionicons name="location" size={32} color={Colors.success} />
             <Text style={styles.activeCardTitle}>Lokasi Anda</Text>
             <Text style={styles.activeCardText}>{loc?.address || 'Mengambil lokasi...'}{'\n'}{loc ? `${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}` : ''}</Text>
-            <Text style={styles.liveText}>🔴 Live tracking aktif</Text>
+            <Text style={styles.liveText}>Ã°Å¸â€Â´ Live tracking aktif</Text>
           </View>
           <View style={styles.contactCard}>
             <Text style={styles.contactTitle}>Kontak Darurat</Text>
-            {[
-              { nama: 'Budi Santoso (Komandan)', hp: '081234567891' },
-              { nama: 'Dian Pratama (Supervisor)', hp: '081234567892' },
-            ].map((c, i) => (
+            {emergencyContacts.length === 0 ? (
+              <Text style={styles.contactEmpty}>Kontak komandan/supervisor belum tersedia. Segera hubungi pusat kendali.</Text>
+            ) : emergencyContacts.map((c, i) => (
               <View key={i} style={styles.contactRow}>
                 <Ionicons name="person" size={18} color={Colors.primary} />
                 <Text style={styles.contactName}>{c.nama}</Text>
-                <TouchableOpacity style={styles.callBtn}><Ionicons name="call" size={16} color={Colors.success} /></TouchableOpacity>
+                <TouchableOpacity style={styles.callBtn} onPress={() => Linking.openURL('tel:' + c.hp.replace(/[^0-9+]/g, '')).catch(() => Alert.alert('Gagal', 'Tidak bisa membuka aplikasi telepon'))}><Ionicons name="call" size={16} color={Colors.success} /></TouchableOpacity>
               </View>
             ))}
           </View>
@@ -164,7 +180,7 @@ const styles = StyleSheet.create({
   activatingTitle: { ...Typography.h1, color: '#fff', marginTop: 20 },
   activatingMsg: { ...Typography.body, color: 'rgba(255,255,255,0.8)', marginTop: 8 },
   activeHeader: {
-    width: '100%', backgroundColor: Colors.danger, paddingTop: 50, paddingBottom: 16,
+    width: '100%', backgroundColor: Colors.danger, paddingBottom: 16,
     alignItems: 'center', flexDirection: 'row', justifyContent: 'center', gap: 12, paddingHorizontal: 20,
   },
   activeHeaderText: { ...Typography.bodyBold, color: '#fff' },
@@ -181,5 +197,6 @@ const styles = StyleSheet.create({
   contactTitle: { ...Typography.bodyBold, color: Colors.textPrimary, marginBottom: 8 },
   contactRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: Colors.borderLight },
   contactName: { ...Typography.small, color: Colors.textPrimary, flex: 1 },
+  contactEmpty: { ...Typography.small, color: Colors.textMuted, paddingVertical: 8 },
   callBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.successBg, alignItems: 'center', justifyContent: 'center' },
 });
