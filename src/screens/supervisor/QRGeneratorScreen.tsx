@@ -2,15 +2,15 @@
  * QR GENERATOR - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  âœ… Dark mode support (was importing useTheme but using Colors directly).
- *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  âœ… Print/share errors no longer silently swallowed â€” proper alerts shown.
- *  âœ… HTML escape for cp.nama, cp.area, cp.lokasi, cp.qrCode (prevents XSS via
+ *  ✅ Dark mode support (was importing useTheme but using Colors directly).
+ *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  ✅ Print/share errors no longer silently swallowed — proper alerts shown.
+ *  ✅ HTML escape for cp.nama, cp.area, cp.lokasi, cp.qrCode (prevents XSS via
  *     names with HTML-like characters in printed output).
- *  âœ… Empty state when checkpoints list is empty.
- *  âœ… Generated count badge in action bar.
- *  âœ… Modal onRequestClose properly handles back button.
- *  âœ… Resilient default values when fields are missing.
+ *  ✅ Empty state when checkpoints list is empty.
+ *  ✅ Generated count badge in action bar.
+ *  ✅ Modal onRequestClose properly handles back button.
+ *  ✅ Resilient default values when fields are missing.
  */
 import React, { useState } from 'react';
 import {
@@ -211,7 +211,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
   const handleGenerateAll = () => {
     setGenerated(checkpoints.map((c) => c.id));
     Alert.alert(
-      'âœ… ' + (lang === 'en' ? 'Done' : 'Berhasil'),
+      '✅ ' + (lang === 'en' ? 'Done' : 'Berhasil'),
       lang === 'en'
         ? `${checkpoints.length} QR Codes generated successfully`
         : `${checkpoints.length} QR Code berhasil digenerate`
@@ -380,7 +380,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
                 <View style={{ flex: 1 }}>
                   <Text style={[st.cpName, { color: theme.text }]}>{cp.nama}</Text>
                   <Text style={[st.cpMeta, { color: theme.textMuted }]}>
-                    {cp.area || '-'} â€¢ {cp.lokasi || '-'}
+                    {cp.area || '-'} • {cp.lokasi || '-'}
                   </Text>
                   <Text style={[st.cpCode, { color: Colors.primary }]}>{cp.qrCode}</Text>
                 </View>
@@ -426,7 +426,7 @@ export default function QRGeneratorScreen({ navigation }: any) {
           <View style={[st.modalContent, { backgroundColor: theme.bgCard }]}>
             <Text style={[st.modalTitle, { color: theme.text }]}>{previewCp?.nama}</Text>
             <Text style={[st.modalArea, { color: theme.textMuted }]}>
-              {previewCp?.area || '-'} â€¢ {previewCp?.lokasi || '-'}
+              {previewCp?.area || '-'} • {previewCp?.lokasi || '-'}
             </Text>
 
             <View style={{ marginVertical: 16, alignItems: 'center' }}>
@@ -521,3 +521,4 @@ const st = StyleSheet.create({
   modalNote: { ...Typography.caption, textAlign: 'center', marginTop: 8 },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16, width: '100%' },
 });
+============================================================

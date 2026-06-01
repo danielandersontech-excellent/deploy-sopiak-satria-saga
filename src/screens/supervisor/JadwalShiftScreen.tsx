@@ -2,19 +2,19 @@
  * JADWAL SHIFT - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ðŸš¨ Hardcoded DATES = ['02'..'08'] never updated! Today indicator was static.
+ *  🚨 Hardcoded DATES = ['02'..'08'] never updated! Today indicator was static.
  *     Now generates current week dynamically (Mon-Sun based on today's date).
  *
- *  ðŸš¨ Assignment was FAKE â€” "(simulasi)" alerts only. No real backend integration.
+ *  🚨 Assignment was FAKE — "(simulasi)" alerts only. No real backend integration.
  *     Now uses dataApi.shiftAssignments.create() and .delete() with optimistic
  *     local state that survives screen reloads.
  *
- *  âœ… Dark mode + i18n support (was importing both but using neither).
- *  âœ… Modal `onRequestClose` for Android back button.
- *  âœ… Full team list in assignment modal (was arbitrarily slice(0, 5)).
- *  âœ… Filter team list in modal to only unassigned members.
- *  âœ… Loading state while fetching assignments.
- *  âœ… Pull-to-refresh.
+ *  ✅ Dark mode + i18n support (was importing both but using neither).
+ *  ✅ Modal `onRequestClose` for Android back button.
+ *  ✅ Full team list in assignment modal (was arbitrarily slice(0, 5)).
+ *  ✅ Filter team list in modal to only unassigned members.
+ *  ✅ Loading state while fetching assignments.
+ *  ✅ Pull-to-refresh.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
@@ -199,7 +199,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
 
       const member = team.find((m) => m.id === memberId);
       Alert.alert(
-        'âœ…',
+        '✅',
         lang === 'en'
           ? `${member?.nama || 'User'} assigned to shift`
           : `${member?.nama || 'Anggota'} berhasil di-assign ke shift`
@@ -372,7 +372,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
                       <View style={{ flex: 1 }}>
                         <Text style={[st.memberName, { color: theme.text }]}>{a.nama}</Text>
                         <Text style={[st.memberPos, { color: theme.textMuted }]}>
-                          {a.pos || '-'} â€¢ NRP: {a.nrp}
+                          {a.pos || '-'} • NRP: {a.nrp}
                         </Text>
                       </View>
                       <TouchableOpacity
@@ -465,7 +465,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
             </View>
 
             <Text style={[st.modalSubtitle, { color: theme.textMuted }]}>
-              {lang === 'en' ? 'Shift:' : 'Shift:'} {shifts.find((s) => s.id === assignShiftId)?.nama || '-'} â€¢{' '}
+              {lang === 'en' ? 'Shift:' : 'Shift:'} {shifts.find((s) => s.id === assignShiftId)?.nama || '-'} •{' '}
               {lang === 'en' ? 'Date:' : 'Tanggal:'} {selectedDateStr}
             </Text>
 
@@ -497,7 +497,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
                     <View style={{ flex: 1 }}>
                       <Text style={[st.memberName, { color: theme.text }]}>{m.nama}</Text>
                       <Text style={[st.memberPos, { color: theme.textMuted }]}>
-                        {m.nrp} â€¢ {m.role}
+                        {m.nrp} • {m.role}
                       </Text>
                     </View>
                     <Ionicons name="add-circle" size={22} color={Colors.primary} />
@@ -587,3 +587,4 @@ const st = StyleSheet.create({
   modalRow: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 12, borderBottomWidth: 1 },
   modalAvatar: { width: 40, height: 40, borderRadius: 20 },
 });
+============================================================

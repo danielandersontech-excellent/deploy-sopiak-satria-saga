@@ -2,19 +2,19 @@
  * EDIT PROFIL - v4 (Bug-Fix Pass on top of v3)
  *
  * FIXES (v4):
- *  ðŸš¨ Backend field name fix: `noHp` â†’ `no_hp`. Express backend uses snake_case
+ *  🚨 Backend field name fix: `noHp` → `no_hp`. Express backend uses snake_case
  *     for the users table column. Sending camelCase `noHp` would be dropped by
  *     the API. Now sends both formats for safety + canonical `no_hp`.
- *  ðŸš¨ Empty `user?.id` check â€” if id is falsy, abort instead of POST to
+ *  🚨 Empty `user?.id` check — if id is falsy, abort instead of POST to
  *     `/api/users/` (which would 404 or worse). Also dropped client-side
  *     `updated_at` (backend's job, prevents clock skew).
- *  âœ… Unsaved-changes warning when navigating back (don't lose typed data).
- *  âœ… Error & progress box colors now theme-aware (was hardcoded #fee2e2 etc.
+ *  ✅ Unsaved-changes warning when navigating back (don't lose typed data).
+ *  ✅ Error & progress box colors now theme-aware (was hardcoded #fee2e2 etc.
  *     looking bad in dark mode).
- *  âœ… Phone digit-only filter â€” strip non-digits as user types.
- *  âœ… `hasChanges` check disables Save button when no fields modified.
- *  âœ… Resets `fotoChanged` state after successful save.
- *  âœ… Trailing whitespace stripped from inputs before validation.
+ *  ✅ Phone digit-only filter — strip non-digits as user types.
+ *  ✅ `hasChanges` check disables Save button when no fields modified.
+ *  ✅ Resets `fotoChanged` state after successful save.
+ *  ✅ Trailing whitespace stripped from inputs before validation.
  */
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
@@ -178,7 +178,7 @@ export default function EditProfilScreen({ navigation }: any) {
     setUploadProgress(null);
 
     try {
-      // Backend expects snake_case (no_hp) â€” send canonical + camelCase alias.
+      // Backend expects snake_case (no_hp) — send canonical + camelCase alias.
       const updateData: Record<string, any> = {
         nama: trimNama,
         no_hp: trimNoHp,
@@ -211,7 +211,7 @@ export default function EditProfilScreen({ navigation }: any) {
           setUploadProgress(lang === 'en' ? 'Photo uploaded!' : 'Foto berhasil diupload!');
         } else {
           setUploadProgress(lang === 'en' ? 'Upload failed, saving locally...' : 'Upload gagal, disimpan lokal...');
-          // Don't include foto_url in payload â€” keep server's current
+          // Don't include foto_url in payload — keep server's current
         }
       } else if (fotoChanged && !fotoUri) {
         // Photo removed
@@ -238,7 +238,7 @@ export default function EditProfilScreen({ navigation }: any) {
       setUploadProgress(null);
       setFotoChanged(false); // important: prevent unsaved-changes warning
       Alert.alert(
-        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         t('profile.saved'),
         [{ text: 'OK', onPress: () => navigation.goBack() }]
       );
@@ -329,7 +329,7 @@ export default function EditProfilScreen({ navigation }: any) {
           </Text>
         </View>
 
-        {/* Upload progress â€” theme-aware */}
+        {/* Upload progress — theme-aware */}
         {uploadProgress && (
           <View
             style={[
@@ -345,7 +345,7 @@ export default function EditProfilScreen({ navigation }: any) {
           </View>
         )}
 
-        {/* Error â€” theme-aware */}
+        {/* Error — theme-aware */}
         {errorMsg !== '' && (
           <View
             style={[
@@ -448,3 +448,4 @@ const s = StyleSheet.create({
   saveInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   saveInfoText: { ...Typography.caption },
 });
+============================================================

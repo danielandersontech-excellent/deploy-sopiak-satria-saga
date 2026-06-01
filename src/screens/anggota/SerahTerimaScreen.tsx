@@ -12,9 +12,9 @@ import { useI18n } from '../../lib/i18n';
 
 const INVENTARIS_ITEMS = ['Radio HT', 'Senter', 'Kunci Pos Jaga', 'Buku Log', 'P3K Kit'];
 const KONDISI = [
-  { key: 'aman', label: 'âœ… Aman', color: Colors.success },
-  { key: 'masalah', label: 'âš ï¸ Masalah', color: Colors.warning },
-  { key: 'perhatian', label: 'ðŸ”´ Perhatian', color: Colors.danger },
+  { key: 'aman', label: '✅ Aman', color: Colors.success },
+  { key: 'masalah', label: '⚠️ Masalah', color: Colors.warning },
+  { key: 'perhatian', label: '🔴 Perhatian', color: Colors.danger },
 ] as const;
 
 export default function SerahTerimaScreen({ navigation }: any) {
@@ -42,7 +42,7 @@ export default function SerahTerimaScreen({ navigation }: any) {
       catatan, waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     });
     setSubmitting(false);
-    Alert.alert('âœ… Serah Terima Berhasil', 'Shift berikutnya akan menerima notifikasi.', [
+    Alert.alert('✅ Serah Terima Berhasil', 'Shift berikutnya akan menerima notifikasi.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
@@ -113,3 +113,4 @@ const styles = StyleSheet.create({
   invText: { ...Typography.body, color: Colors.textPrimary, flex: 1 },
   textarea: { borderWidth: 1.5, borderColor: Colors.border, borderRadius: Radius.md, padding: 14, ...Typography.body, color: Colors.textPrimary, height: 100, backgroundColor: Colors.bgWhite },
 });
+============================================================

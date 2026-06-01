@@ -2,26 +2,26 @@
  * INSIDEN KLIEN - v25 (Bug-Fix Pass on top of v24)
  *
  * FIXES (v25):
- *  ðŸš¨ XSS PREVENTION â€” buildHTML interpolated `jenis`, `lokasiText`, `nama`,
+ *  🚨 XSS PREVENTION — buildHTML interpolated `jenis`, `lokasiText`, `nama`,
  *     `nrp`, `kronologi`, `catatanKomandan` DIRECTLY into HTML. A field
  *     containing `<script>` or special chars would break the print template
  *     or execute. Now every user-controlled field is escaped via escapeHtml().
- *  ðŸš¨ EMPTY CATCH BLOCKS â€” Print/Share errors silently swallowed (lines 120,
+ *  🚨 EMPTY CATCH BLOCKS — Print/Share errors silently swallowed (lines 120,
  *     129 original). User taps button, nothing happens, no clue why. Now
  *     errors are caught and surfaced via Alert with the actual message.
- *  ðŸš¨ PRIVACY LEAK â€” when user has no `lokasi_id`, the screen showed ALL
+ *  🚨 PRIVACY LEAK — when user has no `lokasi_id`, the screen showed ALL
  *     incidents from ALL companies. Now shows empty state instead of leaking.
- *  ðŸš¨ DOWNLOAD BUTTONS DISABLED ACROSS ALL CARDS â€” `disabled={!!downloadingId}`
+ *  🚨 DOWNLOAD BUTTONS DISABLED ACROSS ALL CARDS — `disabled={!!downloadingId}`
  *     disabled every card's buttons when ANY one was downloading. Now scoped
  *     per-card so other cards remain interactive.
  *
- *  âœ… Pull-to-refresh added.
- *  âœ… TAB labels now i18n'd ('Semua' â†’ 'All' in EN, etc.).
- *  âœ… Empty state messages fully translated for all 3 tabs.
- *  âœ… `PRIO_COLOR.tinggi` migrated from hardcoded `#e67e22` to `Colors.warningDark`.
- *  âœ… `tabCount` default bg/text now theme-aware (was hardcoded `#ddd`/`#666`).
- *  âœ… Locale-aware date formatting (id-ID vs en-US).
- *  âœ… Modal back button safety: header gets back arrow when reachable via stack.
+ *  ✅ Pull-to-refresh added.
+ *  ✅ TAB labels now i18n'd ('Semua' → 'All' in EN, etc.).
+ *  ✅ Empty state messages fully translated for all 3 tabs.
+ *  ✅ `PRIO_COLOR.tinggi` migrated from hardcoded `#e67e22` to `Colors.warningDark`.
+ *  ✅ `tabCount` default bg/text now theme-aware (was hardcoded `#ddd`/`#666`).
+ *  ✅ Locale-aware date formatting (id-ID vs en-US).
+ *  ✅ Modal back button safety: header gets back arrow when reachable via stack.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -57,7 +57,7 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
-// ðŸš¨ XSS PREVENTION: escape HTML special chars before interpolation.
+// 🚨 XSS PREVENTION: escape HTML special chars before interpolation.
 function escapeHtml(s: any): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -80,11 +80,11 @@ export default function InsidenKlienScreen({ navigation }: any) {
   const [refreshing, setRefreshing] = useState(false);
 
   const myLokasiId = getField(user, 'lokasi_id', 'lokasiId') || null;
-  // Klien is a special role â€” track whether we should hide all data
+  // Klien is a special role — track whether we should hide all data
   const isKlien = user?.role === 'klien';
   const hideAll = isKlien && !myLokasiId;
 
-  // ðŸš¨ PRIVACY: if klien has no lokasi_id, don't leak everyone's incidents
+  // 🚨 PRIVACY: if klien has no lokasi_id, don't leak everyone's incidents
   const myLaporanK = useMemo(() => {
     if (hideAll) return [];
     if (!myLokasiId) return laporanK;
@@ -125,7 +125,7 @@ export default function InsidenKlienScreen({ navigation }: any) {
 
   const dateLocale = lang === 'en' ? 'en-US' : 'id-ID';
 
-  // ðŸš¨ XSS-SAFE buildHTML
+  // 🚨 XSS-SAFE buildHTML
   const buildHTML = (l: any) => {
     const jenis = escapeHtml(getField(l, 'jenis') || '-');
     const prioritas = escapeHtml(getField(l, 'prioritas') || '-');
@@ -174,7 +174,7 @@ export default function InsidenKlienScreen({ navigation }: any) {
   </body></html>`;
   };
 
-  // ðŸš¨ Errors no longer swallowed
+  // 🚨 Errors no longer swallowed
   const handleDownload = async (l: any) => {
     if (downloadingId) return;
     setDownloadingId(l.id);
@@ -356,7 +356,7 @@ export default function InsidenKlienScreen({ navigation }: any) {
             const nrp = getField(l, 'nrp', 'user_nrp') || '-';
             const catatanKomandan = getField(l, 'catatan_komandan', 'catatanKomandan', 'catatan') || '';
 
-            // Per-card download state â€” only THIS card's buttons are disabled
+            // Per-card download state — only THIS card's buttons are disabled
             const isMyDownload = downloadingId === l.id;
             const isMyShare = downloadingId === l.id + '-s';
             const isAnyActive = !!downloadingId;
@@ -378,7 +378,7 @@ export default function InsidenKlienScreen({ navigation }: any) {
                     <Badge text={jenis} variant="danger" />
                     <View style={{ flex: 1 }} />
                     <Badge
-                      text={status === 'approved' ? (lang === 'en' ? 'âœ“ Resolved' : 'âœ“ Resolved') : (lang === 'en' ? 'â— Open' : 'â— Open')}
+                      text={status === 'approved' ? (lang === 'en' ? '✓ Resolved' : '✓ Resolved') : (lang === 'en' ? '● Open' : '● Open')}
                       variant={status === 'approved' ? 'success' : 'warning'}
                     />
                   </View>
@@ -507,3 +507,4 @@ const st = StyleSheet.create({
   actionBtnOutlineText: { fontSize: 12, fontWeight: '700' },
   expandHint: { alignItems: 'center', marginTop: 4 },
 });
+============================================================

@@ -63,7 +63,7 @@ export default function DashboardScreen({ navigation }: any) {
   }, []);
 
   const absenStep = todayAbs.keluar ? 2 : todayAbs.masuk ? 1 : 0;
-  const absenLabel = [t('absensi.not_done'), `${t('absensi.clock_in')} âœ“`, `${t('general.done')} âœ“âœ“`][absenStep];
+  const absenLabel = [t('absensi.not_done'), `${t('absensi.clock_in')} ✓`, `${t('general.done')} ✓✓`][absenStep];
   const absenVariant: ('warning' | 'info' | 'success') = (['warning', 'info', 'success'] as const)[absenStep];
 
   const getBadge = (key: string): string | undefined => {
@@ -79,7 +79,7 @@ export default function DashboardScreen({ navigation }: any) {
         <View style={s.headerContent}>
           <Image source={{ uri: user?.foto || 'https://via.placeholder.com/50' }} style={s.avatar} />
           <View style={s.headerInfo}>
-            <Text style={s.greeting}>{t('dash.greeting')} ðŸ‘‹</Text>
+            <Text style={s.greeting}>{t('dash.greeting')} 👋</Text>
             <Text style={s.userName}>{user?.nama || 'Security'}</Text>
             <Text style={s.userPos}>{user?.posJaga}</Text>
           </View>
@@ -149,7 +149,7 @@ export default function DashboardScreen({ navigation }: any) {
             <View style={s.patrolIcon}><Ionicons name="navigate" size={20} color="#fff" /></View>
             <View style={{ flex: 1 }}>
               <Text style={s.patrolTitle}>{t('patrol.patrol_active')}</Text>
-              <Text style={s.patrolSub}>{activePatrol.routeName} â€¢ {activePatrol.checkpoints.filter(c => c.scanned).length}/{activePatrol.checkpoints.length} checkpoint</Text>
+              <Text style={s.patrolSub}>{activePatrol.routeName} • {activePatrol.checkpoints.filter(c => c.scanned).length}/{activePatrol.checkpoints.length} checkpoint</Text>
             </View>
             <Ionicons name="chevron-forward" size={20} color={Colors.success} />
           </TouchableOpacity>
@@ -204,3 +204,4 @@ const s = StyleSheet.create({
   panicInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center', ...Shadows.lg },
   panicText: { color: '#fff', fontSize: 10, fontWeight: '800', marginTop: -2 },
 });
+============================================================

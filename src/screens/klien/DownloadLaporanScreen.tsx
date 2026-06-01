@@ -2,27 +2,27 @@
  * DOWNLOAD LAPORAN KLIEN - v25 (Bug-Fix Pass on top of v24)
  *
  * FIXES (v25):
- *  ðŸš¨ XSS PREVENTION â€” buildHTML interpolated `nama`, `nrp`, `posJaga`,
+ *  🚨 XSS PREVENTION — buildHTML interpolated `nama`, `nrp`, `posJaga`,
  *     `kondisi`, `aktivitas`, `kronologi`, `lokasiText`, `jenis` directly into
  *     HTML. Fields with `<` or HTML-like content would break the template or
  *     execute scripts. Now every field passes through escapeHtml().
- *  ðŸš¨ EMPTY CATCH BLOCKS â€” Print/Share errors silently swallowed. User taps
+ *  🚨 EMPTY CATCH BLOCKS — Print/Share errors silently swallowed. User taps
  *     button, nothing happens, no error message. Now errors surface via Alert.
- *  ðŸš¨ PATROLI COUNT ALWAYS 0 â€” original hardcoded `count: 0` even when there
+ *  🚨 PATROLI COUNT ALWAYS 0 — original hardcoded `count: 0` even when there
  *     were patrol records. Now fetches via `patroliApi.list()` + extractArray()
  *     and renders an actual patrol table when generating the report.
- *  ðŸš¨ NO BACK BUTTON â€” DownloadLaporanScreen is registered BOTH as a tab AND
+ *  🚨 NO BACK BUTTON — DownloadLaporanScreen is registered BOTH as a tab AND
  *     as a stack screen. When reached via stack push (e.g. from Dashboard menu),
  *     user had no way back. Now uses navigation.canGoBack() to conditionally
  *     render a back arrow.
- *  ðŸš¨ PRIVACY LEAK â€” klien user with no `lokasi_id` saw EVERY company's data.
- *     Now hideAll â†’ empty + notice.
+ *  🚨 PRIVACY LEAK — klien user with no `lokasi_id` saw EVERY company's data.
+ *     Now hideAll → empty + notice.
  *
- *  âœ… Filter chips ('Semua', 'Harian', etc.) labels now i18n'd.
- *  âœ… Locale-aware date formatting (id-ID vs en-US) in HTML and UI.
- *  âœ… Stat label `textTransform: capitalize` removed (couldn't handle ID/EN
- *     multi-word) â€” labels are now pre-translated.
- *  âœ… `aktivitas.substring(0,80)` truncation now appends "â€¦" instead of
+ *  ✅ Filter chips ('Semua', 'Harian', etc.) labels now i18n'd.
+ *  ✅ Locale-aware date formatting (id-ID vs en-US) in HTML and UI.
+ *  ✅ Stat label `textTransform: capitalize` removed (couldn't handle ID/EN
+ *     multi-word) — labels are now pre-translated.
+ *  ✅ `aktivitas.substring(0,80)` truncation now appends "…" instead of
  *     cutting mid-word silently.
  */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
@@ -61,7 +61,7 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
-// ðŸš¨ XSS prevention
+// 🚨 XSS prevention
 function escapeHtml(s: any): string {
   return String(s ?? '')
     .replace(/&/g, '&amp;')
@@ -75,7 +75,7 @@ function escapeHtml(s: any): string {
 function truncate(s: string, max: number): string {
   if (!s) return '';
   if (s.length <= max) return s;
-  return s.substring(0, max - 1).trimEnd() + 'â€¦';
+  return s.substring(0, max - 1).trimEnd() + '…';
 }
 
 function extractArray(result: any): any[] {
@@ -100,7 +100,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
   const rawLK = useDataStore((s) => s.laporanKejadian);
   const rawAbs = useDataStore((s) => s.absensiRecords);
 
-  // ðŸš¨ Privacy filter â€” hideAll if klien without lokasi
+  // 🚨 Privacy filter — hideAll if klien without lokasi
   const laporanH = useMemo(() => {
     if (hideAll) return [];
     if (!myLokasiId) return rawLH;
@@ -132,7 +132,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
 
   const dateLocale = lang === 'en' ? 'en-US' : 'id-ID';
 
-  // ðŸš¨ Fetch real patroli data instead of always showing count=0
+  // 🚨 Fetch real patroli data instead of always showing count=0
   useEffect(() => {
     let alive = true;
     if (hideAll) {
@@ -311,7 +311,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
     }
 
     if (type === 'Patroli') {
-      // ðŸš¨ Build actual patroli table now (was always empty)
+      // 🚨 Build actual patroli table now (was always empty)
       const rows = patroli.map((p) => {
         const userName = escapeHtml(getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas'));
         const routeName = escapeHtml(getField(p, 'route_name', 'routeName') || '-');
@@ -384,7 +384,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
     {
       id: 'P', type: 'Patroli' as const,
       title: lang === 'en' ? 'Patrol Reports' : 'Laporan Patroli',
-      count: patroli.length, // ðŸš¨ real count from fetched data
+      count: patroli.length, // 🚨 real count from fetched data
       desc: loadingPatroli
         ? (lang === 'en' ? 'Loading patrol data...' : 'Memuat data patroli...')
         : `${patroli.length} ${lang === 'en' ? 'records' : 'record'}`,
@@ -454,7 +454,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
 
   return (
     <View style={[st.container, { backgroundColor: theme.bg }]}>
-      {/* Header â€” conditional back button (this screen is both Tab AND Stack) */}
+      {/* Header — conditional back button (this screen is both Tab AND Stack) */}
       <View style={[st.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : '#fff', borderBottomColor: theme.border }]}>
         <View style={st.headerRow}>
           {canGoBack && (
@@ -663,3 +663,4 @@ const st = StyleSheet.create({
   infoTitle: { fontSize: 12, fontWeight: '700' },
   infoDesc: { fontSize: 11, marginTop: 2, lineHeight: 16 },
 });
+============================================================

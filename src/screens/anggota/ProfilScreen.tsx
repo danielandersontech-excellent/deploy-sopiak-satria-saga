@@ -3,20 +3,20 @@
  *
  * MASALAH SEBELUMNYA:
  * 1. Field names tidak cocok: DB/API pakai snake_case (no_hp, pos_jaga, lokasi_id)
- *    tapi screen baca camelCase (noHp, posJaga, lokasi) â†’ selalu tampil '-'
- * 2. Lokasi hanya menyimpan lokasi_id (UUID) bukan nama lokasi â†’ perlu resolve
+ *    tapi screen baca camelCase (noHp, posJaga, lokasi) → selalu tampil '-'
+ * 2. Lokasi hanya menyimpan lokasi_id (UUID) bukan nama lokasi → perlu resolve
  * 3. Score di-hardcode '98' bukan dari data real
- * 4. Tidak pernah fetch fresh data dari backend â†’ data stale setelah edit profil
+ * 4. Tidak pernah fetch fresh data dari backend → data stale setelah edit profil
  *
  * PERBAIKAN:
  * - Helper function `getField()` yang cek KEDUA format (snake_case & camelCase)
  * - Fetch fresh user data dari API saat mount & setelah kembali dari edit
- * - Resolve lokasi_id â†’ nama lokasi dari dataStore.lokasi
+ * - Resolve lokasi_id → nama lokasi dari dataStore.lokasi
  * - Score dari data real (user.skor / API)
  * - Sinkronisasi authStore setelah fetch
  *
  * FIX v10.1:
- * - setUser tidak ada di AuthState â†’ diganti updateUser yang memang ada di store
+ * - setUser tidak ada di AuthState → diganti updateUser yang memang ada di store
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, Image, TouchableOpacity, Alert, Switch } from 'react-native';
@@ -32,7 +32,7 @@ import { useI18n } from '../../lib/i18n';
 
 /**
  * Safely get a field from user object, checking both snake_case and camelCase variants.
- * Example: getField(user, 'noHp', 'no_hp') â†’ tries user.noHp, user.no_hp, user.nohp
+ * Example: getField(user, 'noHp', 'no_hp') → tries user.noHp, user.no_hp, user.nohp
  */
 function getField(obj: any, ...keys: string[]): string {
   if (!obj) return '';
@@ -58,7 +58,7 @@ export default function ProfilScreen({ navigation }: any) {
 
   const [freshUser, setFreshUser] = useState<any>(null);
 
-  // â•â•â• FETCH fresh user data from API â•â•â•
+  // ═══ FETCH fresh user data from API ═══
   const fetchFreshProfile = useCallback(async () => {
     const uid = getField(user, 'id', '_id');
     if (!uid) return;
@@ -89,12 +89,12 @@ export default function ProfilScreen({ navigation }: any) {
     return unsubscribe;
   }, [navigation, fetchFreshProfile]);
 
-  // â•â•â• Merge user data: freshUser (API) takes priority, then authStore user â•â•â•
+  // ═══ Merge user data: freshUser (API) takes priority, then authStore user ═══
   const merged = useMemo(() => {
     return { ...(user || {}), ...(freshUser || {}) };
   }, [user, freshUser]);
 
-  // â•â•â• Extract fields with snake_case/camelCase fallback â•â•â•
+  // ═══ Extract fields with snake_case/camelCase fallback ═══
   const uid = getField(merged, 'id', '_id');
   const nama = getField(merged, 'nama', 'name', 'full_name') || 'User';
   const nrp = getField(merged, 'nrp', 'NRP');
@@ -107,7 +107,7 @@ export default function ProfilScreen({ navigation }: any) {
   const lokasiId = getField(merged, 'lokasi_id', 'lokasiId');
   const lokasiNamaRaw = getField(merged, 'lokasi_nama', 'lokasiNama', 'lokasi', 'location');
 
-  // â•â•â• Resolve lokasi name from store if we only have ID â•â•â•
+  // ═══ Resolve lokasi name from store if we only have ID ═══
   const lokasiNama = useMemo(() => {
     // First try direct name from user object
     if (lokasiNamaRaw && lokasiNamaRaw !== lokasiId) return lokasiNamaRaw;
@@ -122,7 +122,7 @@ export default function ProfilScreen({ navigation }: any) {
     return '';
   }, [lokasiNamaRaw, lokasiId, allLokasi, team, uid, nrp]);
 
-  // â•â•â• Get real score â•â•â•
+  // ═══ Get real score ═══
   const skor = useMemo(() => {
     // From user object
     const userSkor = Number(getField(merged, 'skor', 'score', 'total_skor'));
@@ -133,7 +133,7 @@ export default function ProfilScreen({ navigation }: any) {
     return 0;
   }, [merged, team, uid, nrp]);
 
-  // â•â•â• Stats from store â•â•â•
+  // ═══ Stats from store ═══
   const absensi = useMemo(() => absensiRecords.filter((a) => a.userId === uid || a.nrp === nrp), [absensiRecords, uid, nrp]);
   const laporanH = useMemo(() => laporanHarian.filter((l) => l.userId === uid), [laporanHarian, uid]);
   const laporanK = useMemo(() => laporanKejadian.filter((l) => l.userId === uid), [laporanKejadian, uid]);
@@ -328,3 +328,4 @@ const styles = StyleSheet.create({
   settingIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   settingLabel: { ...Typography.body, flex: 1 },
 });
+============================================================

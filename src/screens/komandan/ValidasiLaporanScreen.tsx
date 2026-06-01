@@ -6,23 +6,23 @@
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, kronologi, status, lokasi_id, created_at
  *
  * CRITICAL FIXES (v4):
- *  ðŸš¨ Removed DUPLICATE API call in handleApprove/submitRevision.
+ *  🚨 Removed DUPLICATE API call in handleApprove/submitRevision.
  *     The store's updateLaporanHarianStatus / updateLaporanKejadianStatus
  *     already calls laporanApi.harianValidate / kejadianValidate internally.
  *     The screen was calling it AGAIN, causing duplicate audit logs &
  *     duplicate "Laporan Disetujui" notifications to the anggota.
- *     New flow: call API directly â†’ on success update store via setState
+ *     New flow: call API directly → on success update store via setState
  *     (avoids duplicate call AND keeps the optimistic UI update).
  *
- *  ðŸš¨ Fixed kronologi/aktivitas priority for Kejadian items:
+ *  🚨 Fixed kronologi/aktivitas priority for Kejadian items:
  *     - Card preview: Kejadian shows kronologi (was: aktivitas first)
  *     - Detail modal: same fix
  *
- *  âœ… Card preview now also shows pos_jaga / lokasi correctly per type
- *  âœ… Server failure now blocks optimistic update (was silent before)
- *  âœ… Defensive fallbacks for all displayed values
- *  âœ… Removed unused 'Approved' dead branch in filterStatus
- *  âœ… "Refresh Data" button localized
+ *  ✅ Card preview now also shows pos_jaga / lokasi correctly per type
+ *  ✅ Server failure now blocks optimistic update (was silent before)
+ *  ✅ Defensive fallbacks for all displayed values
+ *  ✅ Removed unused 'Approved' dead branch in filterStatus
+ *  ✅ "Refresh Data" button localized
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -342,7 +342,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
             // Refetch to sync with server state
             await fetchLaporan();
 
-            Alert.alert('âœ…', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
+            Alert.alert('✅', lang === 'en' ? 'Report approved' : 'Laporan telah disetujui');
             setShowDetail(null);
           } catch (err: any) {
             console.log('[Validasi] Approve error:', err);
@@ -389,7 +389,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
       setShowDetail(null);
       setRevisionTarget(null);
       Alert.alert(
-        'âš ï¸',
+        '⚠️',
         lang === 'en'
           ? 'Revision requested. Member will be notified.'
           : 'Revisi diminta. Anggota akan menerima notifikasi revisi.'
@@ -583,7 +583,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                       {itemNarrative}
                     </Text>
                     <Text style={[styles.cardDate, { color: theme.textMuted }]}>
-                      {itemTanggal} â€¢ {getLokasiDisplay(item)} {itemShift ? `â€¢ ${itemShift}` : ''}
+                      {itemTanggal} • {getLokasiDisplay(item)} {itemShift ? `• ${itemShift}` : ''}
                     </Text>
 
                     {itemCatatan ? (
@@ -668,8 +668,8 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                     label: lang === 'en' ? 'Date / Time' : 'Tanggal / Waktu',
                     value:
                       getField(showDetail, 'tipe') === 'Kejadian'
-                        ? `${getField(showDetail, 'tanggal') || '-'} â€¢ ${getField(showDetail, 'waktu_kejadian', 'waktuKejadian') || getField(showDetail, 'waktuSubmit') || '-'}`
-                        : `${getField(showDetail, 'tanggal') || '-'} â€¢ ${getField(showDetail, 'waktuSubmit') || '-'}`,
+                        ? `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktu_kejadian', 'waktuKejadian') || getField(showDetail, 'waktuSubmit') || '-'}`
+                        : `${getField(showDetail, 'tanggal') || '-'} • ${getField(showDetail, 'waktuSubmit') || '-'}`,
                   },
                   {
                     label:
@@ -893,3 +893,4 @@ const styles = StyleSheet.create({
   modalInput: { borderWidth: 1.5, borderRadius: Radius.md, padding: 14, ...Typography.body, height: 100, marginBottom: 16 },
   modalActionsRow: { flexDirection: 'row', gap: 10 },
 });
+============================================================

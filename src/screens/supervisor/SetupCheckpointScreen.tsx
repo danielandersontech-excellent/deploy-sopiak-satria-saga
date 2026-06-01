@@ -2,23 +2,23 @@
  * SETUP CHECKPOINT - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ðŸš¨ Hardcoded latitude: 0.5071, longitude: 101.4478 (Pekanbaru!) for ALL new
- *     checkpoints â€” now uses user-entered values with validation.
- *  ðŸš¨ No lokasi_id assigned â€” checkpoint had no foreign key to lokasi.
+ *  🚨 Hardcoded latitude: 0.5071, longitude: 101.4478 (Pekanbaru!) for ALL new
+ *     checkpoints — now uses user-entered values with validation.
+ *  🚨 No lokasi_id assigned — checkpoint had no foreign key to lokasi.
  *     Now requires lokasi selection from dropdown and passes lokasi_id to API.
- *  ðŸš¨ Used store.addCheckpoint which doesn't pass lokasi_id. Now calls
+ *  🚨 Used store.addCheckpoint which doesn't pass lokasi_id. Now calls
  *     dataApi.checkpoints.create() directly + syncs local state.
  *
- *  âœ… Dark mode + i18n (was importing both but using neither).
- *  âœ… Modal `onRequestClose` for Android back button.
- *  âœ… Lat/lng/radius input fields added.
- *  âœ… Coordinate range validation (-90..90, -180..180).
- *  âœ… Radius validation (5-200m).
- *  âœ… QR code uniqueness via timestamp suffix.
- *  âœ… Edit mode for checkpoint (was only status toggle).
- *  âœ… Empty state.
- *  âœ… Pull-to-refresh.
- *  âœ… Submitting state.
+ *  ✅ Dark mode + i18n (was importing both but using neither).
+ *  ✅ Modal `onRequestClose` for Android back button.
+ *  ✅ Lat/lng/radius input fields added.
+ *  ✅ Coordinate range validation (-90..90, -180..180).
+ *  ✅ Radius validation (5-200m).
+ *  ✅ QR code uniqueness via timestamp suffix.
+ *  ✅ Edit mode for checkpoint (was only status toggle).
+ *  ✅ Empty state.
+ *  ✅ Pull-to-refresh.
+ *  ✅ Submitting state.
  */
 import React, { useState, useCallback } from 'react';
 import {
@@ -121,7 +121,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
     setShowModal(true);
   };
 
-  // ðŸš¨ CRITICAL FIX: Call API directly with lokasi_id + sync local state
+  // 🚨 CRITICAL FIX: Call API directly with lokasi_id + sync local state
   const handleSave = async () => {
     if (submitting) return;
 
@@ -181,7 +181,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
           ),
         }));
 
-        Alert.alert('âœ…', lang === 'en' ? 'Checkpoint updated' : 'Checkpoint berhasil diperbarui');
+        Alert.alert('✅', lang === 'en' ? 'Checkpoint updated' : 'Checkpoint berhasil diperbarui');
       } else {
         // === CREATE ===
         const qrCode = `QR-${fName.trim().toUpperCase().replace(/\s+/g, '-').replace(/[^A-Z0-9-]/g, '')}-${Date.now().toString(36).toUpperCase()}`;
@@ -215,7 +215,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
         }));
 
         Alert.alert(
-          'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+          '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
           lang === 'en' ? 'Checkpoint created' : 'Checkpoint baru ditambahkan'
         );
       }
@@ -294,11 +294,11 @@ export default function SetupCheckpointScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.cpName, { color: theme.text }]}>{cp.nama}</Text>
                 <Text style={[styles.cpMeta, { color: theme.textMuted }]}>
-                  {cp.area || '-'} â€¢ {cp.lokasi || '-'}
+                  {cp.area || '-'} • {cp.lokasi || '-'}
                 </Text>
                 <Text style={[styles.cpDetail, { color: theme.textMuted }]}>
                   {cp.latitude != null && cp.longitude != null
-                    ? `${Number(cp.latitude).toFixed(4)}, ${Number(cp.longitude).toFixed(4)} â€¢ ${cp.radius || 15}m`
+                    ? `${Number(cp.latitude).toFixed(4)}, ${Number(cp.longitude).toFixed(4)} • ${cp.radius || 15}m`
                     : `Radius ${cp.radius || 15}m`}
                 </Text>
                 <Text style={[styles.cpCode, { color: Colors.primary }]}>QR: {cp.qrCode}</Text>
@@ -605,3 +605,4 @@ const styles = StyleSheet.create({
   statusChipText: { ...Typography.smallBold },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
 });
+============================================================

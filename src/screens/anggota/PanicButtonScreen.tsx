@@ -121,7 +121,7 @@ export default function PanicButtonScreen({ navigation }: any) {
             <Ionicons name="location" size={32} color={Colors.success} />
             <Text style={styles.activeCardTitle}>Lokasi Anda</Text>
             <Text style={styles.activeCardText}>{loc?.address || 'Mengambil lokasi...'}{'\n'}{loc ? `${loc.coords.latitude.toFixed(5)}, ${loc.coords.longitude.toFixed(5)}` : ''}</Text>
-            <Text style={styles.liveText}>Ã°Å¸â€Â´ Live tracking aktif</Text>
+            <Text style={styles.liveText}>🔴 Live tracking aktif</Text>
           </View>
           <View style={styles.contactCard}>
             <Text style={styles.contactTitle}>Kontak Darurat</Text>

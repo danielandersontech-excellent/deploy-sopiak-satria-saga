@@ -9,12 +9,12 @@
  *   notifikasi: dibaca, target_lokasi_id
  *
  * FIXES (v10):
- *  âœ… getField() now also checks `pos_nama` and `lokasi_nama` (server fields)
- *  âœ… Bell badge clamped to '99+' when unreadCount > 99 (overflow safe)
- *  âœ… pulseAnim dependency made explicit (stable ref, lint-safe)
- *  âœ… Safer uid comparison (won't match anything if user.id is missing)
- *  âœ… MapMarker type assertion uses `as const` instead of `as any`
- *  âœ… Defensive fallbacks for all displayed values
+ *  ✅ getField() now also checks `pos_nama` and `lokasi_nama` (server fields)
+ *  ✅ Bell badge clamped to '99+' when unreadCount > 99 (overflow safe)
+ *  ✅ pulseAnim dependency made explicit (stable ref, lint-safe)
+ *  ✅ Safer uid comparison (won't match anything if user.id is missing)
+ *  ✅ MapMarker type assertion uses `as const` instead of `as any`
+ *  ✅ Defensive fallbacks for all displayed values
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -150,7 +150,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
           latitude: Number(lat),
           longitude: Number(lng),
           title: getField(m, 'nama', 'name') || 'Anggota',
-          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} â€¢ ${getField(m, 'shift') || '-'}`,
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
           type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
           color: (STATUS_MAP[mStatus] || STATUS_MAP.off_duty).color,
           status: mStatus,
@@ -195,7 +195,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
           <View style={st.headerInfo}>
             <Text style={st.greeting}>{t('dash.komandan_dashboard')}</Text>
             <Text style={st.userName}>{userName}</Text>
-            <Text style={st.userPos}>{userPosJaga} â€¢ {userShift}</Text>
+            <Text style={st.userPos}>{userPosJaga} • {userShift}</Text>
           </View>
           <TouchableOpacity style={st.bellBtn} onPress={() => navigation.navigate('Notifikasi')}>
             <Ionicons name="notifications-outline" size={22} color="#fff" />
@@ -281,7 +281,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
             <View style={st.sectionRow}>
               <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'Pending Validation' : 'Menunggu Validasi'}</Text>
               <TouchableOpacity onPress={() => navigation.navigate('ValidasiLaporan')}>
-                <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
+                <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
               </TouchableOpacity>
             </View>
             {[...pendingH.slice(0, 2), ...pendingK.slice(0, 1)].map((item: any, idx) => {
@@ -311,7 +311,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
         <View style={st.sectionRow}>
           <Text style={[st.sectionTitle, { color: theme.text }]}>{lang === 'en' ? 'My Team' : 'Tim Saya'}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('MonitorRealtime')}>
-            <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
+            <Text style={[st.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
           </TouchableOpacity>
         </View>
         {myTeam.slice(0, 4).map((m: any) => {
@@ -329,7 +329,7 @@ export default function DashboardKomandanScreen({ navigation }: any) {
               <View style={[st.memberDot, { backgroundColor: ms.color }]} />
               <View style={{ flex: 1 }}>
                 <Text style={[st.memberName, { color: theme.text }]}>{mNama}</Text>
-                <Text style={[st.memberPos, { color: theme.textMuted }]}>{mPos} â€¢ {mShift}</Text>
+                <Text style={[st.memberPos, { color: theme.textMuted }]}>{mPos} • {mShift}</Text>
               </View>
               <Badge
                 text={ms.label}
@@ -401,3 +401,4 @@ const st = StyleSheet.create({
   panicInner: { width: 56, height: 56, borderRadius: 28, backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center', ...Shadows.lg },
   panicFabText: { color: '#fff', fontSize: 9, fontWeight: '800', marginTop: -2 },
 });
+============================================================

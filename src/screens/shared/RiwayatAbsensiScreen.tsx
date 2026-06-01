@@ -2,28 +2,28 @@
  * RIWAYAT ABSENSI - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ðŸš¨ HARDCODED DUMMY DATA REMOVED â€” original had hardcoded Feb 2026 records
+ *  🚨 HARDCODED DUMMY DATA REMOVED — original had hardcoded Feb 2026 records
  *     (lines 31-36) mixed into the history list, making real records show
  *     alongside fake ones.
- *  ðŸš¨ STATS FIXED â€” original added "+4" to hadir and "+1" to terlambat, and
+ *  🚨 STATS FIXED — original added "+4" to hadir and "+1" to terlambat, and
  *     fallback to hardcoded "92%". Now uses pure real data.
- *  ðŸš¨ MONTH NAVIGATION FIXED â€” original changed `monthIdx` state but the
+ *  🚨 MONTH NAVIGATION FIXED — original changed `monthIdx` state but the
  *     records filter ignored it. Now filters by selected month.
- *  ðŸš¨ YEAR HARDCODED "2026" FIXED â€” now uses current year, with prev/next-year
+ *  🚨 YEAR HARDCODED "2026" FIXED — now uses current year, with prev/next-year
  *     navigation when month rolls over.
- *  ðŸš¨ RECORD GROUPING FIXED â€” original treated each absensi entry as a "day",
+ *  🚨 RECORD GROUPING FIXED — original treated each absensi entry as a "day",
  *     but each user has 2 entries per day (masuk + keluar). Now groups by
  *     `tanggal` so each day shows masuk AND keluar times in one card.
- *  ðŸš¨ `uid = 'T1'` fallback removed â€” was a dev demo fallback that bypassed
+ *  🚨 `uid = 'T1'` fallback removed — was a dev demo fallback that bypassed
  *     auth. Now properly handles no-user state.
  *
- *  âœ… Dark mode support (was importing useTheme but using Colors).
- *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian).
- *  âœ… Pull-to-refresh added.
- *  âœ… Empty state when no records exist for the selected month.
- *  âœ… Real day-of-week computation per record.
- *  âœ… Future months disabled (can't navigate to future).
- *  âœ… Records sorted newest first.
+ *  ✅ Dark mode support (was importing useTheme but using Colors).
+ *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian).
+ *  ✅ Pull-to-refresh added.
+ *  ✅ Empty state when no records exist for the selected month.
+ *  ✅ Real day-of-week computation per record.
+ *  ✅ Future months disabled (can't navigate to future).
+ *  ✅ Records sorted newest first.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
@@ -222,7 +222,7 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
         </TouchableOpacity>
       </View>
 
-      {/* Stats â€” REAL DATA, no fake +4/+1 */}
+      {/* Stats — REAL DATA, no fake +4/+1 */}
       <View style={[st.statsRow, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
         <View style={st.statItem}>
           <Text style={[st.statVal, { color: Colors.success }]}>{hadir}</Text>
@@ -345,3 +345,4 @@ const st = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 60, gap: 12 },
   emptyText: { ...Typography.body, textAlign: 'center', paddingHorizontal: 32 },
 });
+============================================================

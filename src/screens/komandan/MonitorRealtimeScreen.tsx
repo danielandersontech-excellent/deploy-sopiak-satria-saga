@@ -6,15 +6,15 @@
  *   lokasi: id, nama, alamat, posList (JSON with pos details)
  *
  * CRITICAL FIX (v11):
- *  ðŸš¨ fetchLiveLocations now uses extractArray() to handle paginated
+ *  🚨 fetchLiveLocations now uses extractArray() to handle paginated
  *     backend response { data: [...], pagination: {...} }.
- *     Previously Array.isArray(data) was ALWAYS FALSE â†’ liveData was
- *     always empty â†’ map markers never updated from live API.
- *  âœ… useEffect deps include fetchLiveLocations (lint-safe)
- *  âœ… Filtered list is memoized to avoid recomputation each render
- *  âœ… `filtered.map` uses stable key (id || nrp) instead of random
- *  âœ… MapMarker.id coerced to string for safe comparison
- *  âœ… Lat/Lng validity check (rejects NaN values)
+ *     Previously Array.isArray(data) was ALWAYS FALSE → liveData was
+ *     always empty → map markers never updated from live API.
+ *  ✅ useEffect deps include fetchLiveLocations (lint-safe)
+ *  ✅ Filtered list is memoized to avoid recomputation each render
+ *  ✅ `filtered.map` uses stable key (id || nrp) instead of random
+ *  ✅ MapMarker.id coerced to string for safe comparison
+ *  ✅ Lat/Lng validity check (rejects NaN values)
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
@@ -231,7 +231,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
           latitude: loc.lat,
           longitude: loc.lng,
           title: getField(m, 'nama', 'name') || 'Anggota',
-          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} â€¢ ${getField(m, 'shift') || '-'}`,
+          description: `${getField(m, 'pos_jaga', 'posJaga', 'pos_nama', 'pos') || '-'} • ${getField(m, 'shift') || '-'}`,
           type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
           color: st2.color,
           status: mStatus,
@@ -378,7 +378,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
                   <View style={{ flex: 1 }}>
                     <Text style={[s.memberName, { color: theme.text }]}>{mNama}</Text>
                     <Text style={[s.memberMeta, { color: theme.textMuted }]}>
-                      {mPos} â€¢ {mShift}
+                      {mPos} • {mShift}
                     </Text>
                     {loc ? (
                       <View style={s.locRow}>
@@ -386,7 +386,7 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
                         <Text style={s.locText}>
                           {loc.lat.toFixed(4)}, {loc.lng.toFixed(4)}
                         </Text>
-                        {loc.seen ? <Text style={[s.locTime, { color: theme.textMuted }]}>â€¢ {timeAgo(loc.seen)}</Text> : null}
+                        {loc.seen ? <Text style={[s.locTime, { color: theme.textMuted }]}>• {timeAgo(loc.seen)}</Text> : null}
                       </View>
                     ) : (
                       <View style={s.locRow}>
@@ -455,3 +455,4 @@ const s = StyleSheet.create({
   emptyWrap: { alignItems: 'center', paddingVertical: 40 },
   emptyText: { ...Typography.body, marginTop: 8 },
 });
+============================================================

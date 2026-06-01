@@ -1091,4 +1091,3 @@ export default function PersonilPage() {
     </div>
   );
 }
-

@@ -7,25 +7,36 @@ const { haversine } = require('../utils/helpers');
 const { emitToRole, emitToUser } = require('../realtime/socketio');
 const { queryOne } = require('../config/database');
 
+// Max GPS-uncertainty (meters) added on top of the configured radius. GPS at a
+// guard post legitimately reads tens of meters off, so a guard standing ON the
+// spot was being detected as "outside". We widen the effective radius by the
+// device-reported accuracy, capped so a garbage/spoofed accuracy can't make the
+// geofence meaningless.
+const GPS_ACCURACY_TOLERANCE_CAP_M = 75;
+
 class GeofenceService {
   async checkPosition(user, data) {
     const { latitude, longitude, accuracy } = data;
-    if (!latitude || !longitude) throw { status: 400, message: 'latitude & longitude wajib' };
+    // Use == null so a legitimate 0 coordinate (Indonesia straddles the equator)
+    // is NOT rejected as "missing".
+    if (latitude == null || longitude == null) throw { status: 400, message: 'latitude & longitude wajib' };
 
     // 1. Update posisi & simpan history
     await geoRepo.updateUserPosition(user.id, latitude, longitude);
-    await geoRepo.saveLocationHistory(user.id, latitude, longitude, accuracy || null);
+    await geoRepo.saveLocationHistory(user.id, latitude, longitude, accuracy != null ? accuracy : null);
 
     // 2. Ambil lokasi perusahaan
     const lokasi = await geoRepo.getUserLokasi(user.id);
-    if (!lokasi || !lokasi.latitude || !lokasi.longitude) {
+    if (!lokasi || lokasi.latitude == null || lokasi.longitude == null) {
       return { dalam_radius: true, jarak: 0, message: 'Lokasi perusahaan belum di-set' };
     }
 
-    // 3. Hitung jarak
+    // 3. Hitung jarak (+ toleransi akurasi GPS supaya posisi di titik yang sama
+    //    tidak terdeteksi di luar radius karena error GPS yang wajar)
     const jarak = haversine(latitude, longitude, lokasi.latitude, lokasi.longitude);
     const radius = lokasi.radius || 500;
-    const dalam_radius = jarak <= radius;
+    const tolerance = Math.min(Math.max(Number(accuracy) || 0, 0), GPS_ACCURACY_TOLERANCE_CAP_M);
+    const dalam_radius = jarak <= radius + tolerance;
 
     // 4. Cek izin aktif
     const izinAktif = await geoRepo.findActiveIzin(user.id, lokasi.id);
@@ -162,7 +173,8 @@ class GeofenceService {
     ]);
     const personnel = users.map(u => {
       let jarak = null, dalam_radius = true;
-      if (u.lok_lat && u.lok_lng && u.last_latitude && u.last_longitude) {
+      // == null so a legitimate 0 coordinate is treated as present.
+      if (u.lok_lat != null && u.lok_lng != null && u.last_latitude != null && u.last_longitude != null) {
         jarak = Math.round(haversine(u.last_latitude, u.last_longitude, u.lok_lat, u.lok_lng));
         dalam_radius = jarak <= (u.lok_radius || 500);
       }
@@ -177,8 +189,8 @@ class GeofenceService {
 
   async getStatus(userId) {
     const user = await geoRepo.getUserGeofenceStatus(userId);
-    if (!user || !user.lok_lat) return { dalam_radius: true, message: 'Lokasi belum di-set' };
-    const jarak = haversine(user.last_latitude || 0, user.last_longitude || 0, user.lok_lat, user.lok_lng);
+    if (!user || user.lok_lat == null) return { dalam_radius: true, message: 'Lokasi belum di-set' };
+    const jarak = haversine(user.last_latitude != null ? user.last_latitude : 0, user.last_longitude != null ? user.last_longitude : 0, user.lok_lat, user.lok_lng);
     const izin = await geoRepo.findActiveIzin(userId, null);
     return { dalam_radius: jarak <= (user.radius || 500), jarak: Math.round(jarak),
       radius: user.radius || 500, lokasi_nama: user.lokasi_nama, izin_aktif: izin || null };

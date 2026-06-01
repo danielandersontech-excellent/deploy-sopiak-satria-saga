@@ -135,7 +135,7 @@ export default function NotifikasiScreen({ navigation }: any) {
         </TouchableOpacity>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Notifikasi</Text>
-          <Text style={[styles.headerRole, { color: theme.textMuted }]}>{getRoleLabel()} â€¢ {unread} belum dibaca</Text>
+          <Text style={[styles.headerRole, { color: theme.textMuted }]}>{getRoleLabel()} • {unread} belum dibaca</Text>
         </View>
         {unread > 0 ? (
           <TouchableOpacity onPress={markAllRead}>
@@ -223,7 +223,7 @@ export default function NotifikasiScreen({ navigation }: any) {
                         )}
                         {!isPersonal && Array.isArray(targetRole) && targetRole.length > 0 && !targetRole.includes('all') && (
                           <Text style={[styles.notifTarget, { color: theme.primary }]}>
-                            â†’ {targetRole.join(', ')}
+                            → {targetRole.join(', ')}
                           </Text>
                         )}
                       </View>
@@ -291,3 +291,4 @@ const styles = StyleSheet.create({
   personalText: { fontSize: 9, fontWeight: '700', color: Colors.primary },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary, marginTop: 6 },
 });
+============================================================

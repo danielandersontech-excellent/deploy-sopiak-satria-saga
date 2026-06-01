@@ -106,11 +106,27 @@ export function formatDistance(meters: number): string {
 
 export interface GeofenceResult { isInside: boolean; distance: number; posName: string; posId: string; radius: number; }
 
-export function checkGeofence(lat: number, lng: number, posJagaList: any[]): GeofenceResult | null {
+// Max GPS-uncertainty (meters) we add on top of a pos radius. GPS at a guard
+// post legitimately reads tens of meters off (buildings/walls), so a guard
+// standing ON the spot was being flagged "outside". We expand the effective
+// radius by the reported accuracy, but cap it so a garbage/huge accuracy fix
+// can't make the geofence meaningless.
+export const GPS_ACCURACY_TOLERANCE_CAP_M = 75;
+
+export function checkGeofence(
+  lat: number,
+  lng: number,
+  posJagaList: any[],
+  accuracyMeters?: number | null,
+): GeofenceResult | null {
   if (!posJagaList || posJagaList.length === 0) {
     console.log('[Geofence] No pos jaga data available');
     return null; // FIX: return null instead of fake result when no data
   }
+
+  // FIX (bug absensi): use GPS accuracy as tolerance so being physically at the
+  // post is not reported as "outside" due to normal GPS error. Capped + clamped.
+  const tolerance = Math.min(Math.max(accuracyMeters ?? 0, 0), GPS_ACCURACY_TOLERANCE_CAP_M);
 
   let closest: GeofenceResult = { isInside: false, distance: Infinity, posName: '-', posId: '', radius: 100 };
   let hasValidPos = false;
@@ -126,7 +142,7 @@ export function checkGeofence(lat: number, lng: number, posJagaList: any[]): Geo
     const radius = pos.radius || 100;
     if (dist < closest.distance) {
       closest = { 
-        isInside: dist <= radius, 
+        isInside: dist <= radius + tolerance, 
         distance: dist, 
         posName: pos.nama || '-', 
         posId: pos.id || '',
@@ -140,7 +156,7 @@ export function checkGeofence(lat: number, lng: number, posJagaList: any[]): Geo
     return null;
   }
 
-  console.log(`[Geofence] Closest: ${closest.posName} (${Math.round(closest.distance)}m, radius ${closest.radius}m, inside=${closest.isInside})`);
+  console.log(`[Geofence] Closest: ${closest.posName} (${Math.round(closest.distance)}m, radius ${closest.radius}m, tol ±${Math.round(tolerance)}m, inside=${closest.isInside})`);
   return closest;
 }
 

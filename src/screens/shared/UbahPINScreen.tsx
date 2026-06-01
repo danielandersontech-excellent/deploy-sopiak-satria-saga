@@ -2,21 +2,21 @@
  * UBAH PIN - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ðŸš¨ PINField was defined INSIDE the render function â€” React recreates the
+ *  🚨 PINField was defined INSIDE the render function — React recreates the
  *     component on every render, causing the TextInput to LOSE FOCUS on every
  *     keystroke. User couldn't type a 6-digit PIN! Moved PINField OUTSIDE the
  *     component to fix focus retention.
- *  ðŸš¨ Dead code removed â€” `nrp` and `email` variables were leftover from legacy
+ *  🚨 Dead code removed — `nrp` and `email` variables were leftover from legacy
  *     Supabase email-auth flow; the actual call is `authApi.changePin(old, new)`.
  *
- *  âœ… Dark mode support (was importing useTheme but using Colors directly).
- *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian).
- *  âœ… Unsaved-changes warning when navigating back (prevents losing typed PIN).
- *  âœ… KeyboardAvoidingView so keyboard doesn't cover input fields.
- *  âœ… Submitting state on save button to prevent double-tap.
- *  âœ… Empty error state when user starts typing again.
- *  âœ… Visual indicator when PIN is being shown (eye toggle).
- *  âœ… Live validation feedback.
+ *  ✅ Dark mode support (was importing useTheme but using Colors directly).
+ *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian).
+ *  ✅ Unsaved-changes warning when navigating back (prevents losing typed PIN).
+ *  ✅ KeyboardAvoidingView so keyboard doesn't cover input fields.
+ *  ✅ Submitting state on save button to prevent double-tap.
+ *  ✅ Empty error state when user starts typing again.
+ *  ✅ Visual indicator when PIN is being shown (eye toggle).
+ *  ✅ Live validation feedback.
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import {
@@ -64,7 +64,7 @@ function PINField({ label, value, onChangeText, show, toggle, editable = true, t
           secureTextEntry={!show}
           keyboardType="number-pad"
           maxLength={6}
-          placeholder="â€¢â€¢â€¢â€¢â€¢â€¢"
+          placeholder="••••••"
           placeholderTextColor={theme.textMuted}
           editable={editable}
         />
@@ -154,7 +154,7 @@ export default function UbahPINScreen({ navigation }: any) {
       setPinBaru('');
       setKonfirmasi('');
       Alert.alert(
-        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en'
           ? 'PIN changed successfully. Use the new PIN for your next login.'
           : 'PIN berhasil diubah. Gunakan PIN baru untuk login berikutnya.',
@@ -325,3 +325,4 @@ const st = StyleSheet.create({
   eyeBtn: { position: 'absolute', right: 12 },
   feedbackRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
 });
+============================================================

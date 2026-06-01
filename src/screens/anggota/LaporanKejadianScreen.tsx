@@ -174,7 +174,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
         <Text style={styles.fieldLabel}>Kronologi Kejadian *</Text>
         <View>
           <TextInput style={styles.textarea} multiline numberOfLines={8} textAlignVertical="top" placeholder="Deskripsikan kronologi kejadian secara detail... (min 100 karakter)" placeholderTextColor={Colors.textMuted} value={kronologi} onChangeText={setKronologi} maxLength={1000} />
-          <Text style={[styles.charCount, kronologi.length < 100 && { color: Colors.danger }]}>{kronologi.length}/1000 {kronologi.length < 100 ? `(min ${100 - kronologi.length} lagi)` : 'âœ“'}</Text>
+          <Text style={[styles.charCount, kronologi.length < 100 && { color: Colors.danger }]}>{kronologi.length}/1000 {kronologi.length < 100 ? `(min ${100 - kronologi.length} lagi)` : '✓'}</Text>
         </View>
 
         {/* Bukti Media - Real Camera & Gallery */}
@@ -299,3 +299,4 @@ const styles = StyleSheet.create({
   modalDesc: { ...Typography.body, color: Colors.textMuted, marginBottom: 8, textAlign: 'center' },
   modalBukti: { ...Typography.small, color: Colors.success, marginBottom: 16 },
 });
+============================================================

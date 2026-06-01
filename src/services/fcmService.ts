@@ -6,19 +6,19 @@
  * CARA KERJA TOKEN:
  *
  *   Di Expo Go:
- *     - getDevicePushTokenAsync() â†’ FCM token milik PROJECT Expo Go
+ *     - getDevicePushTokenAsync() → FCM token milik PROJECT Expo Go
  *     - Token ini TIDAK BISA dipakai oleh Firebase Admin SDK project kamu
  *     - Error: "SenderId mismatch"
- *     - SOLUSI: Harus pakai Expo Push Token â†’ kirim via Expo Push API
+ *     - SOLUSI: Harus pakai Expo Push Token → kirim via Expo Push API
  *
  *   Di Development Build / Production:
- *     - getDevicePushTokenAsync() â†’ FCM token milik PROJECT kamu
+ *     - getDevicePushTokenAsync() → FCM token milik PROJECT kamu
  *     - getExpoPushTokenAsync() juga tetap bekerja
  *
  * STRATEGI:
  *   1. SELALU coba getExpoPushTokenAsync() dulu - works everywhere
  *   2. Jika gagal, fallback ke getDevicePushTokenAsync()
- *   3. Backend detect token type â†’ Expo token via Expo API, FCM via Firebase Admin
+ *   3. Backend detect token type → Expo token via Expo API, FCM via Firebase Admin
  *   4. Jika Firebase Admin kena "SenderId mismatch", auto-fallback ke Expo Push API
  */
 import * as Notifications from 'expo-notifications';
@@ -90,7 +90,7 @@ export async function setupNotificationChannels(): Promise<void> {
     sound: 'default',
   });
 
-  console.log('[FCM] âœ… Notification channels created');
+  console.log('[FCM] ✅ Notification channels created');
 }
 
 // ===== REGISTER FOR PUSH NOTIFICATIONS =====
@@ -130,7 +130,7 @@ export async function registerForPushNotifications(userId?: string): Promise<str
         projectId: projectId || undefined,
       });
       token = expoToken.data;
-      console.log('[FCM] âœ… Expo Push Token:', token?.substring(0, 30) + '...');
+      console.log('[FCM] ✅ Expo Push Token:', token?.substring(0, 30) + '...');
     } catch (expoError: any) {
       console.log('[FCM] Expo Push Token not available:', expoError?.message?.substring(0, 80));
 
@@ -164,7 +164,7 @@ export async function registerForPushNotifications(userId?: string): Promise<str
 export async function saveFcmToken(userId: string, token: string): Promise<void> {
   try {
     await usersApi.updatePushToken(userId, token);
-    console.log('[FCM] âœ… Token saved to backend');
+    console.log('[FCM] ✅ Token saved to backend');
   } catch (err) {
     console.log('[FCM] Token save failed (will retry):', err);
     await AsyncStorage.setItem('@ptsss_pending_fcm_save', JSON.stringify({ userId, token }));
@@ -178,7 +178,7 @@ export async function retryPendingTokenSave(): Promise<void> {
     const { userId, token } = JSON.parse(pending);
     await usersApi.updatePushToken(userId, token);
     await AsyncStorage.removeItem('@ptsss_pending_fcm_save');
-    console.log('[FCM] âœ… Pending token save completed');
+    console.log('[FCM] ✅ Pending token save completed');
   } catch { /* Will retry next time */ }
 }
 

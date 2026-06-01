@@ -1,7 +1,7 @@
 /**
  * TAMBAH/EDIT USER - Express.js Backend
- * CREATE: POST /api/auth/register â†’ creates user with default PIN 123456
- * EDIT: PUT /api/users/:id â†’ updates user data
+ * CREATE: POST /api/auth/register → creates user with default PIN 123456
+ * EDIT: PUT /api/users/:id → updates user data
  */
 import React, { useState, useMemo } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
@@ -96,7 +96,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
 
     setSaving(false);
     Alert.alert(
-      'âœ… Berhasil',
+      '✅ Berhasil',
       `Pengguna baru berhasil ditambahkan:\n\nNama: ${nama.trim()}\nNRP: ${nrp.trim()}\nPIN: 123456\n\nUser dapat login dan ubah PIN sendiri.`,
       [{ text: 'OK', onPress: () => navigation.goBack() }]
     );
@@ -120,7 +120,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
     });
 
     setSaving(false);
-    Alert.alert('âœ… Berhasil', 'Data pengguna berhasil diperbarui', [
+    Alert.alert('✅ Berhasil', 'Data pengguna berhasil diperbarui', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);
   };
@@ -244,3 +244,4 @@ const st = StyleSheet.create({
   saveInfo: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 },
   saveInfoText: { ...Typography.caption, color: Colors.textMuted },
 });
+============================================================

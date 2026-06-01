@@ -51,7 +51,7 @@ export default function TentangAplikasiScreen({ navigation }: any) {
             </View>
           ))}
         </Card>
-        <Text style={st.copyright}>Â© 2026 PT Sopiak Satria Saga{'\n'}All rights reserved.</Text>
+        <Text style={st.copyright}>© 2026 PT Sopiak Satria Saga{'\n'}All rights reserved.</Text>
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>
@@ -76,3 +76,4 @@ const st = StyleSheet.create({
   contactValue: { ...Typography.smallBold, color: Colors.textPrimary },
   copyright: { ...Typography.caption, color: Colors.textMuted, textAlign: 'center', marginTop: 24 },
 });
+============================================================

@@ -2,22 +2,22 @@
  * DASHBOARD SUPERVISOR - v9 (Bug-Fix Pass)
  *
  * FIXES (v9):
- *  âœ… Unread badge now uses `unreadCountForRole('supervisor')` instead of raw
+ *  ✅ Unread badge now uses `unreadCountForRole('supervisor')` instead of raw
  *     `notifikasi.filter(!dibaca).length`. Previously counted ALL unread
  *     notifications including those targeted at anggota/komandan only.
- *  âœ… Bell badge clamped to "99+" (was overflowing UI for large counts).
- *  âœ… Map markers: lat/lng null/NaN check (was `m.lastLatitude && m.lastLongitude`
+ *  ✅ Bell badge clamped to "99+" (was overflowing UI for large counts).
+ *  ✅ Map markers: lat/lng null/NaN check (was `m.lastLatitude && m.lastLongitude`
  *     which excludes 0,0 even though they could be valid Atlantic coordinates).
- *  âœ… Off-duty status grouped correctly: `m.status !== 'off_duty'` counts
+ *  ✅ Off-duty status grouped correctly: `m.status !== 'off_duty'` counts
  *     `break` as on-duty (consistent with status meaning).
- *  âœ… Companies use `lokasiId` matching as primary (more reliable than name),
+ *  ✅ Companies use `lokasiId` matching as primary (more reliable than name),
  *     `lokasi` name as fallback. Same fix as komandan screens.
- *  âœ… Top performers: stable sort with id tiebreaker (avoids reorder churn).
- *  âœ… MapMarker uses proper `MapMarker['type']` union (no `as const` mix).
- *  âœ… Cleanup: removed unused `width` Dimensions extraction.
- *  âœ… Interval clears properly on unmount (no leak).
- *  âœ… Pull-to-refresh on dashboard scroll view.
- *  âœ… Safer `mapMarkers.id` to string for navigation comparison.
+ *  ✅ Top performers: stable sort with id tiebreaker (avoids reorder churn).
+ *  ✅ MapMarker uses proper `MapMarker['type']` union (no `as const` mix).
+ *  ✅ Cleanup: removed unused `width` Dimensions extraction.
+ *  ✅ Interval clears properly on unmount (no leak).
+ *  ✅ Pull-to-refresh on dashboard scroll view.
+ *  ✅ Safer `mapMarkers.id` to string for navigation comparison.
  */
 import React, { useMemo, useState, useEffect, useCallback } from 'react';
 import {
@@ -130,7 +130,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
         latitude: Number(m.lastLatitude),
         longitude: Number(m.lastLongitude),
         title: m.nama,
-        description: `${m.pos || '-'} â€¢ ${m.shift || '-'}`,
+        description: `${m.pos || '-'} • ${m.shift || '-'}`,
         type: (m.status === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
         color: m.status === 'on_duty' ? Colors.success
           : m.status === 'patroli' ? Colors.primary
@@ -406,7 +406,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
         <View style={s.sectionRow}>
           <Text style={[s.sectionTitle, { color: theme.text }]}>{t('dash.companies')}</Text>
           <TouchableOpacity onPress={() => navigation.navigate('PerusahaanList')}>
-            <Text style={[s.linkText, { color: theme.primary }]}>{t('dash.view_all')} â†’</Text>
+            <Text style={[s.linkText, { color: theme.primary }]}>{t('dash.view_all')} →</Text>
           </TouchableOpacity>
         </View>
         {companies.map((c) => (
@@ -546,7 +546,7 @@ export default function DashboardSupervisorScreen({ navigation }: any) {
             <View style={{ flex: 1 }}>
               <Text style={[s.perfName, { color: theme.text }]}>{m.nama}</Text>
               <Text style={[s.perfSub, { color: theme.textMuted }]}>
-                {m.lokasi || '-'} â€¢ {m.pos || '-'}
+                {m.lokasi || '-'} • {m.pos || '-'}
               </Text>
             </View>
             <View style={s.scoreBox}>
@@ -673,3 +673,4 @@ const s = StyleSheet.create({
   scoreBox: { flexDirection: 'row', alignItems: 'center', gap: 3 },
   scoreVal: { fontSize: 18, fontWeight: '800' },
 });
+============================================================

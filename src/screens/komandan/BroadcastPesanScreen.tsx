@@ -3,20 +3,20 @@
  * Komandan hanya bisa broadcast ke anggota di perusahaan klien yang sama
  *
  * CRITICAL FIXES (v10):
- *  ðŸš¨ Removed DUPLICATE API call. Previously:
- *      1) handleSend â†’ dataApi.broadcasts.create({...lokasi_id})  (with scope)
- *      2) addBroadcast() in dataStore â†’ dataApi.broadcasts.create({...}) AGAIN
+ *  🚨 Removed DUPLICATE API call. Previously:
+ *      1) handleSend → dataApi.broadcasts.create({...lokasi_id})  (with scope)
+ *      2) addBroadcast() in dataStore → dataApi.broadcasts.create({...}) AGAIN
  *         (WITHOUT lokasi_id - so the duplicate copy is visible to everyone!)
  *     Result: 2 broadcasts created per send, second one not scope-restricted.
  *     New flow: API call once (with lokasi_id), then update local Zustand
  *     state directly via useDataStore.setState - no second API request.
  *
- *  âœ… setSubmitting moved to try/finally for guaranteed cleanup
- *  âœ… getField() used consistently for user fields (snake_case + camelCase)
- *  âœ… Disabled inputs while submitting (prevents double-tap submission)
- *  âœ… Error message localized
- *  âœ… Team count filter uses getField fallback (handles both casing)
- *  âœ… Defensive null-checks for user data
+ *  ✅ setSubmitting moved to try/finally for guaranteed cleanup
+ *  ✅ getField() used consistently for user fields (snake_case + camelCase)
+ *  ✅ Disabled inputs while submitting (prevents double-tap submission)
+ *  ✅ Error message localized
+ *  ✅ Team count filter uses getField fallback (handles both casing)
+ *  ✅ Defensive null-checks for user data
  *
  * PRIOR FIXES:
  *  - Komandan scoped to their lokasi_id only
@@ -153,7 +153,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
       }));
 
       Alert.alert(
-        'âœ… ' + (lang === 'en' ? 'Message Sent' : 'Pesan Terkirim'),
+        '✅ ' + (lang === 'en' ? 'Message Sent' : 'Pesan Terkirim'),
         lang === 'en'
           ? `Broadcast to ${target} sent successfully`
           : `Broadcast ke ${target} berhasil dikirim`,
@@ -370,7 +370,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
                 <Text style={[s.histMsg, { color: theme.textSecondary }]} numberOfLines={2}>
                   {b.pesan}
                 </Text>
-                <Text style={[s.histTarget, { color: theme.primary }]}>â†’ {b.target}</Text>
+                <Text style={[s.histTarget, { color: theme.primary }]}>→ {b.target}</Text>
               </Card>
             ))}
           </>
@@ -441,3 +441,4 @@ const s = StyleSheet.create({
   histMsg: { ...Typography.small, marginTop: 2 },
   histTarget: { ...Typography.caption, marginTop: 4 },
 });
+============================================================

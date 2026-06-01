@@ -2,7 +2,7 @@
  * MANAJEMEN LOKASI - v3 (Bug-Fix Pass)
  *
  * CRITICAL FIXES (v3):
- *  ðŸš¨ Pos Jaga add/edit/delete were SILENTLY LOST on refresh!
+ *  🚨 Pos Jaga add/edit/delete were SILENTLY LOST on refresh!
  *     The store's `updateLokasi(id, { posList })` only updates LOCAL state and
  *     calls `dataApi.lokasi.update()` which does NOT accept posList field.
  *     Backend has separate /api/data/pos-jaga endpoints. Pos changes vanished
@@ -12,15 +12,15 @@
  *     update Zustand state via setState to keep UI in sync. After refresh
  *     posList is rebuilt by store mapping pos_jaga + lokasi tables.
  *
- *  âœ… Add Pos: include lokasi_id in payload (was missing - pos created without lokasi).
- *  âœ… Edit Pos: full update with all fields (was only updating name+radius+status locally).
- *  âœ… Delete Pos: backend delete + local state sync.
- *  âœ… Submitting state on all mutations to prevent double-tap.
- *  âœ… Error messages localized; backend errors shown to user instead of silently failing.
- *  âœ… Pull-to-refresh added.
- *  âœ… Modal `onRequestClose` for Android back button.
- *  âœ… Lat/Lng validation: range checks (-90..90, -180..180).
- *  âœ… Radius validation: integer, 10-500m range.
+ *  ✅ Add Pos: include lokasi_id in payload (was missing - pos created without lokasi).
+ *  ✅ Edit Pos: full update with all fields (was only updating name+radius+status locally).
+ *  ✅ Delete Pos: backend delete + local state sync.
+ *  ✅ Submitting state on all mutations to prevent double-tap.
+ *  ✅ Error messages localized; backend errors shown to user instead of silently failing.
+ *  ✅ Pull-to-refresh added.
+ *  ✅ Modal `onRequestClose` for Android back button.
+ *  ✅ Lat/Lng validation: range checks (-90..90, -180..180).
+ *  ✅ Radius validation: integer, 10-500m range.
  */
 import React, { useState, useCallback } from 'react';
 import {
@@ -113,7 +113,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setShowAddPos(true);
   };
 
-  // ðŸš¨ CRITICAL FIX: Call posJaga API directly + sync local state
+  // 🚨 CRITICAL FIX: Call posJaga API directly + sync local state
   const handleAddPos = async () => {
     if (submitting) return;
     if (!newPosNama.trim()) {
@@ -165,7 +165,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 
       setShowAddPos(false);
       Alert.alert(
-        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en'
           ? `Post "${newPosNama.trim()}" has been added to ${lok.nama}`
           : `Pos "${newPosNama.trim()}" berhasil ditambahkan ke ${lok.nama}`
@@ -211,7 +211,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       });
       setShowEditLokasi(false);
       Alert.alert(
-        'âœ… ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+        '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
         lang === 'en' ? 'Location updated successfully' : 'Lokasi berhasil diperbarui'
       );
     } catch (e: any) {
@@ -237,7 +237,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     setShowEditPos(true);
   };
 
-  // ðŸš¨ CRITICAL FIX: Edit Pos persists to backend via posJaga API
+  // 🚨 CRITICAL FIX: Edit Pos persists to backend via posJaga API
   const handleEditPos = async () => {
     if (submitting) return;
     if (!editPosNama.trim()) {
@@ -282,7 +282,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       }));
 
       setShowEditPos(false);
-      Alert.alert('âœ…', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
+      Alert.alert('✅', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
     } catch (e: any) {
       console.log('[Lokasi] edit pos err:', e);
       Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to update post' : 'Gagal memperbarui pos'));
@@ -291,7 +291,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
     }
   };
 
-  // ðŸš¨ CRITICAL FIX: Delete Pos persists to backend
+  // 🚨 CRITICAL FIX: Delete Pos persists to backend
   const handleDeletePos = (lokId: string, posId: string, posName: string) => {
     Alert.alert(
       lang === 'en' ? 'Delete Post?' : 'Hapus Pos?',
@@ -387,7 +387,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                   <Text style={[st.locName, { color: theme.text }]}>{l.nama}</Text>
                   <Text style={[st.locAddr, { color: theme.textMuted }]}>{l.alamat || '-'}</Text>
                   <Text style={[st.locMeta, { color: theme.textMuted }]}>
-                    {l.posList.length} pos â€¢ {l.totalAnggota} {lang === 'en' ? 'members' : 'anggota'}
+                    {l.posList.length} pos • {l.totalAnggota} {lang === 'en' ? 'members' : 'anggota'}
                   </Text>
                 </View>
                 <Badge
@@ -416,7 +416,7 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
                       <Text style={[st.posDetail, { color: theme.textMuted }]}>
                         Radius: {p.radius}m
                         {p.latitude != null && p.longitude != null
-                          ? ` â€¢ ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}`
+                          ? ` • ${Number(p.latitude).toFixed(4)}, ${Number(p.longitude).toFixed(4)}`
                           : ''}
                       </Text>
                     </View>
@@ -865,3 +865,4 @@ const st = StyleSheet.create({
   statusChipText: { ...Typography.smallBold },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 20 },
 });
+============================================================

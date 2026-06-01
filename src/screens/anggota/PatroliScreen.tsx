@@ -4,7 +4,7 @@
  * MASALAH SEBELUMNYA:
  * - Menggunakan `patroliRecords` dari dataStore yang TIDAK ADA atau kosong
  * - Field names tidak cocok (snake_case dari DB/API vs camelCase di store)
- * - Tidak pernah fetch data patroli dari backend â†’ selalu "Belum Ada Patroli"
+ * - Tidak pernah fetch data patroli dari backend → selalu "Belum Ada Patroli"
  * 
  * PERBAIKAN:
  * - Fetch riwayat patroli dari backend API (tabel `patroli`) via patroliApi.list()
@@ -28,7 +28,7 @@ import { patroliApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
-/* â”€â”€â”€ Tipe record patroli yang sudah dinormalisasi â”€â”€â”€ */
+/* ─── Tipe record patroli yang sudah dinormalisasi ─── */
 interface PatrolRecord {
   id: string;
   userId: string;
@@ -90,9 +90,9 @@ export default function PatroliScreen({ navigation }: any) {
 
   const uid = user?.id || '';
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════
   // FETCH: Ambil riwayat patroli dari SEMUA sumber
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ═══════════════════════════════════════════
   const fetchHistory = useCallback(async () => {
     setHistLoading(true);
     const collected: PatrolRecord[] = [];
@@ -168,14 +168,14 @@ export default function PatroliScreen({ navigation }: any) {
   useEffect(() => {
     const wasActive = prevActiveRef.current;
     prevActiveRef.current = activePatrol;
-    // Patrol just ended â†’ refresh history
+    // Patrol just ended → refresh history
     if (wasActive && !activePatrol && uid) {
       const timer = setTimeout(fetchHistory, 800);
       return () => clearTimeout(timer);
     }
   }, [activePatrol, uid, fetchHistory]);
 
-  // â•â•â• Timer patroli aktif â•â•â•
+  // ═══ Timer patroli aktif ═══
   useEffect(() => {
     if (!activePatrol?.isActive) return;
     const iv = setInterval(() => setElapsed(Math.floor((Date.now() - activePatrol.startTime) / 1000)), 1000);
@@ -191,7 +191,7 @@ export default function PatroliScreen({ navigation }: any) {
   const total = activePatrol?.checkpoints.length || 0;
   const progress = total > 0 ? (scanned / total) * 100 : 0;
 
-  // â•â•â• Patroli hari ini â•â•â•
+  // ═══ Patroli hari ini ═══
   const todayPatrols = useMemo(() => {
     return records.filter(p => isToday(p.startTime) || isToday(p.endTime));
   }, [records]);
@@ -220,7 +220,7 @@ export default function PatroliScreen({ navigation }: any) {
     return m >= 60 ? `${Math.floor(m/60)} jam ${m%60} menit` : m > 0 ? `${m} mnt ${sec} dtk` : `${sec} dtk`;
   };
 
-  // â•â•â• Handlers â•â•â•
+  // ═══ Handlers ═══
   const handleStart = (routeId: string) => {
     const cnt = routeCount(routeId);
     const name = routes.find(r => r.id === routeId)?.nama || 'Rute';
@@ -239,18 +239,18 @@ export default function PatroliScreen({ navigation }: any) {
         { text: 'Lanjutkan', style: 'cancel' },
         { text: 'Akhiri', style: 'destructive', onPress: () => {
           endPatrol();
-          Alert.alert('Patroli Diakhiri', `${info.name}\n${info.scanned}/${info.total} CP â€¢ ${info.time}`);
+          Alert.alert('Patroli Diakhiri', `${info.name}\n${info.scanned}/${info.total} CP • ${info.time}`);
         }},
       ]);
     } else {
       endPatrol();
-      Alert.alert('Patroli Selesai! ðŸŽ‰', `${info.name}\nSemua ${info.total} CP berhasil! â€¢ ${info.time}\n\nAnda bisa patroli lagi jika diperlukan.`);
+      Alert.alert('Patroli Selesai! 🎉', `${info.name}\nSemua ${info.total} CP berhasil! • ${info.time}\n\nAnda bisa patroli lagi jika diperlukan.`);
     }
   };
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ════════════════════════════════════════
   // RENDER: ROUTE SELECTION
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ════════════════════════════════════════
   if (!activePatrol) {
     return (
       <View style={[s.container, { backgroundColor: theme.bg }]}>
@@ -266,7 +266,7 @@ export default function PatroliScreen({ navigation }: any) {
 
         <ScrollView contentContainerStyle={s.content} showsVerticalScrollIndicator={false}>
 
-          {/* â•â•â• SUMMARY â•â•â• */}
+          {/* ═══ SUMMARY ═══ */}
           {histLoading ? (
             <Card style={[s.summaryCard, { borderColor: theme.border }]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 }}>
@@ -285,7 +285,7 @@ export default function PatroliScreen({ navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[s.summaryTitle, { color: isDark ? Colors.success : '#166534' }]}>
-                    Patroli Hari Ini âœ“
+                    Patroli Hari Ini ✓
                   </Text>
                   <Text style={[s.summarySub, { color: isDark ? theme.textMuted : '#15803D' }]}>
                     {totalToday} patroli selesai
@@ -333,7 +333,7 @@ export default function PatroliScreen({ navigation }: any) {
             </Card>
           )}
 
-          {/* â•â•â• ROUTE LIST â•â•â• */}
+          {/* ═══ ROUTE LIST ═══ */}
           <Text style={[s.sectionTitle, { color: theme.text }]}>Pilih Rute Patroli</Text>
 
           {routes.length === 0 ? (
@@ -360,10 +360,10 @@ export default function PatroliScreen({ navigation }: any) {
                       )}
                     </View>
                     <Text style={[s.routeMeta, { color: theme.textMuted }]}>
-                      {route.checkpointIds.length} Checkpoint â€¢ ~{route.waktuEstimasi} menit
+                      {route.checkpointIds.length} Checkpoint • ~{route.waktuEstimasi} menit
                     </Text>
                     <Text style={[s.routeCps, { color: Colors.primary }]} numberOfLines={2}>
-                      {cpNames.join(' â†’ ')}
+                      {cpNames.join(' → ')}
                     </Text>
                   </View>
                 </View>
@@ -380,8 +380,8 @@ export default function PatroliScreen({ navigation }: any) {
                         Terakhir: {fmtTime(last.endTime || last.startTime)} WIB
                       </Text>
                       <Text style={[s.lastDetail, { color: isDark ? theme.textMuted : '#15803D' }]}>
-                        Durasi: {fmtDur(last.startTime, last.endTime)} â€¢ {last.checkpointScanned}/{last.checkpointTotal || route.checkpointIds.length} CP
-                        {last.status === 'incomplete' ? ' (tidak lengkap)' : ' âœ“'}
+                        Durasi: {fmtDur(last.startTime, last.endTime)} • {last.checkpointScanned}/{last.checkpointTotal || route.checkpointIds.length} CP
+                        {last.status === 'incomplete' ? ' (tidak lengkap)' : ' ✓'}
                       </Text>
                     </View>
                   </View>
@@ -398,7 +398,7 @@ export default function PatroliScreen({ navigation }: any) {
                         <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.status === 'completed' ? Colors.success : Colors.warning }} />
                         <Text style={{ fontSize: 11, color: theme.textSecondary }}>
                           #{i+1} - {fmtTime(p.startTime)} s/d {fmtTime(p.endTime)} ({p.checkpointScanned}/{p.checkpointTotal} CP)
-                          {p.status === 'incomplete' ? ' âš ï¸' : ' âœ“'}
+                          {p.status === 'incomplete' ? ' ⚠️' : ' ✓'}
                         </Text>
                       </View>
                     ))}
@@ -416,7 +416,7 @@ export default function PatroliScreen({ navigation }: any) {
             );
           })}
 
-          {/* â•â•â• FULL HISTORY â•â•â• */}
+          {/* ═══ FULL HISTORY ═══ */}
           {totalToday > 0 && (
             <>
               <Text style={[s.sectionTitle, { color: theme.text, marginTop: 20 }]}>Riwayat Patroli Hari Ini</Text>
@@ -462,9 +462,9 @@ export default function PatroliScreen({ navigation }: any) {
     );
   }
 
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ════════════════════════════════════════
   // RENDER: ACTIVE PATROL
-  // â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+  // ════════════════════════════════════════
   return (
     <View style={[s.container, { backgroundColor: theme.bg }]}>
       <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
@@ -499,7 +499,7 @@ export default function PatroliScreen({ navigation }: any) {
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text style={[{ ...Typography.bodyBold }, { color: theme.text }]}>{cp.nama}</Text>
-                  {done && <Text style={{ fontSize: 12, color: Colors.success, marginTop: 2 }}>âœ“ Discan pukul {cp.scanTime}</Text>}
+                  {done && <Text style={{ fontSize: 12, color: Colors.success, marginTop: 2 }}>✓ Discan pukul {cp.scanTime}</Text>}
                   {cur && !done && <Text style={{ fontSize: 12, color: Colors.primary, fontWeight: '600', marginTop: 2 }}>Selanjutnya</Text>}
                 </View>
                 {cur && !done && <Button title="SCAN" variant="primary" size="small" icon="qr-code-outline" onPress={() => navigation.navigate('QRScanner', { checkpointId: cp.id })} />}
@@ -571,3 +571,4 @@ const s = StyleSheet.create({
   cpNumCur: { backgroundColor: Colors.primary },
   cpNumTxt: { ...Typography.smallBold, color: Colors.textMuted },
 });
+============================================================

@@ -265,4 +265,3 @@ export default function GeofencePage() {
     </div>
   );
 }
-

@@ -2,17 +2,17 @@
  * SETUP RUTE - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  ðŸš¨ Edit button was "(simulasi)" â€” never actually edited routes!
+ *  🚨 Edit button was "(simulasi)" — never actually edited routes!
  *     Now opens modal with route data and persists via updateRoute().
- *  âœ… Dark mode + i18n (was importing both but using neither).
- *  âœ… Modal `onRequestClose` for Android back button.
- *  âœ… Waktu Estimasi input (was hardcoded `selectedCps.length * 6`).
- *  âœ… Assigned Shift selector from shifts in store (was hardcoded 'Semua').
- *  âœ… Search filter for routes.
- *  âœ… Empty state for routes and checkpoints in modal.
- *  âœ… Submitting state to prevent double-tap.
- *  âœ… Confirmation dialog uses dual-language text.
- *  âœ… Pull-to-refresh.
+ *  ✅ Dark mode + i18n (was importing both but using neither).
+ *  ✅ Modal `onRequestClose` for Android back button.
+ *  ✅ Waktu Estimasi input (was hardcoded `selectedCps.length * 6`).
+ *  ✅ Assigned Shift selector from shifts in store (was hardcoded 'Semua').
+ *  ✅ Search filter for routes.
+ *  ✅ Empty state for routes and checkpoints in modal.
+ *  ✅ Submitting state to prevent double-tap.
+ *  ✅ Confirmation dialog uses dual-language text.
+ *  ✅ Pull-to-refresh.
  */
 import React, { useState, useCallback, useMemo } from 'react';
 import {
@@ -122,7 +122,7 @@ export default function SetupRuteScreen({ navigation }: any) {
           waktuEstimasi: finalEstimasi,
           assignedShift: fShift,
         } as any);
-        Alert.alert('âœ…', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
+        Alert.alert('✅', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
       } else {
         addRoute({
           nama: fName.trim(),
@@ -131,7 +131,7 @@ export default function SetupRuteScreen({ navigation }: any) {
           assignedShift: fShift,
           status: 'active',
         });
-        Alert.alert('âœ…', lang === 'en' ? 'Route added' : 'Rute baru ditambahkan');
+        Alert.alert('✅', lang === 'en' ? 'Route added' : 'Rute baru ditambahkan');
       }
       setShowModal(false);
     } catch (e: any) {
@@ -152,7 +152,7 @@ export default function SetupRuteScreen({ navigation }: any) {
         assignedShift: r.assignedShift,
         status: r.status === 'active' ? 'active' : 'inactive',
       });
-      Alert.alert('âœ…', lang === 'en' ? 'Route duplicated' : 'Rute berhasil diduplikat');
+      Alert.alert('✅', lang === 'en' ? 'Route duplicated' : 'Rute berhasil diduplikat');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed');
     } finally {
@@ -224,9 +224,9 @@ export default function SetupRuteScreen({ navigation }: any) {
                 />
               </View>
               <Text style={[st.routeMeta, { color: theme.textMuted }]}>
-                {r.checkpointIds.length} checkpoint â€¢ ~{r.waktuEstimasi} {lang === 'en' ? 'min' : 'menit'} â€¢ {r.assignedShift || '-'}
+                {r.checkpointIds.length} checkpoint • ~{r.waktuEstimasi} {lang === 'en' ? 'min' : 'menit'} • {r.assignedShift || '-'}
               </Text>
-              <Text style={[st.routeCps, { color: Colors.primary }]}>{cpNames.join(' â†’ ')}</Text>
+              <Text style={[st.routeCps, { color: Colors.primary }]}>{cpNames.join(' → ')}</Text>
               <View style={st.cardActions}>
                 <Button
                   title={lang === 'en' ? 'Edit' : 'Edit'}
@@ -512,3 +512,4 @@ const st = StyleSheet.create({
   shiftChipText: { ...Typography.caption, fontWeight: '600' },
   modalActions: { flexDirection: 'row', gap: 10, marginTop: 16 },
 });
+============================================================

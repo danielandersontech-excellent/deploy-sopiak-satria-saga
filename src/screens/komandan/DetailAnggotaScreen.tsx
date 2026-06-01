@@ -9,31 +9,31 @@
  *   laporan_kejadian: user_id, jenis, prioritas, waktu_kejadian, lokasi_text, kronologi, status, lokasi_id, created_at
  *
  * CRITICAL FIXES (v5):
- *  ðŸš¨ All API fetches now use extractArray() to handle paginated response
+ *  🚨 All API fetches now use extractArray() to handle paginated response
  *     { data: [...], pagination: {...} }. Previously Array.isArray(result)
- *     was ALWAYS FALSE â†’ activity tab was ALWAYS empty (fell back to
+ *     was ALWAYS FALSE → activity tab was ALWAYS empty (fell back to
  *     store filter which was also incomplete). Fixed for:
  *     - absensiApi.list (line 134)
  *     - patroliApi.list user-specific + global (line 157, 163)
  *     - laporanApi.harianList (line 172)
  *     - laporanApi.kejadianList (line 192)
  *
- *  âœ… fmtDate now detects Invalid Date and returns original string instead
+ *  ✅ fmtDate now detects Invalid Date and returns original string instead
  *     of literal "Invalid Date" text in the UI.
- *  âœ… useEffect deps include fetchActivityData (no stale closures)
- *  âœ… Refresh control now also refreshes when on profile/location tabs
- *  âœ… Safe key generation - no Math.random() in render (was causing
- *     React key churn on re-render â†’ unnecessary remounts)
- *  âœ… Type-safe member null-check earlier (avoid undefined member access)
- *  âœ… pos_jaga fallback chain includes pos_nama
- *  âœ… Map marker type uses proper union type instead of `as any`
+ *  ✅ useEffect deps include fetchActivityData (no stale closures)
+ *  ✅ Refresh control now also refreshes when on profile/location tabs
+ *  ✅ Safe key generation - no Math.random() in render (was causing
+ *     React key churn on re-render → unnecessary remounts)
+ *  ✅ Type-safe member null-check earlier (avoid undefined member access)
+ *  ✅ pos_jaga fallback chain includes pos_nama
+ *  ✅ Map marker type uses proper union type instead of `as any`
  *
  * PRIOR FIXES:
  *  - getField() for dual snake_case/camelCase field access
  *  - member.pos_jaga (not pos), member.no_hp (not noHp), member.lokasi_id
  *  - Absensi fallback: user_id, pos_jaga, dalam_radius, created_at
  *  - Patroli: route_name, checkpoint_scanned, checkpoint_total, start_time, end_time
- *  - Lokasi tab: resolves lokasi_id â†’ lokasi table, finds pos in posList
+ *  - Lokasi tab: resolves lokasi_id → lokasi table, finds pos in posList
  *  - Map markers: last_latitude/last_longitude
  *  - Checkpoint filter by lokasi_id (not lokasi name)
  */
@@ -386,7 +386,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
           latitude: Number(memberLastLat),
           longitude: Number(memberLastLng),
           title: memberNama,
-          description: `${memberPosJaga} â€¢ ${memberShift}`,
+          description: `${memberPosJaga} • ${memberShift}`,
           type: (mStatus === 'patroli' ? 'patrol' : 'person') as MapMarker['type'],
           color: ms.color,
           status: mStatus,
@@ -408,7 +408,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
           </View>
           <Text style={[styl.memberName, { color: isDark ? theme.text : '#fff' }]}>{memberNama}</Text>
           <Text style={[styl.memberNrp, { color: isDark ? theme.textMuted : 'rgba(255,255,255,0.6)' }]}>
-            NRP: {memberNrp} â€¢ {memberRole}
+            NRP: {memberNrp} • {memberRole}
           </Text>
           <View style={styl.badgeRow}>
             <Badge text={ms.label} variant={ms.variant} />
@@ -586,7 +586,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                                 : 'Keluar'}
                             </Text>
                             <Text style={[styl.actSub, { color: theme.textMuted }]}>
-                              {aPos} â€¢ {fmtDate(aDate)}
+                              {aPos} • {fmtDate(aDate)}
                             </Text>
                           </View>
                           <Badge
@@ -632,7 +632,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                             </Text>
                             <Text style={[styl.actSub, { color: theme.textMuted }]}>
                               {getField(p, 'checkpoint_scanned', 'checkpointScanned') || 0}/
-                              {getField(p, 'checkpoint_total', 'checkpointTotal') || 0} checkpoint â€¢{' '}
+                              {getField(p, 'checkpoint_total', 'checkpointTotal') || 0} checkpoint •{' '}
                               {fmtDate(getField(p, 'created_at', 'createdAt'))}
                             </Text>
                           </View>
@@ -683,11 +683,11 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                                   : lKondisi || '-'}
                               </Text>
                               <Text style={[styl.actSub, { color: theme.textMuted }]}>
-                                {getField(l, 'tanggal') || '-'} â€¢ {getField(l, 'shift') || '-'}
+                                {getField(l, 'tanggal') || '-'} • {getField(l, 'shift') || '-'}
                               </Text>
                             </View>
                             <Badge
-                              text={getField(l, 'status') === 'approved' ? 'âœ“' : 'â³'}
+                              text={getField(l, 'status') === 'approved' ? '✓' : '⏳'}
                               variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'}
                             />
                           </View>
@@ -707,12 +707,12 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                                 {getField(l, 'jenis') || '-'}
                               </Text>
                               <Text style={[styl.actSub, { color: theme.textMuted }]}>
-                                {lang === 'en' ? 'Priority' : 'Prioritas'}: {getField(l, 'prioritas') || '-'} â€¢{' '}
+                                {lang === 'en' ? 'Priority' : 'Prioritas'}: {getField(l, 'prioritas') || '-'} •{' '}
                                 {fmtDate(getField(l, 'created_at', 'createdAt'))}
                               </Text>
                             </View>
                             <Badge
-                              text={getField(l, 'status') === 'approved' ? 'âœ“' : 'â³'}
+                              text={getField(l, 'status') === 'approved' ? '✓' : '⏳'}
                               variant={getField(l, 'status') === 'approved' ? 'success' : 'warning'}
                             />
                           </View>
@@ -800,7 +800,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                     </Text>
                     {getField(memberPos, 'latitude') != null ? (
                       <Text style={[styl.posCoords, { color: theme.textMuted }]}>
-                        ðŸ“ {Number(getField(memberPos, 'latitude')).toFixed(4)},{' '}
+                        📍 {Number(getField(memberPos, 'latitude')).toFixed(4)},{' '}
                         {Number(getField(memberPos, 'longitude')).toFixed(4)}
                       </Text>
                     ) : null}
@@ -904,7 +904,7 @@ export default function DetailAnggotaScreen({ route, navigation }: any) {
                             {getField(cp, 'nama', 'name') || '-'}
                           </Text>
                           <Text style={[styl.cpMeta, { color: theme.textMuted }]}>
-                            {getField(cp, 'area') || '-'} â€¢ Radius {getField(cp, 'radius') || 100}m
+                            {getField(cp, 'area') || '-'} • Radius {getField(cp, 'radius') || 100}m
                           </Text>
                         </View>
                         <Badge
@@ -1071,3 +1071,4 @@ const styl = StyleSheet.create({
   shiftLabel: { fontSize: 16, fontWeight: '700' },
   shiftDesc: { fontSize: 12, marginTop: 1 },
 });
+============================================================

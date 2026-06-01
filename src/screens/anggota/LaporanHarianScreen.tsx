@@ -20,9 +20,9 @@ import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 const KONDISI_OPTIONS = [
-  { key: 'aman', label: 'Aman', color: Colors.success, icon: 'âœ…' },
-  { key: 'ada_masalah', label: 'Ada Masalah', color: Colors.warning, icon: 'âš ï¸' },
-  { key: 'perhatian_khusus', label: 'Perhatian Khusus', color: Colors.danger, icon: 'ðŸ”´' },
+  { key: 'aman', label: 'Aman', color: Colors.success, icon: '✅' },
+  { key: 'ada_masalah', label: 'Ada Masalah', color: Colors.warning, icon: '⚠️' },
+  { key: 'perhatian_khusus', label: 'Perhatian Khusus', color: Colors.danger, icon: '🔴' },
 ] as const;
 
 export default function LaporanHarianScreen({ navigation }: any) {
@@ -155,7 +155,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
             maxLength={500}
           />
           <Text style={[styles.charCount, aktivitas.length < 50 && { color: Colors.danger }]}>
-            {aktivitas.length}/500 {aktivitas.length < 50 ? `(min ${50 - aktivitas.length} lagi)` : 'âœ“'}
+            {aktivitas.length}/500 {aktivitas.length < 50 ? `(min ${50 - aktivitas.length} lagi)` : '✓'}
           </Text>
         </View>
 
@@ -242,7 +242,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
         <View style={styles.modalOverlay}>
           <View style={styles.modalCard}>
             <View style={styles.successCircle}><Ionicons name="checkmark" size={40} color="#fff" /></View>
-            <Text style={styles.modalTitle}>Laporan Terkirim! âœ…</Text>
+            <Text style={styles.modalTitle}>Laporan Terkirim! ✅</Text>
             <Text style={styles.modalDesc}>Menunggu validasi dari Komandan</Text>
             {fotoUris.length > 0 && (
               <Text style={styles.modalFoto}>{fotoUris.length} foto dokumentasi terlampir</Text>
@@ -288,3 +288,4 @@ const styles = StyleSheet.create({
   modalDesc: { ...Typography.body, color: Colors.textMuted, marginBottom: 8 },
   modalFoto: { ...Typography.small, color: Colors.success, marginBottom: 16 },
 });
+============================================================

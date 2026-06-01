@@ -2,14 +2,14 @@
  * MANAJEMEN PENGGUNA - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  âœ… Back button added in header (was missing â€” supervisor stuck on this screen).
- *  âœ… Dark mode support (was importing useTheme but using Colors directly).
- *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  âœ… Role filter chips (All / Anggota / Komandan) â€” was no way to filter by role.
- *  âœ… Empty state when no users match filter.
- *  âœ… Submitting state on delete to prevent double-tap.
- *  âœ… Case-insensitive NRP search.
- *  âœ… Pull-to-refresh added.
+ *  ✅ Back button added in header (was missing — supervisor stuck on this screen).
+ *  ✅ Dark mode support (was importing useTheme but using Colors directly).
+ *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  ✅ Role filter chips (All / Anggota / Komandan) — was no way to filter by role.
+ *  ✅ Empty state when no users match filter.
+ *  ✅ Submitting state on delete to prevent double-tap.
+ *  ✅ Case-insensitive NRP search.
+ *  ✅ Pull-to-refresh added.
  */
 import React, { useState, useMemo, useCallback } from 'react';
 import {
@@ -72,7 +72,7 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
             try {
               removeTeamMember(id);
               Alert.alert(
-                'âœ…',
+                '✅',
                 lang === 'en' ? 'User deleted' : 'Anggota berhasil dihapus'
               );
             } catch (e: any) {
@@ -192,10 +192,10 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
               <View style={{ flex: 1 }}>
                 <Text style={[styles.userName, { color: theme.text }]}>{m.nama}</Text>
                 <Text style={[styles.userNrp, { color: Colors.primary }]}>
-                  NRP: {m.nrp} â€¢ {m.role}
+                  NRP: {m.nrp} • {m.role}
                 </Text>
                 <Text style={[styles.userPos, { color: theme.textMuted }]}>
-                  {m.pos || '-'} â€¢ {m.shift || '-'}
+                  {m.pos || '-'} • {m.shift || '-'}
                 </Text>
               </View>
               <Badge
@@ -307,3 +307,4 @@ const styles = StyleSheet.create({
   },
   emptyText: { ...Typography.body, textAlign: 'center' },
 });
+============================================================

@@ -11,7 +11,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#1a5276"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.ptsss.mobile"
@@ -39,8 +41,16 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "data": [{ "scheme": "https", "host": "sopiaksatriasaga.com" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "https",
+              "host": "sopiaksatriasaga.com"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -78,7 +88,9 @@
           "color": "#1a5276"
         }
       ],
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-asset",
+      "expo-font"
     ],
     "updates": {
       "enabled": true,

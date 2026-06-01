@@ -2,16 +2,16 @@
  * PERUSAHAAN LIST SCREEN - v2 (Bug-Fix Pass)
  *
  * FIXES (v2):
- *  âœ… Conditional back button â€” shows when reached via stack push (e.g. dashboard
+ *  ✅ Conditional back button — shows when reached via stack push (e.g. dashboard
  *     "View All" link), hidden when used as bottom tab.
- *  âœ… Dark mode support (was importing useTheme but using Colors directly).
- *  âœ… i18n support (was importing useI18n but using hardcoded Indonesian strings).
- *  âœ… Members matched by `lokasiId` first (more reliable than name), with name
+ *  ✅ Dark mode support (was importing useTheme but using Colors directly).
+ *  ✅ i18n support (was importing useI18n but using hardcoded Indonesian strings).
+ *  ✅ Members matched by `lokasiId` first (more reliable than name), with name
  *     fallback. Same fix as komandan/dashboard screens.
- *  âœ… "Today's absen" now filters by actual today's date (was misleading label
+ *  ✅ "Today's absen" now filters by actual today's date (was misleading label
  *     showing ALL absen across all dates).
- *  âœ… Foto URI filter for member avatars (avoid empty/broken image).
- *  âœ… Pull-to-refresh.
+ *  ✅ Foto URI filter for member avatars (avoid empty/broken image).
+ *  ✅ Pull-to-refresh.
  */
 import React, { useMemo, useState, useCallback } from 'react';
 import {
@@ -115,7 +115,7 @@ export default function PerusahaanListScreen({ navigation }: any) {
             {lang === 'en' ? 'Client Companies' : 'Perusahaan Klien'}
           </Text>
           <Text style={s.headerSub}>
-            {lokasi.length} {lang === 'en' ? 'companies' : 'perusahaan'} â€¢ {totalPersonil} {lang === 'en' ? 'personnel' : 'personil'} ({totalOnDuty} {lang === 'en' ? 'active' : 'aktif'})
+            {lokasi.length} {lang === 'en' ? 'companies' : 'perusahaan'} • {totalPersonil} {lang === 'en' ? 'personnel' : 'personil'} ({totalOnDuty} {lang === 'en' ? 'active' : 'aktif'})
           </Text>
         </View>
       </View>
@@ -364,3 +364,4 @@ const s = StyleSheet.create({
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 8 },
   emptyText: { ...Typography.body },
 });
+============================================================

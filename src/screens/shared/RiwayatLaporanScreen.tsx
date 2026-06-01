@@ -62,7 +62,7 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
               <Text style={st.cardId}>{l.id}</Text>
             </View>
             <Text style={st.cardDesc}>{l.desc}</Text>
-            <Text style={st.cardMeta}>{(l as any).tanggal || '-'} â€¢ {l.waktuSubmit}</Text>
+            <Text style={st.cardMeta}>{(l as any).tanggal || '-'} • {l.waktuSubmit}</Text>
             {l.catatanKomandan ? <Text style={st.catatan}>Catatan: {l.catatanKomandan}</Text> : null}
           </Card>
         ))}
@@ -91,3 +91,4 @@ const st = StyleSheet.create({
   cardMeta: { ...Typography.caption, color: Colors.textMuted, marginTop: 4 },
   catatan: { ...Typography.caption, color: Colors.warning, marginTop: 6, fontStyle: 'italic' },
 });
+============================================================

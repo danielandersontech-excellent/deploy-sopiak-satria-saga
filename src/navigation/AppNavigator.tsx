@@ -3,20 +3,20 @@
  * Navigation - PT Sopiak Satria Saga v9 (FIXED)
  * ============================================
  * FIXES (v9 - May 2026):
- *  âœ… FIX Splash Terpotong: SplashScreen now uses SafeAreaView + proper flex layout
+ *  ✅ FIX Splash Terpotong: SplashScreen now uses SafeAreaView + proper flex layout
  *     - Removed conflicting double `flex: 1` between container & centerContent
  *     - Version label uses safe-area bottom inset, no longer hidden behind nav-gesture bar
  *     - StatusBar styled to match splash bg (no white bar at top)
- *  âœ… FIX usePushNotificationManager: now receives `navigationRef` (the ref itself,
+ *  ✅ FIX usePushNotificationManager: now receives `navigationRef` (the ref itself,
  *     not `.current` which was always null at hook-call time). Hook updated to
  *     dereference internally and react to ref readiness.
- *  âœ… FIX NavigationContainer: ref now properly attached so navigation from
+ *  ✅ FIX NavigationContainer: ref now properly attached so navigation from
  *     notifications, deep links, and auth flows actually works.
- *  âœ… FIX Splash: ActivityIndicator + loadingText placed in normal flow (not
+ *  ✅ FIX Splash: ActivityIndicator + loadingText placed in normal flow (not
  *     overlapping bottom-absolute version), so on small screens nothing clips.
- *  âœ… Splash now respects insets â€” content centered between safe top & safe bottom.
- *  âœ… Dark mode fully integrated in navigation theme
- *  âœ… i18n tab labels reactive to language changes
+ *  ✅ Splash now respects insets — content centered between safe top & safe bottom.
+ *  ✅ Dark mode fully integrated in navigation theme
+ *  ✅ i18n tab labels reactive to language changes
  */
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, Image, Animated, StatusBar, Platform } from 'react-native';
@@ -376,7 +376,10 @@ const splashStyles = StyleSheet.create({
     alignItems: 'center', justifyContent: 'center',
     marginBottom: 20, overflow: 'hidden',
   },
-  logo: { width: 130, height: 130 },
+  // Logo must fit inside the circular (overflow:'hidden', r=80) container's
+  // inscribed square (max side ~113px). 130px overflowed -> top corners clipped.
+  // 100px keeps a safe margin so no corner is ever cut.
+  logo: { width: 100, height: 100 },
   title: {
     fontSize: 20, fontWeight: '800', color: '#ffffff',
     letterSpacing: 1.2, textAlign: 'center',
