@@ -204,4 +204,3 @@ const s = StyleSheet.create({
   panicInner: { width: 62, height: 62, borderRadius: 31, backgroundColor: Colors.danger, alignItems: 'center', justifyContent: 'center', ...Shadows.lg },
   panicText: { color: '#fff', fontSize: 10, fontWeight: '800', marginTop: -2 },
 });
-============================================================

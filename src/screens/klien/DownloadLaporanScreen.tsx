@@ -663,4 +663,3 @@ const st = StyleSheet.create({
   infoTitle: { fontSize: 12, fontWeight: '700' },
   infoDesc: { fontSize: 11, marginTop: 2, lineHeight: 16 },
 });
-============================================================

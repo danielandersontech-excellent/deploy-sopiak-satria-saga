@@ -1071,4 +1071,3 @@ const styl = StyleSheet.create({
   shiftLabel: { fontSize: 16, fontWeight: '700' },
   shiftDesc: { fontSize: 12, marginTop: 1 },
 });
-============================================================

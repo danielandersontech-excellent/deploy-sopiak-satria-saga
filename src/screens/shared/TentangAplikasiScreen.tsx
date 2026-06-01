@@ -76,4 +76,3 @@ const st = StyleSheet.create({
   contactValue: { ...Typography.smallBold, color: Colors.textPrimary },
   copyright: { ...Typography.caption, color: Colors.textMuted, textAlign: 'center', marginTop: 24 },
 });
-============================================================

@@ -782,4 +782,3 @@ const s = StyleSheet.create({
   footerBrand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 16 },
   footerText: { fontSize: 10 },
 });
-============================================================

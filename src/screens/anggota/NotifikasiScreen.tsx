@@ -291,4 +291,3 @@ const styles = StyleSheet.create({
   personalText: { fontSize: 9, fontWeight: '700', color: Colors.primary },
   unreadDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: Colors.primary, marginTop: 6 },
 });
-============================================================

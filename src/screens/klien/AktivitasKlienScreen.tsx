@@ -531,4 +531,3 @@ const st = StyleSheet.create({
   cardDetail: { fontSize: 11, marginTop: 1 },
   cardTime: { fontSize: 10 },
 });
-============================================================

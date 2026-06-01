@@ -441,4 +441,3 @@ const s = StyleSheet.create({
   histMsg: { ...Typography.small, marginTop: 2 },
   histTarget: { ...Typography.caption, marginTop: 4 },
 });
-============================================================

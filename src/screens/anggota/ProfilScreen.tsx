@@ -328,4 +328,3 @@ const styles = StyleSheet.create({
   settingIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' },
   settingLabel: { ...Typography.body, flex: 1 },
 });
-============================================================
