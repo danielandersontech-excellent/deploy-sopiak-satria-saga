@@ -55,6 +55,12 @@ export function usePushNotificationManager(navOrRef: any) {
   const isLoggedIn = useAuthStore((s) => s.isLoggedIn);
   const refreshData = useDataStore((s) => s.loadAllData);
   const notifikasi = useDataStore((s) => s.notifikasi);
+  // AUDIT-B1A (BUG-02): OS badge must count only notifications relevant to THIS
+  // user's role/id, matching the in-app tab badge (unreadCountForRole). The old
+  // code counted every unread row, including ones this user generated for OTHER
+  // roles (e.g. an anggota's "Laporan Harian Baru" targeted at komandan), so the
+  // device badge was permanently inflated for that user.
+  const unreadForRole = useDataStore((s) => s.unreadCountForRole);
   const notifRef = useRef<Notifications.Subscription | null>(null);
   const responseRef = useRef<Notifications.Subscription | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
@@ -126,7 +132,7 @@ export function usePushNotificationManager(navOrRef: any) {
       const data = response.notification.request.content.data || {};
       console.log('[PushManager] 👆 Notification tapped:', data);
 
-      const target = getNotificationNavigationTarget(data as Record<string, any>);
+      const target = getNotificationNavigationTarget(data as Record<string, any>, user?.role);
       const nav = resolveNav(navOrRefStable.current);
       if (target && nav && typeof nav.navigate === 'function') {
         try {
@@ -145,15 +151,20 @@ export function usePushNotificationManager(navOrRef: any) {
         responseRef.current = null;
       }
     };
-  }, [isLoggedIn]);
+  }, [isLoggedIn, user?.role]);
 
   // --- Badge count sync ---
+  // AUDIT-B1A (BUG-02): count only notifications addressed to THIS user/role,
+  // matching the in-app tab badge. The old `filter(n => !n.dibaca)` counted
+  // every unread row, including ones this user generated for other roles
+  // (addNotifikasi stores them in the author's own store), so the OS badge was
+  // permanently inflated and never reachable zero.
   useEffect(() => {
     if (!isLoggedIn) return;
 
-    const unread = notifikasi?.filter((n: any) => !n.dibaca)?.length || 0;
+    const unread = user?.role ? unreadForRole(user.role) : 0;
     Notifications.setBadgeCountAsync(unread).catch(() => {});
-  }, [isLoggedIn, notifikasi]);
+  }, [isLoggedIn, notifikasi, user?.role, unreadForRole]);
 
   // --- Retry pending token on app resume ---
   useEffect(() => {

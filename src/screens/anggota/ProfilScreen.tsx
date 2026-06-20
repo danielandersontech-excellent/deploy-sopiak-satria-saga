@@ -29,6 +29,8 @@ import { useDataStore } from '../../stores/dataStore';
 import { usersApi } from '../../lib/apiClient';
 import { useTheme } from '../../lib/theme';
 import { useI18n } from '../../lib/i18n';
+// AUDIT-B1A (BUG-01): full logout teardown (state/cache/queue/services/push token)
+import { performLogout } from '../../services/sessionCleanup';
 
 /**
  * Safely get a field from user object, checking both snake_case and camelCase variants.
@@ -144,7 +146,7 @@ export default function ProfilScreen({ navigation }: any) {
       t('settings.confirm_logout'),
       [
         { text: t('general.cancel'), style: 'cancel' },
-        { text: t('settings.logout'), style: 'destructive', onPress: () => { logout(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } },
+        { text: t('settings.logout'), style: 'destructive', onPress: async () => { await performLogout(); navigation.reset({ index: 0, routes: [{ name: 'Login' }] }); } },
       ]
     );
   };

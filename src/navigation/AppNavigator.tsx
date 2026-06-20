@@ -87,8 +87,34 @@ import RiwayatAbsensiScreen from '../screens/shared/RiwayatAbsensiScreen';
 import RiwayatLaporanScreen from '../screens/shared/RiwayatLaporanScreen';
 import TentangAplikasiScreen from '../screens/shared/TentangAplikasiScreen';
 
+// AUDIT-B1A (BUG-06): screen-level role guard (defense-in-depth on top of the
+// backend scope checks). Previously this middleware existed but was never
+// imported, so any role could reach command/admin screens via programmatic or
+// notification-driven navigation.
+import { withRoleGuard, SCREEN_PERMISSIONS } from '../middleware/roleGuard';
+
 const Stack = createNativeStackNavigator();
 const Tab = createBottomTabNavigator();
+
+// AUDIT-B1A (BUG-06): build the guarded screen components ONCE at module scope.
+// Wrapping inline inside render() would create a new component identity on every
+// render and force React Navigation to remount (and lose) the screen each time.
+// Only command/supervisor/admin-exclusive screens are guarded; shared and
+// anggota screens (and the klien tabs + Notifikasi) stay open to avoid lockout.
+const GuardedValidasiLaporan = withRoleGuard(ValidasiLaporanScreen, SCREEN_PERMISSIONS.ValidasiLaporan);
+const GuardedMonitorRealtime = withRoleGuard(MonitorRealtimeScreen, SCREEN_PERMISSIONS.MonitorRealtime);
+const GuardedBroadcastPesan = withRoleGuard(BroadcastPesanScreen, SCREEN_PERMISSIONS.BroadcastPesan);
+const GuardedDetailAnggota = withRoleGuard(DetailAnggotaScreen, SCREEN_PERMISSIONS.DetailAnggota);
+const GuardedManajemenPengguna = withRoleGuard(ManajemenPenggunaScreen, SCREEN_PERMISSIONS.ManajemenPengguna);
+const GuardedTambahEditUser = withRoleGuard(TambahEditUserScreen, SCREEN_PERMISSIONS.TambahEditUser);
+const GuardedSetupCheckpoint = withRoleGuard(SetupCheckpointScreen, SCREEN_PERMISSIONS.SetupCheckpoint);
+const GuardedSetupRute = withRoleGuard(SetupRuteScreen, SCREEN_PERMISSIONS.SetupRute);
+const GuardedQRGenerator = withRoleGuard(QRGeneratorScreen, SCREEN_PERMISSIONS.QRGenerator);
+const GuardedAnalytics = withRoleGuard(AnalyticsScreen, SCREEN_PERMISSIONS.Analytics);
+const GuardedManajemenLokasi = withRoleGuard(ManajemenLokasiScreen, SCREEN_PERMISSIONS.ManajemenLokasi);
+const GuardedJadwalShift = withRoleGuard(JadwalShiftScreen, SCREEN_PERMISSIONS.JadwalShift);
+const GuardedPerusahaanList = withRoleGuard(PerusahaanListScreen, SCREEN_PERMISSIONS.PerusahaanList);
+const GuardedDetailPerusahaan = withRoleGuard(DetailPerusahaanScreen, SCREEN_PERMISSIONS.DetailPerusahaan);
 
 function TabIcon({ route, focused, color }: { route: any; focused: boolean; color: string }) {
   const { theme } = useTheme();
@@ -532,22 +558,22 @@ export default function AppNavigator() {
         <Stack.Screen name="ProfilDetail" component={ProfilScreen} />
 
         {/* KOMANDAN STACK */}
-        <Stack.Screen name="ValidasiLaporan" component={ValidasiLaporanScreen} />
-        <Stack.Screen name="MonitorRealtime" component={MonitorRealtimeScreen} />
-        <Stack.Screen name="BroadcastPesan" component={BroadcastPesanScreen} />
-        <Stack.Screen name="DetailAnggota" component={DetailAnggotaScreen} />
+        <Stack.Screen name="ValidasiLaporan" component={GuardedValidasiLaporan} />
+        <Stack.Screen name="MonitorRealtime" component={GuardedMonitorRealtime} />
+        <Stack.Screen name="BroadcastPesan" component={GuardedBroadcastPesan} />
+        <Stack.Screen name="DetailAnggota" component={GuardedDetailAnggota} />
 
         {/* SUPERVISOR / ADMIN STACK */}
-        <Stack.Screen name="ManajemenPengguna" component={ManajemenPenggunaScreen} />
-        <Stack.Screen name="TambahEditUser" component={TambahEditUserScreen} />
-        <Stack.Screen name="SetupCheckpoint" component={SetupCheckpointScreen} />
-        <Stack.Screen name="SetupRute" component={SetupRuteScreen} />
-        <Stack.Screen name="QRGenerator" component={QRGeneratorScreen} />
-        <Stack.Screen name="Analytics" component={AnalyticsScreen} />
-        <Stack.Screen name="ManajemenLokasi" component={ManajemenLokasiScreen} />
-        <Stack.Screen name="JadwalShift" component={JadwalShiftScreen} />
-        <Stack.Screen name="PerusahaanList" component={PerusahaanListScreen} />
-        <Stack.Screen name="DetailPerusahaan" component={DetailPerusahaanScreen} />
+        <Stack.Screen name="ManajemenPengguna" component={GuardedManajemenPengguna} />
+        <Stack.Screen name="TambahEditUser" component={GuardedTambahEditUser} />
+        <Stack.Screen name="SetupCheckpoint" component={GuardedSetupCheckpoint} />
+        <Stack.Screen name="SetupRute" component={GuardedSetupRute} />
+        <Stack.Screen name="QRGenerator" component={GuardedQRGenerator} />
+        <Stack.Screen name="Analytics" component={GuardedAnalytics} />
+        <Stack.Screen name="ManajemenLokasi" component={GuardedManajemenLokasi} />
+        <Stack.Screen name="JadwalShift" component={GuardedJadwalShift} />
+        <Stack.Screen name="PerusahaanList" component={GuardedPerusahaanList} />
+        <Stack.Screen name="DetailPerusahaan" component={GuardedDetailPerusahaan} />
 
         {/* KLIEN STACK */}
         <Stack.Screen name="DownloadLaporan" component={DownloadLaporanScreen} />

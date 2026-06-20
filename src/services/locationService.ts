@@ -11,6 +11,33 @@ const OFFLINE_QUEUE_KEY = '@ptsss_offline_queue';
 const LOCATION_PING_INTERVAL = 5 * 60 * 1000; // 5 minutes (geofence needs frequent checking)
 let pingInterval: ReturnType<typeof setInterval> | null = null;
 
+// ===== BACKGROUND LOCATION TASK DEFINITION =====
+// AUDIT-B1A (BUG-08): TaskManager.defineTask MUST run at module scope. When the
+// OS relaunches the app in the background (headless) to deliver a location
+// update, it only runs top-level module code — it does NOT call
+// registerBackgroundLocationTask(). The task was previously defined INSIDE that
+// async function, so after the app was killed the handler was never registered
+// and background pings were silently dropped. Defining it here guarantees the
+// handler exists as soon as this module is imported at startup.
+export const BG_LOCATION_TASK = 'ptsss-bg-location';
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const TaskManager = require('expo-task-manager');
+  TaskManager.defineTask(BG_LOCATION_TASK, async ({ data, error }: any) => {
+    if (error || !data) return;
+    const { locations } = data;
+    if (locations?.length > 0) {
+      const { latitude, longitude } = locations[0].coords;
+      try {
+        const user = useAuthStore.getState().user;
+        if (user) await usersApi.updateLocation(user.id, latitude, longitude);
+      } catch {}
+    }
+  });
+} catch {
+  // expo-task-manager not available (e.g. Expo Go) — registration is skipped.
+}
+
 // ===== LOCATION HELPERS =====
 
 export async function getCurrentLocation() {
@@ -201,24 +228,12 @@ async function sendLocationPing() {
 
 export async function registerBackgroundLocationTask() {
   try {
-    const TaskManager = require('expo-task-manager');
-    const TASK_NAME = 'ptsss-bg-location';
-
-    TaskManager.defineTask(TASK_NAME, async ({ data, error }: any) => {
-      if (error || !data) return;
-      const { locations } = data;
-      if (locations?.length > 0) {
-        const { latitude, longitude } = locations[0].coords;
-        try {
-          const user = useAuthStore.getState().user;
-          if (user) await usersApi.updateLocation(user.id, latitude, longitude);
-        } catch {}
-      }
-    });
-
+    // The task handler itself is defined at module scope (see BG_LOCATION_TASK
+    // above) so it survives headless relaunches. Here we only request the
+    // background permission and start the updates.
     const { status } = await Location.requestBackgroundPermissionsAsync();
     if (status === 'granted') {
-      await Location.startLocationUpdatesAsync(TASK_NAME, {
+      await Location.startLocationUpdatesAsync(BG_LOCATION_TASK, {
         accuracy: Location.Accuracy.Balanced,
         timeInterval: LOCATION_PING_INTERVAL,
         distanceInterval: 100,

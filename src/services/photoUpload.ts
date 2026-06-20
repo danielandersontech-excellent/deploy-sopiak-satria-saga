@@ -5,7 +5,13 @@ export interface UploadResult { success: boolean; publicUrl: string | null; erro
 export async function compressImage(uri: string, maxW = 1024, maxH = 1024, quality = 0.7) {
   try {
     if (uri.startsWith('http')) return { uri, width: 0, height: 0 };
-    const r = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: maxW, height: maxH } }], { compress: quality, format: ImageManipulator.SaveFormat.JPEG });
+    // AUDIT-B1A (BUG-03): resize by WIDTH ONLY. Passing both width and height to
+    // ImageManipulator forces the image into an exact box and stretches/squashes
+    // any photo whose aspect ratio isn't square (selfies, evidence, patrol shots
+    // were all distorted). With a single dimension the library scales the other
+    // proportionally. `maxH` is kept in the signature for call-site compatibility.
+    void maxH;
+    const r = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: maxW } }], { compress: quality, format: ImageManipulator.SaveFormat.JPEG });
     try { const o = await FileSystem.getInfoAsync(uri); const c = await FileSystem.getInfoAsync(r.uri); console.log('[Compress] '+(o.exists&&'size' in o?Math.round((o.size||0)/1024):'?')+'KB -> '+(c.exists&&'size' in c?Math.round((c.size||0)/1024):'?')+'KB ('+r.width+'x'+r.height+')'); } catch {}
     return r;
   } catch (e: any) { console.log('[Compress] Failed:', e.message); return { uri, width: 0, height: 0 }; }

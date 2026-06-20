@@ -161,6 +161,12 @@ const genId = (prefix: string) => `${prefix}-${++_idCounter}`;
 interface DataStore {
   _loaded: boolean;
   loadAllData: () => Promise<void>;
+  /**
+   * AUDIT-B1A (BUG-01): full in-memory reset. Must be called on logout so a
+   * different user logging in on the same device never sees the previous
+   * user's team / absensi / laporan / notifikasi (cross-user data bleed).
+   */
+  reset: () => void;
 
   team: TeamMember[];
   getTeamMember: (id: string) => TeamMember | undefined;
@@ -227,6 +233,28 @@ interface DataStore {
 
 export const useDataStore = create<DataStore>((set, get) => ({
   _loaded: false,
+
+  // AUDIT-B1A (BUG-01): clear ALL store state back to initial values.
+  // Called from the logout flow (see services/sessionCleanup.ts) so the
+  // next user on the same device starts from an empty store instead of
+  // briefly seeing the previous session's data.
+  reset: () => set({
+    _loaded: false,
+    team: [],
+    absensiRecords: [],
+    checkpoints: [],
+    routes: [],
+    activePatrol: null,
+    laporanHarian: [],
+    laporanKejadian: [],
+    serahTerimaRecords: [],
+    notifikasi: [],
+    broadcasts: [],
+    lokasi: [],
+    shifts: [],
+    panicActive: false,
+    panicTime: 0,
+  }),
 
   // ==================== LOAD ALL DATA FROM BACKEND API ====================
   loadAllData: async () => {

@@ -28,6 +28,13 @@ import { API_URL, getToken } from '../lib/apiClient';
 let socket: any = null;
 let socketConnected = false;
 
+// AUDIT-B1A (BUG-09): a single server-side batch update can emit many socket
+// events back-to-back (e.g. absensi:new + stats:update + user:status). Each one
+// previously triggered a full loadAllData() (~a dozen parallel API calls), so a
+// burst produced a refetch storm. We coalesce bursts within this window into a
+// single refresh. Connection/retry/AppState/polling behaviour is unchanged.
+const SOCKET_REFRESH_DEBOUNCE_MS = 800;
+
 async function getSocketClient() {
   try { return require('socket.io-client'); }
   catch { return null; }
@@ -38,9 +45,21 @@ export function useRealtimeSync() {
   const user = useAuthStore((s) => s.user);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const appStateRef = useRef<AppStateStatus>(AppState.currentState);
+  // AUDIT-B1A (BUG-09): timer for the debounced socket-event refresh.
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Track whether the inner Socket.io setup actually completed; we
   // shouldn't try to reconnect from AppState changes before then.
   const setupCompleteRef = useRef(false);
+
+  // AUDIT-B1A (BUG-09): trailing-debounced refresh used ONLY for socket events.
+  // Foreground/polling refreshes stay immediate (they are infrequent by nature).
+  const debouncedLoadAllData = useCallback(() => {
+    if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+    refreshDebounceRef.current = setTimeout(() => {
+      refreshDebounceRef.current = null;
+      loadAllData();
+    }, SOCKET_REFRESH_DEBOUNCE_MS);
+  }, [loadAllData]);
 
   const handleAppStateChange = useCallback((nextState: AppStateStatus) => {
     const prev = appStateRef.current;
@@ -125,7 +144,7 @@ export function useRealtimeSync() {
             'laporan:urgent', 'panic:alert', 'panic:resolved', 'broadcast:new',
             'user:status', 'stats:update',
           ];
-          events.forEach((ev) => socket.on(ev, () => loadAllData()));
+          events.forEach((ev) => socket.on(ev, () => debouncedLoadAllData()));
 
           // Polling fallback for when the socket is asleep — fires every
           // 5 minutes only if the socket isn't currently connected.
@@ -163,6 +182,12 @@ export function useRealtimeSync() {
       socketConnected = false;
       const iv = localInterval ?? intervalRef.current;
       if (iv) clearInterval(iv);
+      // AUDIT-B1A (BUG-09): cancel a pending debounced refresh so it can't fire
+      // after the component using this hook has unmounted.
+      if (refreshDebounceRef.current) {
+        clearTimeout(refreshDebounceRef.current);
+        refreshDebounceRef.current = null;
+      }
       sub.remove();
     };
   }, [user?.id]);

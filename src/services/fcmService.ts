@@ -226,14 +226,34 @@ export async function setBadgeCount(count: number): Promise<void> {
   await Notifications.setBadgeCountAsync(count);
 }
 
+// AUDIT-B1A (BUG-05): routing is now role-aware. The old map sent every
+// `laporan` push to ValidasiLaporan (a komandan-only screen) and every `panic`
+// push to MonitorRealtime, so an anggota tapping "your report was approved"
+// (or any panic broadcast) landed on a screen they can't use / isn't theirs.
+// We route report notifications to the recipient's own history for field
+// staff, and keep command-tier monitoring screens for komandan/supervisor/admin.
+const COMMAND_ROLES = ['komandan', 'supervisor', 'admin'];
+
 export function getNotificationNavigationTarget(
-  data: Record<string, any>
+  data: Record<string, any>,
+  role?: string
 ): { screen: string; params?: any } | null {
   if (!data?.type) return null;
+  const isCommand = !!role && COMMAND_ROLES.includes(role);
   switch (data.type) {
-    case 'panic': return { screen: 'MonitorRealtime', params: { tab: 'panic' } };
+    case 'panic':
+      // Only command roles have the realtime panic monitor; everyone else just
+      // opens the notification center (the screen is unreachable for them).
+      return isCommand
+        ? { screen: 'MonitorRealtime', params: { tab: 'panic' } }
+        : { screen: 'Notifikasi' };
     case 'absensi': return { screen: 'Absensi' };
-    case 'laporan': return { screen: 'ValidasiLaporan', params: { id: data.id } };
+    case 'laporan':
+      // Command roles go to the validation queue; field staff go to their own
+      // report history where approval/rejection status is shown.
+      return isCommand
+        ? { screen: 'ValidasiLaporan', params: { id: data.id } }
+        : { screen: 'RiwayatLaporan', params: { id: data.id } };
     case 'patrol': return { screen: 'Patroli' };
     case 'broadcast': return { screen: 'Notifikasi' };
     default: return { screen: 'Notifikasi' };

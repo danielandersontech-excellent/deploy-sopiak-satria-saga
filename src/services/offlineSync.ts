@@ -263,6 +263,11 @@ export async function processQueue(): Promise<{
       const batch = sorted.slice(i, i + CONFIG.BATCH_SIZE);
 
       for (const action of batch) {
+        // AUDIT-B1A (BUG-04): never re-execute a dead-lettered item. It stays in
+        // the queue for manual review (retryDeadLetters), but auto-processing it
+        // would re-hammer the server with a request already known to fail.
+        if (action.last_error?.startsWith('DEAD_LETTER')) continue;
+
         // Check if should wait based on retry count
         if (action.retries > 0) {
           const delay = calculateDelay(action.retries - 1);

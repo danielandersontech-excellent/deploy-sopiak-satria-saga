@@ -288,10 +288,46 @@ export async function api<T = any>(endpoint: string, opts: ApiOpts = {}): Promis
 
 export async function apiUpload<T = any>(endpoint: string, formData: FormData): Promise<T> {
   const url = `${API_URL}${endpoint}`;
-  const token = await getToken();
-  const headers: Record<string, string> = {};
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(url, { method: 'POST', headers, body: formData });
+
+  // NOTE: never set Content-Type here — fetch must add the multipart boundary.
+  const doFetch = async (tok: string | null): Promise<Response> => {
+    const headers: Record<string, string> = {};
+    if (tok) headers['Authorization'] = `Bearer ${tok}`;
+    return fetch(url, { method: 'POST', headers, body: formData });
+  };
+
+  let res = await doFetch(await getToken());
+
+  // AUDIT-B1A (BUG-07): mirror api()'s token auto-refresh. Uploads previously
+  // had no 401 handling at all, so once the 30-minute access token expired
+  // mid-session every selfie/evidence/patrol upload failed until the user
+  // manually logged out and back in. Reuse the same module-level refresh lock
+  // as api() so a concurrent refresh is shared rather than duplicated.
+  if (res.status === 401) {
+    const errData = await res.clone().json().catch(() => ({} as any));
+    if (errData.code === 'TOKEN_EXPIRED') {
+      if (!_isRefreshing) { _isRefreshing = true; _refreshPromise = tryRefreshToken(); }
+      const refreshed = await _refreshPromise;
+      _isRefreshing = false; _refreshPromise = null;
+      if (refreshed) {
+        res = await doFetch(await getToken()); // retry once with the fresh token
+      } else {
+        await clearToken();
+        throw new Error('Session expired. Silakan login ulang.');
+      }
+    } else {
+      throw new Error(errData.error || 'Unauthorized');
+    }
+  }
+
+  // AUDIT-B1A (BUG-07): guard non-JSON responses (502 / HTML / proxy errors)
+  // so the caller gets a readable message instead of a JSON-parse crash.
+  const contentType = res.headers.get('content-type') || '';
+  if (!contentType.includes('application/json')) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Server error: ${text.substring(0, 100) || `HTTP ${res.status}`}`);
+  }
+
   const data = await res.json();
   if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
   return data as T;

@@ -11,7 +11,7 @@
 import * as SQLite from "expo-sqlite";
 
 const DB_NAME = "ptsss_offline.db";
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 let _db: SQLite.SQLiteDatabase | null = null;
 let _dbPromise: Promise<SQLite.SQLiteDatabase> | null = null;
@@ -99,6 +99,11 @@ async function initTables(db: SQLite.SQLiteDatabase): Promise<void> {
     CREATE INDEX IF NOT EXISTS idx_users_role ON users(role);
     CREATE INDEX IF NOT EXISTS idx_pos_lokasi ON pos_jaga(lokasi_id);
   `);
+
+  // AUDIT-B1A (BUG-04): normalize rows queued under the old schema (where
+  // max_retries defaulted to 5) up to the dead-letter threshold so in-flight
+  // offline submissions from a previous app version aren't hard-deleted early.
+  await db.runAsync("UPDATE offline_queue SET max_retries = 7 WHERE max_retries < 7");
 
   await db.runAsync("DELETE FROM db_version");
   await db.runAsync("INSERT INTO db_version (version) VALUES (?)", DB_VERSION);
@@ -210,7 +215,13 @@ export async function addToOfflineQueue(type: string, data: any): Promise<string
   const id = `${Date.now()}_${Math.random().toString(36).substr(2, 8)}`;
   await serialExec(async () => {
     const db = await getDb();
-    await db.runAsync("INSERT INTO offline_queue (id, type, data, timestamp, retries) VALUES (?, ?, ?, ?, 0)", [id, type, JSON.stringify(data), Date.now()]);
+    // AUDIT-B1A (BUG-04): set max_retries explicitly to 7 to match
+    // offlineSync CONFIG.MAX_RETRIES. The column default was 5, two below the
+    // dead-letter threshold, so failed submissions were hard-deleted by
+    // removeExpiredQueueItems before they could ever be dead-lettered (silent
+    // data loss for offline absensi/laporan). Kept as a literal because
+    // offlineDatabase must not import offlineSync (would create a cycle).
+    await db.runAsync("INSERT INTO offline_queue (id, type, data, timestamp, retries, max_retries) VALUES (?, ?, ?, ?, 0, 7)", [id, type, JSON.stringify(data), Date.now()]);
   });
   console.log(`[OfflineDB] ✅ Queued: ${type} (id: ${id})`);
   return id;
@@ -230,7 +241,12 @@ export async function updateQueueItemRetry(id: string, error: string): Promise<v
 }
 
 export async function removeExpiredQueueItems(): Promise<number> {
-  return serialExec(async () => { const db = await getDb(); const result = await db.runAsync("DELETE FROM offline_queue WHERE retries >= max_retries"); return result.changes; });
+  // AUDIT-B1A (BUG-04): keep dead-lettered items (last_error 'DEAD_LETTER…')
+  // so the manual-retry path (retryDeadLetters) and review remain possible.
+  // Previously this deleted everything at retries >= max_retries, which — with
+  // the old max_retries=5 default — silently destroyed failed offline
+  // submissions two retries before the dead-letter stage was ever reached.
+  return serialExec(async () => { const db = await getDb(); const result = await db.runAsync("DELETE FROM offline_queue WHERE retries >= max_retries AND (last_error IS NULL OR last_error NOT LIKE 'DEAD_LETTER%')"); return result.changes; });
 }
 
 export async function getOfflineQueueCount(): Promise<number> {

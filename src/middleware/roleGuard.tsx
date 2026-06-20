@@ -9,10 +9,11 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Radius } from '../constants';
+import { useAuthStore } from '../stores/authStore';
 
 // ==================== ROLE DEFINITIONS ====================
 
-export type AppRole = 'anggota' | 'komandan' | 'supervisor' | 'admin';
+export type AppRole = 'anggota' | 'komandan' | 'supervisor' | 'admin' | 'klien';
 
 /**
  * Screen-level permissions
@@ -131,7 +132,8 @@ export function canPerformAction(role: AppRole, action: string): boolean {
  */
 export function getRoleLevel(role: AppRole): number {
   const levels: Record<AppRole, number> = {
-    // klien role removed (separate table)
+    // klien is an external customer role, outside the staff hierarchy.
+    klien: 0,
     anggota: 1,
     komandan: 2,
     supervisor: 3,
@@ -158,10 +160,15 @@ export function withRoleGuard(
   allowedRoles: AppRole[]
 ) {
   return function RoleGuardedScreen(props: any) {
-    // Get role from navigation params or auth store
-    const userRole: AppRole = props.route?.params?.userRole || 'anggota';
+    // AUDIT-B1A (BUG-06): read the role from the auth store, NOT from
+    // route params. The previous version read props.route?.params?.userRole
+    // (which navigation never populates) and defaulted to 'anggota', so the
+    // guard would have denied every legitimate komandan/supervisor/admin while
+    // letting anyone reach the anggota screens. It was also never imported
+    // anywhere, so no screen had any role enforcement at all.
+    const userRole = useAuthStore((s) => s.user?.role) as AppRole | undefined;
 
-    if (!allowedRoles.includes(userRole)) {
+    if (!userRole || !allowedRoles.includes(userRole)) {
       return (
         <View style={styles.denied}>
           <View style={styles.deniedIcon}>
