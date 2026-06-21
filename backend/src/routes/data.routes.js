@@ -147,7 +147,37 @@ router.use('/routes', crudRoutes(dataCtrl.routes, true));
 router.use('/jadwal-shift', crudRoutes(dataCtrl.jadwalShift, true));
 router.use('/shift-assignments', crudRoutes(dataCtrl.shiftAssignments, true));
 router.use('/report-exports', crudRoutes(dataCtrl.reportExports, true));
-router.use('/clients', crudRoutes(dataCtrl.clients, true));
+// =============================================================================
+// SECURITY (Fase 0 / 2F-1): `clients` is intentionally NOT registered via the
+// generic crudRoutes() factory.
+//
+// The factory leaves GET '/' and GET '/:id' on bare `auth` (its adminOnly flag
+// only gates POST/PUT/DELETE). For `clients` that meant ANY authenticated user
+// — an anggota/komandan, or a klien from ANY tenant — could call
+// GET /api/data/clients and receive every client row, including the bcrypt
+// `pin_hash` of a 6-digit PIN (crackable offline → cross-tenant account
+// takeover) plus login identity.
+//
+// We register clients explicitly so the two READ endpoints are gated to
+// admin/supervisor only. This matches the existing front-end menu gating
+// (ROLE_MENUS in web-admin lib/api.ts already limits /clients and /lokasi to
+// admin+supervisor) — now enforced server-side.
+//
+// The WRITE guard is preserved EXACTLY as the factory's adminOnly path had it
+// (admin/supervisor/komandan), so write behavior is unchanged.
+//
+// Defense in depth: `pin_hash` and `must_change_pin` are additionally stripped
+// from the read output in data.service.js, so the secret is never returned
+// even to an admin. The klien LOGIN path (auth.service.js) reads `pin_hash`
+// through its own raw query and is unaffected by any of this.
+const clientsR = require('express').Router();
+const clientsWriteGuard = [auth, requireRole('admin', 'supervisor', 'komandan')];
+clientsR.get('/', auth, requireRole('admin', 'supervisor'), dataCtrl.clients.getAll);
+clientsR.get('/:id', auth, requireRole('admin', 'supervisor'), dataCtrl.clients.getById);
+clientsR.post('/', ...clientsWriteGuard, dataCtrl.clients.create);
+clientsR.put('/:id', ...clientsWriteGuard, dataCtrl.clients.update);
+clientsR.delete('/:id', ...clientsWriteGuard, dataCtrl.clients.remove);
+router.use('/clients', clientsR);
 const bcR = require('express').Router();
 bcR.get('/', auth, opCtrl.getBroadcasts); bcR.post('/', auth, requireRole('komandan','supervisor','admin'), opCtrl.createBroadcast);
 router.use('/broadcasts', bcR);

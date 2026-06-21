@@ -21,6 +21,30 @@ function randomPin() {
   return String(crypto.randomInt(100000, 1000000));
 }
 
+// =============================================================================
+// SECURITY (Fase 0 / 2F-1): fields that must NEVER leave the API on a
+// `clients` READ response.
+//
+//   - pin_hash: bcrypt hash of a 6-digit numeric PIN. Returning it to a client
+//     lets anyone who receives it crack the PIN offline and log in as that
+//     client. This was being leaked by the generic SELECT clients.* read path.
+//   - must_change_pin: internal PIN-rotation state, no business use on the read
+//     side; we drop it so the read response carries no credential metadata.
+//
+// Stripping is applied to getAll() and getById() output for the `clients`
+// table only. The LOGIN path (auth.service.js) and PIN reset/change paths read
+// `pin_hash` through their own raw queries and are NOT affected by this.
+// =============================================================================
+const CLIENT_READ_SECRET_FIELDS = ['pin_hash', 'must_change_pin'];
+
+function stripClientSecrets(row) {
+  if (!row || typeof row !== 'object') return row;
+  for (const field of CLIENT_READ_SECRET_FIELDS) {
+    if (field in row) delete row[field];
+  }
+  return row;
+}
+
 class DataService {
   getRepo(table) {
     const map = { lokasi: repos.lokasi, 'pos-jaga': repos.posJaga, checkpoints: repos.checkpoint,
@@ -37,6 +61,10 @@ class DataService {
       clients: 'nama_klien' };
     let results = await repo.findAll({ where: filters, orderBy: orderMap[table] || 'created_at DESC', limit: filters.limit });
     results = await this.enrichResults(table, results, filters);
+    // SECURITY (Fase 0 / 2F-1): never return pin_hash / must_change_pin for clients.
+    if (table === 'clients' && Array.isArray(results)) {
+      results = results.map((r) => stripClientSecrets(r));
+    }
     return results;
   }
 
@@ -93,6 +121,8 @@ class DataService {
     const repo = this.getRepo(table);
     const row = await repo.findById(id);
     if (!row) throw { status: 404, message: 'Tidak ditemukan' };
+    // SECURITY (Fase 0 / 2F-1): never return pin_hash / must_change_pin for clients.
+    if (table === 'clients') return stripClientSecrets(row);
     return row;
   }
 
