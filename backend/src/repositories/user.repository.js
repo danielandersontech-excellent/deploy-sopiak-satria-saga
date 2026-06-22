@@ -87,6 +87,11 @@ class UserRepository extends BaseRepository {
       sql += ` AND u.role = ANY($${params.length})`;
     }
     if (filters.lokasi_id) { params.push(filters.lokasi_id); sql += ` AND u.lokasi_id = $${params.length}`; }
+    else if (Array.isArray(filters.lokasi_ids)) {
+      // [1-2] scope: empty array = deny-all sentinel; otherwise match the set.
+      if (filters.lokasi_ids.length === 0) { sql += ' AND FALSE'; }
+      else { params.push(filters.lokasi_ids); sql += ` AND u.lokasi_id = ANY($${params.length}::uuid[])`; }
+    }
     if (filters.status) { params.push(filters.status); sql += ` AND u.status = $${params.length}`; }
     if (filters.status_penempatan) { params.push(filters.status_penempatan); sql += ` AND u.status_penempatan = $${params.length}`; }
 

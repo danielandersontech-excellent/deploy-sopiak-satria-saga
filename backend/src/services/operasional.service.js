@@ -66,7 +66,25 @@ class OperasionalService {
 
   // Notifikasi
   async getNotifikasi(user) { return opRepo.findNotifikasi(user.id, user.role); }
-  async createNotifikasi(data) { return opRepo.createNotifikasi(data); }
+  async createNotifikasi(user, data) {
+    // [1-6] anti-spoofing. Only authority roles may broadcast to a target_role
+    // or target another user (e.g. "Laporan Disetujui"). Everyone else may
+    // only create a notification addressed to THEMSELVES (the legitimate
+    // mobile case of a local self-notification mirrored to the server).
+    const AUTHORITY = ['admin', 'supervisor', 'komandan'];
+    if (!user || !AUTHORITY.includes(user.role)) {
+      const targetsRole = data && data.target_role != null &&
+        (!Array.isArray(data.target_role) || data.target_role.length > 0);
+      const targetsOther = data && data.target_user_id != null &&
+        String(data.target_user_id) !== String(user && user.id);
+      if (targetsRole || targetsOther) {
+        throw { status: 403, message: 'Tidak boleh membuat notifikasi untuk target tersebut' };
+      }
+      // Force the target to self regardless of what was sent.
+      data = { ...data, target_user_id: user.id, target_role: null };
+    }
+    return opRepo.createNotifikasi(data);
+  }
   async markRead(id) { return opRepo.markRead(id); }
   async markAllRead(user) { return opRepo.markAllRead(user.id, user.role); }
 }

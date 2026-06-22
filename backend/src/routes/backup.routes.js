@@ -8,6 +8,12 @@ const backupService = require('../services/backup.service');
 const path = require('path');
 const fs = require('fs');
 const { logger } = require('../utils/logger');
+// [1-10] audit sensitive backup operations via the existing audit mechanism.
+const { logEvent } = require('../middleware/auditlog');
+
+// [1-9] Whitelist of legitimate backup filenames. Used by /restore to reject
+// anything that isn't a plain backup leaf-name before it reaches the service.
+const SAFE_BACKUP_FILENAME = /^[\w.\-]+\.(sql|dump|backup)$/;
 
 const guard = [auth, requireRole('admin', 'supervisor')];
 
@@ -20,6 +26,8 @@ const adminGuard = [auth, requireRole('admin')];
 router.post('/create', ...guard, async (req, res) => {
   try {
     const result = await backupService.createBackup();
+    // [1-10] audit
+    logEvent(req.user.id, req.user.nama || '', 'BACKUP_CREATE', 'backup', null, { filename: result && result.filename }).catch(() => {});
     res.json({ success: true, ...result });
   } catch (err) {
     logger.error(`[Backup Route] Create error: ${err.message}`);
@@ -60,7 +68,16 @@ router.post('/restore', ...adminGuard, async (req, res) => {
   try {
     const { filename } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename is required' });
+    // [1-9] Reject path-traversal / unexpected names at the route layer
+    // (defense in depth — backup.service also basenames + confines to
+    // BACKUP_DIR). Only plain backup leaf-names are accepted.
+    if (typeof filename !== 'string' || filename.includes('..') || filename.includes('/') ||
+        filename.includes('\\') || !SAFE_BACKUP_FILENAME.test(filename)) {
+      return res.status(400).json({ error: 'Invalid filename' });
+    }
     const result = await backupService.restoreBackup(filename);
+    // [1-10] audit (destructive, full-DB operation)
+    logEvent(req.user.id, req.user.nama || '', 'BACKUP_RESTORE', 'backup', null, { filename }).catch(() => {});
     res.json({ success: true, ...result });
   } catch (err) {
     logger.error(`[Backup Route] Restore error: ${err.message}`);

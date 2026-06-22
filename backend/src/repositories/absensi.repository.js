@@ -14,6 +14,11 @@ class AbsensiRepository {
     if (filters.date) { params.push(filters.date); where += ` AND DATE(a.created_at) = $${params.length}`; }
     if (filters.status) { params.push(filters.status); where += ` AND a.status = $${params.length}`; }
     if (filters.lokasi_id) { params.push(filters.lokasi_id); where += ` AND u.lokasi_id = $${params.length}`; }
+    else if (Array.isArray(filters.lokasi_ids)) {
+      // [1-1] scope: empty array = deny-all sentinel; otherwise match the set.
+      if (filters.lokasi_ids.length === 0) { where += ' AND FALSE'; }
+      else { params.push(filters.lokasi_ids); where += ` AND u.lokasi_id = ANY($${params.length}::uuid[])`; }
+    }
     if (filters.waktu_gte || filters.created_at_gte) { const v = filters.waktu_gte || filters.created_at_gte; params.push(v); where += ` AND a.created_at >= $${params.length}`; }
     if (filters.waktu_lte || filters.created_at_lte) { const v = filters.waktu_lte || filters.created_at_lte; params.push(v); where += ` AND a.created_at <= $${params.length}`; }
 
@@ -32,10 +37,21 @@ class AbsensiRepository {
     return paginatedResponse(rows, total, page, limit);
   }
 
-  async findToday() {
+  async findToday(filters = {}) {
+    // [1-1] today-absensi is now scoped. Build the same user_id / lokasi
+    // filters the list endpoint uses so cross-tenant rows are never returned.
+    let where = 'WHERE DATE(a.created_at) = CURRENT_DATE';
+    const params = [];
+    if (filters.user_id) { params.push(filters.user_id); where += ` AND a.user_id = $${params.length}`; }
+    if (filters.lokasi_id) { params.push(filters.lokasi_id); where += ` AND u.lokasi_id = $${params.length}`; }
+    else if (Array.isArray(filters.lokasi_ids)) {
+      if (filters.lokasi_ids.length === 0) { where += ' AND FALSE'; }
+      else { params.push(filters.lokasi_ids); where += ` AND u.lokasi_id = ANY($${params.length}::uuid[])`; }
+    }
     return queryAll(
       `SELECT a.*, u.nama, u.nrp FROM absensi a LEFT JOIN users u ON a.user_id = u.id
-       WHERE DATE(a.created_at) = CURRENT_DATE ORDER BY a.created_at DESC`
+       ${where} ORDER BY a.created_at DESC`,
+      params
     );
   }
 

@@ -35,8 +35,27 @@ exports.rejectIzin = async (req, res) => {
 };
 
 exports.getIzinList = async (req, res) => {
-  try { res.json(await geoService.getIzinList(req.query)); }
-  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+  // [1-3] resolve scope server-side, identical to getViolations below.
+  // Previously this forwarded req.query straight to the service, so a klien
+  // or komandan could read off-area permission requests from other lokasi.
+  try {
+    const scope = await getScopeFilter(req.user);
+    const filters = { ...req.query };
+    if (!scope.unrestricted) {
+      const requested = filters.lokasi_id;
+      if (requested) {
+        if (!scope.lokasiIds.includes(requested)) {
+          delete filters.lokasi_id;
+          filters.lokasi_ids = []; // deny-all sentinel
+        }
+      } else if (scope.lokasiIds.length === 1) {
+        filters.lokasi_id = scope.lokasiIds[0];
+      } else {
+        filters.lokasi_ids = scope.lokasiIds.slice();
+      }
+    }
+    res.json(await geoService.getIzinList(filters));
+  } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
 exports.getViolations = async (req, res) => {

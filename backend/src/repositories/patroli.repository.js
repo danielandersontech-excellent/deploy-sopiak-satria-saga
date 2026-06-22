@@ -37,7 +37,7 @@ class PatroliRepository {
 
   async findByIdWithScans(id) {
     const patrol = await queryOne(
-      `SELECT p.*, u.nama, u.nrp, r.nama as rute_nama FROM patroli p
+      `SELECT p.*, u.nama, u.nrp, u.lokasi_id AS user_lokasi_id, r.nama as rute_nama FROM patroli p
        LEFT JOIN users u ON p.user_id = u.id LEFT JOIN routes r ON p.route_id = r.id WHERE p.id = $1`, [id]);
     if (patrol) {
       patrol.scans = await queryAll(

@@ -21,14 +21,29 @@ class PatroliService {
     return patroliRepo.findAll(filters);
   }
 
-  async getById(id) {
-    // Note: getById is intentionally NOT scope-checked in this pass —
-    // the spec for P0-6 covered getAll only, and validation flows
-    // legitimately fetch by id across roles. If we want to tighten
-    // this later, the check would be: load patrol → join users →
-    // confirm the patroli user's lokasi_id is in viewer's scope.
+  async getById(id, user) {
+    // [1-4] IDOR fix. getById was previously unscoped (any user could pull any
+    // patrol's detail: scans, GPS, photos). Authority roles
+    // (komandan/supervisor/admin) may still fetch any patrol by id — report
+    // validation flows legitimately cross lokasi. anggota/klien are restricted
+    // to their own lokasi scope; out-of-scope -> 404 (don't reveal existence).
     const patrol = await patroliRepo.findByIdWithScans(id);
     if (!patrol) throw { status: 404, message: 'Patroli tidak ditemukan' };
+
+    const AUTHORITY = ['admin', 'supervisor', 'komandan'];
+    if (!user || !AUTHORITY.includes(user.role)) {
+      const scope = await getScopeFilter(user);
+      if (!scope.unrestricted) {
+        const lokasiId = patrol.user_lokasi_id || null;
+        const inScope = lokasiId && scope.lokasiIds.includes(lokasiId);
+        if (!inScope) {
+          // Keep the helper column out of the (denied) response path anyway.
+          throw { status: 404, message: 'Patroli tidak ditemukan' };
+        }
+      }
+    }
+    // Strip the scope-only helper column so the response shape is unchanged.
+    delete patrol.user_lokasi_id;
     return patrol;
   }
 

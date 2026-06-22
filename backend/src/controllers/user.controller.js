@@ -4,12 +4,12 @@
 const userService = require('../services/user.service');
 
 exports.getAll = async (req, res) => {
-  try { res.json(await userService.getAll(req.query)); }
+  try { res.json(await userService.getAll(req.query, req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
 exports.getById = async (req, res) => {
-  try { res.json(await userService.getById(req.params.id)); }
+  try { res.json(await userService.getById(req.params.id, req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
@@ -19,7 +19,7 @@ exports.update = async (req, res) => {
 };
 
 exports.delete = async (req, res) => {
-  try { await userService.delete(req.params.id); res.json({ message: 'Deleted' }); }
+  try { await userService.delete(req.params.id, req.user); res.json({ message: 'Deleted' }); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 

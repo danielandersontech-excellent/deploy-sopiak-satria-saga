@@ -4,14 +4,40 @@
 const absensiRepo = require('../repositories/absensi.repository');
 const { logEvent } = require('../middleware/auditlog');
 const { emitToAll, emitToRole } = require('../realtime/socketio');
+const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
+
+// [1-1] Build the lokasi scope into a filters object for non-anggota roles.
+// anggota are scoped to their OWN records (user_id) — strictest, and matches
+// prior behaviour. Everyone else goes through the shared scope util:
+//   admin/supervisor → unrestricted
+//   komandan         → their own lokasi
+//   klien            → every lokasi of their client_id
+//   anyone else      → deny (lokasi_ids: [])
+// The repository understands filters.lokasi_id (single), filters.lokasi_ids
+// (uuid[]; empty array = deny-all), mirroring the rest of the codebase.
+async function scopeAbsensiFilters(filters, user) {
+  if (user && user.role === 'anggota') {
+    filters.user_id = user.id;
+    return filters;
+  }
+  const scope = await getScopeFilter(user);
+  applyLokasiScope(filters, scope);
+  return filters;
+}
 
 class AbsensiService {
   async getAll(filters, user) {
-    if (['anggota'].includes(user.role)) filters.user_id = user.id;
+    await scopeAbsensiFilters(filters, user);
     return absensiRepo.findAll(filters);
   }
 
-  async getToday() { return absensiRepo.findToday(); }
+  // [1-1] getToday now requires the requesting user so the same lokasi scope
+  // is applied. Previously this returned every company's today-absensi to any
+  // authenticated caller (the endpoint GET /api/absensi/today the app uses).
+  async getToday(user) {
+    const filters = await scopeAbsensiFilters({}, user);
+    return absensiRepo.findToday(filters);
+  }
 
   async create(user, data, fotoUrl) {
     if (!data.tipe || data.latitude == null || data.longitude == null) {

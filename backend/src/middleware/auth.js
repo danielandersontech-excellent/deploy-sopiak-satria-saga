@@ -217,10 +217,18 @@ const auth = async (req, res, next) => {
 
     // Fetch fresh user data from DB
     const user = await queryOne(
-      'SELECT id, nrp, nama, role, lokasi_id, pos_jaga_id, status, shift FROM users WHERE id = $1',
+      'SELECT id, nrp, nama, role, lokasi_id, pos_jaga_id, status, shift, status_penempatan FROM users WHERE id = $1',
       [decoded.id]
     );
     if (!user) return res.status(401).json({ error: 'User tidak ditemukan' });
+
+    // [1-7] Enforce account deactivation. `status` is the duty state
+    // (on_duty/off_duty) and is NOT an access gate; the deactivation flag is
+    // `status_penempatan === 'nonaktif'`. A deactivated staff member must lose
+    // access immediately rather than keeping it until token + refresh expiry.
+    if (user.status_penempatan === 'nonaktif') {
+      return res.status(401).json({ error: 'Akun dinonaktifkan', code: 'ACCOUNT_DEACTIVATED' });
+    }
 
     req.user = user;
     next();

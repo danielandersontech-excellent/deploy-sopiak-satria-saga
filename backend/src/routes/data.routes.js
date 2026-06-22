@@ -133,14 +133,19 @@ router.post(
   },
 );
 
-function crudRoutes(ctrl, adminOnly = false) {
+function crudRoutes(ctrl, adminOnly = false, writeRoles = ['admin', 'supervisor', 'komandan']) {
   const r = require('express').Router();
-  const wg = adminOnly ? [auth, requireRole('admin','supervisor','komandan')] : [auth];
+  // [1-5] write roles are now configurable. Default keeps the previous
+  // admin/supervisor/komandan set so operational resources are unchanged;
+  // sensitive resources (lokasi) pass a tighter set below.
+  const wg = adminOnly ? [auth, requireRole(...writeRoles)] : [auth];
   r.get('/', auth, ctrl.getAll); r.get('/:id', auth, ctrl.getById);
   r.post('/', ...wg, ctrl.create); r.put('/:id', ...wg, ctrl.update); r.delete('/:id', ...wg, ctrl.remove);
   return r;
 }
-router.use('/lokasi', crudRoutes(dataCtrl.lokasi, true));
+// [1-5] lokasi is a sensitive resource: only admin/supervisor may mutate it
+// (a komandan is a field role and should not create/delete sites).
+router.use('/lokasi', crudRoutes(dataCtrl.lokasi, true, ['admin', 'supervisor']));
 router.use('/pos-jaga', crudRoutes(dataCtrl.posJaga, true));
 router.use('/checkpoints', crudRoutes(dataCtrl.checkpoints, true));
 router.use('/routes', crudRoutes(dataCtrl.routes, true));
@@ -163,15 +168,19 @@ router.use('/report-exports', crudRoutes(dataCtrl.reportExports, true));
 // (ROLE_MENUS in web-admin lib/api.ts already limits /clients and /lokasi to
 // admin+supervisor) — now enforced server-side.
 //
-// The WRITE guard is preserved EXACTLY as the factory's adminOnly path had it
-// (admin/supervisor/komandan), so write behavior is unchanged.
+// The WRITE guard is admin/supervisor only.
+//   - Fase 0 (2F-1) registered clients explicitly to gate the two READ
+//     endpoints to admin/supervisor (was: any authenticated user).
+//   - Fase 1 (1-5) tightens the WRITE guard too: a komandan is a field role
+//     and must not create/update/delete client (tenant) accounts. Previously
+//     the write guard was admin/supervisor/komandan.
 //
 // Defense in depth: `pin_hash` and `must_change_pin` are additionally stripped
 // from the read output in data.service.js, so the secret is never returned
 // even to an admin. The klien LOGIN path (auth.service.js) reads `pin_hash`
 // through its own raw query and is unaffected by any of this.
 const clientsR = require('express').Router();
-const clientsWriteGuard = [auth, requireRole('admin', 'supervisor', 'komandan')];
+const clientsWriteGuard = [auth, requireRole('admin', 'supervisor')];
 clientsR.get('/', auth, requireRole('admin', 'supervisor'), dataCtrl.clients.getAll);
 clientsR.get('/:id', auth, requireRole('admin', 'supervisor'), dataCtrl.clients.getById);
 clientsR.post('/', ...clientsWriteGuard, dataCtrl.clients.create);

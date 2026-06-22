@@ -12,10 +12,19 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  // Check for httpOnly cookie OR localStorage-based auth
+  // Check for httpOnly auth cookies. The access token (ptsss_token, ~30m) is
+  // short-lived; the refresh token (ptsss_refresh, ~7d) outlives it.
   const token = request.cookies.get("ptsss_token")?.value;
-  if (!token) {
-    // Redirect to login if no cookie found
+  const refresh = request.cookies.get("ptsss_refresh")?.value;
+
+  // [1-8] Only redirect to /login when there is NO session at all (neither
+  // cookie). Previously the middleware redirected as soon as the 30-minute
+  // access cookie expired, logging the user out even though a valid refresh
+  // cookie was still present. When only the access cookie is missing we let
+  // the request through so apiFetch (lib/api.ts) can transparently refresh on
+  // the first 401. Route protection is preserved: with no cookies at all the
+  // user is still sent to login.
+  if (!token && !refresh) {
     const loginUrl = new URL("/login", request.url);
     loginUrl.searchParams.set("redirect", pathname);
     return NextResponse.redirect(loginUrl);

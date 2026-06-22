@@ -63,8 +63,8 @@ exports.getNotifikasi = async (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 };
 exports.createNotifikasi = async (req, res) => {
-  try { res.status(201).json(await opService.createNotifikasi(req.body)); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try { res.status(201).json(await opService.createNotifikasi(req.user, req.body)); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 exports.markRead = async (req, res) => {
   try { await opService.markRead(req.params.id); res.json({ message: 'OK' }); }

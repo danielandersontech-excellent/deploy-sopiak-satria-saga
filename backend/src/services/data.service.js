@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const repos = require('../repositories/data.repository');
 const { queryAll, queryOne } = require('../config/database');
 const { logger } = require('../utils/logger');
+const { getScopeFilter } = require('../utils/scope');
 
 // Same rounds as auth.service.js / bootstrap.js — P0-15.
 const BCRYPT_ROUNDS = parseInt(process.env.BCRYPT_ROUNDS || '12');
@@ -117,12 +118,31 @@ class DataService {
     return results;
   }
 
-  async getById(table, id) {
+  async getById(table, id, user) {
     const repo = this.getRepo(table);
     const row = await repo.findById(id);
     if (!row) throw { status: 404, message: 'Tidak ditemukan' };
     // SECURITY (Fase 0 / 2F-1): never return pin_hash / must_change_pin for clients.
     if (table === 'clients') return stripClientSecrets(row);
+
+    // [1-11] light IDOR scope for lokasi-bearing master data. A restricted
+    // caller (komandan/anggota/klien) may only read a record that belongs to a
+    // lokasi within their scope; out-of-scope -> 404. For `lokasi` itself the
+    // scope key is the row's own id. Resources without a lokasi key
+    // (report-exports, shift-assignments) are NOT lokasi-scoped here — they
+    // carry no tenant data keyed by lokasi — so they are left readable to
+    // internal roles (documented decision). admin/supervisor are unrestricted.
+    if (user) {
+      const scope = await getScopeFilter(user);
+      if (!scope.unrestricted) {
+        const lokKey = (table === 'lokasi') ? row.id : row.lokasi_id;
+        if (lokKey !== undefined && lokKey !== null) {
+          if (!scope.lokasiIds.includes(lokKey)) {
+            throw { status: 404, message: 'Tidak ditemukan' };
+          }
+        }
+      }
+    }
     return row;
   }
 

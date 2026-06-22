@@ -84,11 +84,19 @@ const allowedOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3001')
   .split(',')
   .map(s => s.trim())
   .filter(Boolean);
+// [1-13] With credentials:true a wildcard ('*') Access-Control-Allow-Origin is
+// invalid and unsafe (browsers reject it, and reflecting any origin would let
+// any site make credentialed requests). If '*' is configured, warn and ignore
+// it — only explicit, allow-listed origins are honoured.
+if (allowedOrigins.includes('*')) {
+  logger.warn('[CORS] CORS_ORIGIN contains "*", which is ignored because credentials are enabled. Set explicit origins.');
+}
 app.use(cors({
   origin: (origin, callback) => {
     // Allow requests with no origin (mobile apps, Postman, curl, server-to-server).
     if (!origin) return callback(null, true);
-    if (allowedOrigins.includes(origin) || allowedOrigins.includes('*')) {
+    // [1-13] never honour '*'; match against the explicit allow-list only.
+    if (allowedOrigins.includes(origin)) {
       return callback(null, true);
     }
     logger.warn(`[CORS] Blocked origin: ${origin}`);

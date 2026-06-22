@@ -26,7 +26,7 @@ exports.getAll = async (req, res) => {
 };
 
 exports.getToday = async (req, res) => {
-  try { res.json(await absensiService.getToday()); }
+  try { res.json(await absensiService.getToday(req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 

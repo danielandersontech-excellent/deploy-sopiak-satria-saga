@@ -16,7 +16,7 @@ exports.getAll = async (req, res) => {
 };
 
 exports.getById = async (req, res) => {
-  try { res.json(await patroliService.getById(req.params.id)); }
+  try { res.json(await patroliService.getById(req.params.id, req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 

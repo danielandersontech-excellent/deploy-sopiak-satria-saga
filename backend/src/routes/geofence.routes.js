@@ -19,7 +19,7 @@ router.put('/izin/:id/approve',      auth, APPROVAL_ROLES, ctrl.approveIzin);
 router.put('/izin/:id/reject',       auth, APPROVAL_ROLES, ctrl.rejectIzin);
 router.get('/izin',                  auth, ctrl.getIzinList);
 router.get('/violations',            auth, ctrl.getViolations);
-router.put('/violations/:id/ack',    auth, ctrl.ackViolation);
+router.put('/violations/:id/ack',    auth, APPROVAL_ROLES, ctrl.ackViolation);
 router.get('/live-map',              auth, ctrl.liveMap);
 router.get('/status',                auth, ctrl.status);
 
