@@ -178,9 +178,15 @@ export default function PersonilPage() {
         await usersApi.update(edit.id, payload);
         toast(`Data ${form.nama} berhasil diperbarui`);
       } else {
-        await authApi.register({ nrp: form.nrp, ...payload });
+        // [2-1] Backend membuat PIN acak & mengembalikannya sekali sebagai
+        // `initial_pin`. Tampilkan PIN itu (bukan "123456" yang ditebak).
+        const created: any = await authApi.register({ nrp: form.nrp, ...payload });
+        const initialPin = created?.initial_pin ?? created?.data?.initial_pin ?? null;
         toast(
-          `${form.nama} (${form.role}) berhasil ditambahkan. Login: ${form.nrp} / PIN: 123456`,
+          initialPin
+            ? `${form.nama} (${form.role}) ditambahkan. Login: ${form.nrp} / PIN awal: ${initialPin} — sampaikan ke user (tampil sekali), minta ganti saat login pertama.`
+            : `${form.nama} (${form.role}) ditambahkan. PIN awal dibuat namun tidak tercatat di respons — lakukan reset PIN bila user tidak dapat login.`,
+          initialPin ? "success" : "warning",
         );
       }
       setModal(false);
@@ -816,8 +822,10 @@ export default function PersonilPage() {
                 color: "var(--primary)",
               }}
             >
-              <i className="fas fa-info-circle" /> Personil baru akan mendapat
-              akun: NRP / PIN: 123456. Data berkas bisa dilengkapi nanti.
+              <i className="fas fa-info-circle" /> Personil baru mendapat akun
+              login via NRP. PIN awal dibuat otomatis (acak) dan ditampilkan
+              SEKALI setelah simpan — catat & sampaikan ke personil. Data berkas
+              bisa dilengkapi nanti.
             </div>
           )}
           <h4 style={{ marginBottom: 10, color: "var(--primary)" }}>

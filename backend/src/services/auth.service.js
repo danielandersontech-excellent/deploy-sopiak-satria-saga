@@ -6,7 +6,7 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const authRepo = require('../repositories/auth.repository');
-const { generateToken, generateRefreshToken } = require('../middleware/auth');
+const { generateToken, generateRefreshToken, revokeRefreshToken } = require('../middleware/auth');
 const { logEvent } = require('../middleware/auditlog');
 const { queryOne } = require('../config/database');
 
@@ -125,6 +125,12 @@ class AuthService {
 
     const newHash = await bcrypt.hash(newPin, parseInt(process.env.BCRYPT_ROUNDS || '12'));
     await authRepo.updatePassword(userId, newHash);
+    // [2-3] Setelah PIN berganti, cabut SEMUA refresh token milik user ini
+    // (memakai mekanisme revoke yang sudah ada). Refresh token yang dicuri
+    // tak lagi bisa dipakai untuk login baru. Sesi aktif TIDAK logout
+    // mendadak: access token saat ini tetap hidup hingga kedaluwarsa singkat
+    // (~30m), lalu perangkat melakukan login ulang seperti biasa.
+    try { await revokeRefreshToken(userId); } catch (e) { /* non-fatal */ }
     return { message: 'PIN berhasil diubah' };
   }
 
