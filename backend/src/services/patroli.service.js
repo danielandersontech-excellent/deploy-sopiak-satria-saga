@@ -55,9 +55,9 @@ class PatroliService {
     return patrol;
   }
 
-  async scan(user, patroliId, checkpointId, fotoUrl) {
+  async scan(user, patroliId, checkpointId, fotoUrl, idempotencyKey) {
     if (!checkpointId) throw { status: 400, message: 'checkpoint_id wajib' };
-    const scan = await patroliRepo.addScan(patroliId, checkpointId, fotoUrl);
+    const scan = await patroliRepo.addScan(patroliId, checkpointId, fotoUrl, idempotencyKey);
     emitToRole(['supervisor', 'admin', 'komandan'], 'patroli:update', { action: 'scan', patroli_id: patroliId, ...scan, nama: user.nama });
     return scan;
   }

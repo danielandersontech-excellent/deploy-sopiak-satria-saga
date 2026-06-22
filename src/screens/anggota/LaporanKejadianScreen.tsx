@@ -55,7 +55,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
 
-  const canSubmit = jenis && kronologi.length >= 100;
+  const canSubmit = jenis && kronologi.trim().length >= 100; // [3-8] abaikan spasi
 
   const handleCameraCapture = (uri: string) => {
     if (buktiUris.length < 10) {
@@ -108,14 +108,31 @@ export default function LaporanKejadianScreen({ navigation }: any) {
       ? await uploadKejadianPhotos(buktiUris, user?.id || 'unknown')
       : [];
 
-    addLaporanKejadian({
+    // [3-5] Foto bukti gagal di-upload → JANGAN submit URI lokal.
+    if (uploadedUrls.some((u) => !u)) {
+      setSubmitting(false);
+      Alert.alert('Upload Foto Gagal', 'Sebagian foto bukti gagal diunggah. Periksa koneksi internet lalu coba kirim lagi.');
+      return;
+    }
+
+    const res = await addLaporanKejadian({
       userId: user?.id || 'T1', nama: user?.nama || 'User', nrp: user?.nrp || '220001',
       jenis, prioritas, waktuKejadian: jam, lokasi: loc?.address || 'Lokasi tidak tersedia',
-      latitude: loc?.coords.latitude || 0, longitude: loc?.coords.longitude || 0, kronologi, buktiMedia: uploadedUrls,
+      latitude: loc?.coords.latitude || 0, longitude: loc?.coords.longitude || 0, kronologi, buktiMedia: uploadedUrls as string[],
       status: 'pending', catatanKomandan: '', waktuSubmit: jam,
     });
     setSubmitting(false);
-    setShowSuccess(true);
+
+    // [3-1] Hasil sesungguhnya.
+    if (res.status === 'error') {
+      Alert.alert('Gagal Mengirim', res.error || 'Server menolak laporan. Silakan periksa & coba lagi.');
+      return;
+    }
+    if (res.status === 'queued') {
+      Alert.alert('Tersimpan', 'Tidak ada koneksi. Laporan tersimpan & akan dikirim otomatis saat online.', [{ text: 'OK', onPress: () => setShowSuccess(true) }]);
+    } else {
+      setShowSuccess(true);
+    }
   };
 
   return (
@@ -174,7 +191,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
         <Text style={styles.fieldLabel}>Kronologi Kejadian *</Text>
         <View>
           <TextInput style={styles.textarea} multiline numberOfLines={8} textAlignVertical="top" placeholder="Deskripsikan kronologi kejadian secara detail... (min 100 karakter)" placeholderTextColor={Colors.textMuted} value={kronologi} onChangeText={setKronologi} maxLength={1000} />
-          <Text style={[styles.charCount, kronologi.length < 100 && { color: Colors.danger }]}>{kronologi.length}/1000 {kronologi.length < 100 ? `(min ${100 - kronologi.length} lagi)` : '✓'}</Text>
+          <Text style={[styles.charCount, kronologi.trim().length < 100 && { color: Colors.danger }]}>{kronologi.trim().length}/1000 {kronologi.trim().length < 100 ? `(min ${100 - kronologi.trim().length} lagi)` : '✓'}</Text>
         </View>
 
         {/* Bukti Media - Real Camera & Gallery */}

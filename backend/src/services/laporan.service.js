@@ -33,6 +33,11 @@ class LaporanService {
   }
 
   async createHarian(user, data, fotos) {
+    // [3-8] Pertahankan validasi panjang minimal di server (konten ter-trim)
+    // agar tidak bisa dilewati dengan spasi / klien yang dimodifikasi.
+    if (!data.aktivitas || String(data.aktivitas).trim().length < 50) {
+      throw { status: 400, message: 'Aktivitas wajib diisi minimal 50 karakter' };
+    }
     const foto_dokumentasi = data.foto_dokumentasi ? (typeof data.foto_dokumentasi === 'string' ? JSON.parse(data.foto_dokumentasi) : data.foto_dokumentasi) : [];
     const row = await laporanRepo.createHarian({ user_id: user.id, ...data, fotos, foto_dokumentasi, lokasi_id: data.lokasi_id || user.lokasi_id || null });
     logEvent(user.id, user.nama || '', 'CREATE', 'laporan_harian', row.id, { shift: data.shift });
@@ -59,11 +64,16 @@ class LaporanService {
   }
 
   async createKejadian(user, data, bukti) {
+    // [3-8] validasi panjang minimal kronologi (konten ter-trim) di server.
+    if (!data.kronologi || String(data.kronologi).trim().length < 100) {
+      throw { status: 400, message: 'Kronologi wajib diisi minimal 100 karakter' };
+    }
     const row = await laporanRepo.createKejadian({
       user_id: user.id, jenis: data.jenis, prioritas: data.prioritas,
       lokasi_text: data.lokasi_text, latitude: data.latitude ? parseFloat(data.latitude) : null,
       longitude: data.longitude ? parseFloat(data.longitude) : null, kronologi: data.kronologi, bukti_media: bukti,
       lokasi_id: data.lokasi_id || user.lokasi_id || null,
+      idempotency_key: data.idempotency_key || null, // [3-2]
     });
     logEvent(user.id, user.nama || '', 'CREATE', 'laporan_kejadian', row.id, { jenis: data.jenis, prioritas: data.prioritas });
     emitToRole(['supervisor', 'admin', 'komandan'], 'laporan:new', { type: 'kejadian', ...row, nama: user.nama });

@@ -1,33 +1,85 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { useState, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
-import { Card, Badge } from '../../components';
+import { Card, Badge, Button } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
-import { useDataStore } from '../../stores/dataStore';
+import { laporanApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
 const TABS = ['Semua', 'Harian', 'Kejadian'];
+const SHORT_MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+function fmtTanggal(iso?: string): string {
+  if (!iso) return '-';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '-';
+  return `${d.getDate()} ${SHORT_MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
+}
+function fmtJam(iso?: string): string {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '';
+  return d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
+}
 
 export default function RiwayatLaporanScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const laporanHarian = useDataStore((s) => s.laporanHarian);
-  const laporanKejadian = useDataStore((s) => s.laporanKejadian);
   const [tab, setTab] = useState('Semua');
 
-  const uid = user?.id || 'T1';
-  const laporanH = useMemo(() => laporanHarian.filter((l) => l.userId === uid), [laporanHarian, uid]);
-  const laporanK = useMemo(() => laporanKejadian.filter((l) => l.userId === uid), [laporanKejadian, uid]);
+  const uid = user?.id;
+  // [3-6] Ambil laporan milik user LANGSUNG dari backend (backend men-scope
+  // anggota ke user_id-nya) dengan paginasi, BUKAN memfilter 50 record global.
+  const [harian, setHarian] = useState<any[]>([]);
+  const [kejadian, setKejadian] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [limit, setLimit] = useState(50);
+  const [hasMore, setHasMore] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const all = [
-    ...laporanH.map((l) => ({ ...l, tipe: 'Harian' as const, desc: l.kondisi })),
-    ...laporanK.map((l) => ({ ...l, tipe: 'Kejadian' as const, desc: l.jenis })),
-  ];
+  const fetchData = useCallback(async () => {
+    if (!uid) { setHarian([]); setKejadian([]); setHasMore(false); return; }
+    setLoading(true);
+    try {
+      const base = `user_id=${encodeURIComponent(uid)}&limit=${limit}&page=1&sort=created_at&order=desc`;
+      const [hRes, kRes]: any[] = await Promise.all([
+        laporanApi.harianList(base),
+        laporanApi.kejadianList(base),
+      ]);
+      const hRows: any[] = Array.isArray(hRes) ? hRes : (hRes?.data || hRes?.items || []);
+      const kRows: any[] = Array.isArray(kRes) ? kRes : (kRes?.data || kRes?.items || []);
+      setHarian(hRows.map((l: any) => ({
+        id: l.id, tipe: 'Harian' as const, desc: l.kondisi || l.aktivitas || '-', status: l.status || 'pending',
+        tanggal: l.tanggal || fmtTanggal(l.created_at), waktuSubmit: fmtJam(l.created_at), catatanKomandan: l.catatan_komandan || '',
+        _ts: new Date(l.created_at).getTime() || 0,
+      })));
+      setKejadian(kRows.map((l: any) => ({
+        id: l.id, tipe: 'Kejadian' as const, desc: l.jenis || '-', status: l.status || 'pending',
+        tanggal: fmtTanggal(l.created_at), waktuSubmit: fmtJam(l.created_at), catatanKomandan: l.catatan_komandan || '',
+        _ts: new Date(l.created_at).getTime() || 0,
+      })));
+      const hNext = hRes?.pagination?.hasNext, kNext = kRes?.pagination?.hasNext;
+      setHasMore(!!hNext || !!kNext);
+    } catch {
+      setHarian([]); setKejadian([]); setHasMore(false);
+    } finally {
+      setLoading(false);
+    }
+  }, [uid, limit]);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try { await fetchData(); } catch {}
+    finally { setRefreshing(false); }
+  }, [fetchData]);
+
+  const all = [...harian, ...kejadian].sort((a, b) => (b._ts || 0) - (a._ts || 0));
   const filtered = tab === 'Semua' ? all : all.filter((l) => l.tipe === tab);
 
   const statusVar = (s: string): 'success' | 'warning' | 'default' | 'danger' => {
@@ -51,8 +103,15 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
           </TouchableOpacity>
         ))}
       </View>
-      <ScrollView contentContainerStyle={st.content}>
-        {filtered.length === 0 ? (
+      <ScrollView
+        contentContainerStyle={st.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={theme.primary} />}
+      >
+        {loading && filtered.length === 0 ? (
+          <View style={st.emptyWrap}><ActivityIndicator color={theme.primary} /></View>
+        ) : !uid ? (
+          <View style={st.emptyWrap}><Ionicons name="person-outline" size={48} color={Colors.textMuted} /><Text style={st.emptyText}>Belum login</Text></View>
+        ) : filtered.length === 0 ? (
           <View style={st.emptyWrap}><Ionicons name="document-outline" size={48} color={Colors.textMuted} /><Text style={st.emptyText}>Belum ada laporan</Text></View>
         ) : filtered.map((l, idx) => (
           <Card key={idx} style={st.card}>
@@ -66,6 +125,9 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
             {l.catatanKomandan ? <Text style={st.catatan}>Catatan: {l.catatanKomandan}</Text> : null}
           </Card>
         ))}
+        {hasMore && filtered.length > 0 && (
+          <Button title={loading ? 'Memuat...' : 'Muat lebih banyak'} variant="outline" size="medium" fullWidth disabled={loading} onPress={() => setLimit((n) => n + 50)} style={{ marginTop: 8 }} />
+        )}
         <View style={{ height: 32 }} />
       </ScrollView>
     </View>

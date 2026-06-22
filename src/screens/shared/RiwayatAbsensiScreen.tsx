@@ -25,14 +25,14 @@
  *  ✅ Future months disabled (can't navigate to future).
  *  ✅ Records sorted newest first.
  */
-import React, { useState, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, RefreshControl, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card, Badge } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
-import { useDataStore } from '../../stores/dataStore';
+import { absensiApi } from '../../lib/apiClient';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
 
@@ -81,8 +81,12 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
   const { t, lang } = useI18n();
   const { theme, isDark } = useTheme();
   const user = useAuthStore((s) => s.user);
-  const absensiRecords = useDataStore((s) => s.absensiRecords);
-  const loadAllData = useDataStore((s) => s.loadAllData);
+
+  // [3-4] Riwayat absensi mengambil data SENDIRI dari backend per rentang
+  // tanggal bulan terpilih (bukan store yang hanya berisi HARI INI). Backend
+  // sudah men-scope anggota ke user_id-nya (Fase 1), jadi hanya milik sendiri.
+  const [monthData, setMonthData] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
   // Default to current month/year (NOT hardcoded 2026)
   const now = new Date();
@@ -96,20 +100,37 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
 
   const uid = user?.id;
 
-  // Filter user's records (NO 'T1' fallback)
-  const userRecords = useMemo(() => {
-    if (!uid) return [];
-    return absensiRecords.filter((a) => a.userId === uid);
-  }, [absensiRecords, uid]);
+  // Ambil absensi bulan terpilih dari backend (rentang tanggal).
+  const fetchMonth = useCallback(async () => {
+    if (!uid) { setMonthData([]); return; }
+    setLoading(true);
+    try {
+      const start = new Date(year, monthIdx, 1, 0, 0, 0).toISOString();
+      const end = new Date(year, monthIdx + 1, 0, 23, 59, 59).toISOString();
+      const qs = `user_id=${encodeURIComponent(uid)}&created_at_gte=${encodeURIComponent(start)}&created_at_lte=${encodeURIComponent(end)}&limit=300&sort=created_at&order=desc`;
+      const res: any = await absensiApi.list(qs);
+      const rows: any[] = Array.isArray(res) ? res : (res?.data || res?.items || []);
+      const mapped = rows.map((a: any) => {
+        const d = new Date(a.created_at || a.waktu || Date.now());
+        return {
+          // tanggal pakai bulan-singkat ID agar bisa di-parse parseStoredDate.
+          tanggal: `${d.getDate()} ${SHORT_MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`,
+          waktu: a.waktu || d.toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
+          tipe: a.tipe,
+          status: a.status || 'hadir',
+        };
+      });
+      setMonthData(mapped);
+    } catch {
+      setMonthData([]);
+    } finally {
+      setLoading(false);
+    }
+  }, [uid, monthIdx, year]);
 
-  // Filter records for the selected month
-  const monthRecords = useMemo(() => {
-    return userRecords.filter((a) => {
-      const d = parseStoredDate(a.tanggal);
-      if (!d) return false;
-      return d.getMonth() === monthIdx && d.getFullYear() === year;
-    });
-  }, [userRecords, monthIdx, year]);
+  useEffect(() => { fetchMonth(); }, [fetchMonth]);
+
+  const monthRecords = monthData;
 
   // Group by date (combine masuk + keluar into one day card)
   const dayGroups: DayGroup[] = useMemo(() => {
@@ -173,9 +194,9 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
-    try { await loadAllData?.(); } catch {}
+    try { await fetchMonth(); } catch {}
     finally { setRefreshing(false); }
-  }, [loadAllData]);
+  }, [fetchMonth]);
 
   const statusLabel = (s: string) => {
     if (s === 'hadir') return lang === 'en' ? 'Present' : 'Hadir';
@@ -263,7 +284,13 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
           </View>
         )}
 
-        {uid && dayGroups.length === 0 && (
+        {uid && loading && dayGroups.length === 0 && (
+          <View style={st.emptyWrap}>
+            <ActivityIndicator color={theme.primary} />
+          </View>
+        )}
+
+        {uid && !loading && dayGroups.length === 0 && (
           <View style={st.emptyWrap}>
             <Ionicons name="calendar-outline" size={48} color={theme.textMuted} />
             <Text style={[st.emptyText, { color: theme.textMuted }]}>

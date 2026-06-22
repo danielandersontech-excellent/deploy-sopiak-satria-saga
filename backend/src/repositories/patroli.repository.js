@@ -54,7 +54,18 @@ class PatroliRepository {
     );
   }
 
-  async addScan(patroliId, checkpointId, fotoUrl) {
+  async addScan(patroliId, checkpointId, fotoUrl, idempotencyKey) {
+    // [3-2] idempotency: scan di-replay dari antrian offline harus aman.
+    if (idempotencyKey) {
+      const row = await queryOne(
+        `INSERT INTO patrol_scans (patroli_id, checkpoint_id, scan_time, foto_url, idempotency_key)
+         VALUES ($1,$2,NOW(),$3,$4)
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [patroliId, checkpointId, fotoUrl, idempotencyKey]
+      );
+      if (row) return row;
+      return queryOne('SELECT * FROM patrol_scans WHERE idempotency_key = $1', [idempotencyKey]);
+    }
     return queryOne(
       `INSERT INTO patrol_scans (patroli_id, checkpoint_id, scan_time, foto_url)
        VALUES ($1,$2,NOW(),$3) RETURNING *`,

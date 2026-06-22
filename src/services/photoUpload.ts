@@ -39,12 +39,14 @@ async function uploadToBackend(localUri: string, folder: string, watermarkInfo?:
     if (watermarkInfo) headers['X-Watermark-Info'] = encodeURIComponent(JSON.stringify(watermarkInfo));
     const response = await fetch(API_URL+'/api/data/upload?folder='+folder, { method: 'POST', headers, body: formData });
     if (response.ok) { const data = await response.json(); const url = fixUploadUrl(data.url); console.log('[Upload] ✅ '+url); return { success: true, publicUrl: url, error: null }; }
-    else { let msg = 'HTTP '+response.status; try { const d = await response.json(); msg = d.error || msg; } catch {} return { success: false, publicUrl: localUri, error: msg }; }
-  } catch (e: any) { console.log('[Upload] Error: '+e.message); return { success: false, publicUrl: localUri, error: e.message }; }
+    else { let msg = 'HTTP '+response.status; try { const d = await response.json(); msg = d.error || msg; } catch {} return { success: false, publicUrl: null, error: msg }; }
+  } catch (e: any) { console.log('[Upload] Error: '+e.message); return { success: false, publicUrl: null, error: e.message }; }
 }
-export async function uploadAbsensiPhoto(uri: string, _userId: string, wm?: any) { return (await uploadToBackend(uri, 'absensi', wm)).publicUrl || uri; }
-export async function uploadProfilePhoto(uri: string, _userId: string) { const c = await compressImage(uri, 512, 512, 0.8); return (await uploadToBackend(c.uri, 'profile')).publicUrl || uri; }
-export async function uploadEvidencePhotos(uris: string[], _userId: string, wm?: any) { return Promise.all(uris.map(async u => (await uploadToBackend(u, 'laporan', wm)).publicUrl || u)); }
-export async function uploadKejadianPhotos(uris: string[], _userId: string, wm?: any) { return Promise.all(uris.map(async u => (await uploadToBackend(u, 'kejadian', wm)).publicUrl || u)); }
-export async function uploadPatroliPhoto(uri: string, _userId: string, wm?: any) { return (await uploadToBackend(uri, 'patroli', wm)).publicUrl || uri; }
+// [3-5] Pada KEGAGALAN upload, helper mengembalikan null (BUKAN URI lokal file://).
+// Pemanggil WAJIB memeriksa null dan tidak menyimpan/menyubmit foto yang gagal.
+export async function uploadAbsensiPhoto(uri: string, _userId: string, wm?: any): Promise<string | null> { const r = await uploadToBackend(uri, 'absensi', wm); return r.success ? r.publicUrl : null; }
+export async function uploadProfilePhoto(uri: string, _userId: string): Promise<string | null> { const c = await compressImage(uri, 512, 512, 0.8); const r = await uploadToBackend(c.uri, 'profile'); return r.success ? r.publicUrl : null; }
+export async function uploadEvidencePhotos(uris: string[], _userId: string, wm?: any): Promise<(string | null)[]> { return Promise.all(uris.map(async u => { const r = await uploadToBackend(u, 'laporan', wm); return r.success ? r.publicUrl : null; })); }
+export async function uploadKejadianPhotos(uris: string[], _userId: string, wm?: any): Promise<(string | null)[]> { return Promise.all(uris.map(async u => { const r = await uploadToBackend(u, 'kejadian', wm); return r.success ? r.publicUrl : null; })); }
+export async function uploadPatroliPhoto(uri: string, _userId: string, wm?: any): Promise<string | null> { const r = await uploadToBackend(uri, 'patroli', wm); return r.success ? r.publicUrl : null; }
 export function formatFileSize(b: number) { if(b<1024)return b+'B';if(b<1048576)return Math.round(b/1024)+'KB';return(b/1048576).toFixed(1)+'MB'; }

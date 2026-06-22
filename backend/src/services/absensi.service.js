@@ -55,6 +55,7 @@ class AbsensiService {
       dalam_radius: data.dalam_radius !== 'false' && data.dalam_radius !== false,
       waktu: data.waktu || null,
       lokasi_id: data.lokasi_id || user.lokasi_id || null,
+      idempotency_key: data.idempotency_key || null, // [3-2]
     });
     logEvent(user.id, user.nama || '', 'CREATE', 'absensi', row.id, { tipe: data.tipe, status: data.status || 'hadir' });
     emitToRole(['supervisor', 'admin', 'komandan'], 'absensi:new', { ...row, nama: user.nama, nrp: user.nrp });

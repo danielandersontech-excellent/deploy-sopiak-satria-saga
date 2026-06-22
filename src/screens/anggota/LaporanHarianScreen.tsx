@@ -2,7 +2,7 @@
  * LAPORAN HARIAN - Real Camera Integration
  * Uses CameraModal for documentation photos + ImagePicker for gallery
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Image,
   KeyboardAvoidingView, Platform,
@@ -15,6 +15,7 @@ import { Card, Badge, Button, CameraModal } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { uploadEvidencePhotos } from '../../services/photoUpload';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useClock } from '../../hooks/useClock';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
@@ -41,7 +42,24 @@ export default function LaporanHarianScreen({ navigation }: any) {
   const [showSuccess, setShowSuccess] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
 
-  const canSubmit = aktivitas.length >= 50;
+  const canSubmit = aktivitas.trim().length >= 50; // [3-8] abaikan spasi
+
+  // [3-7] Persistensi draft lokal (AsyncStorage), per user.
+  const draftKey = `@ptsss_draft_laporan_harian_${user?.id || 'anon'}`;
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (d.kondisi) setKondisi(d.kondisi);
+        if (typeof d.aktivitas === 'string') setAktivitas(d.aktivitas);
+        if (typeof d.temuan === 'string') setTemuan(d.temuan);
+        if (Array.isArray(d.fotoUris)) setFotoUris(d.fotoUris);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
 
   const handleCameraCapture = (uri: string) => {
     if (fotoUris.length < 5) {
@@ -77,7 +95,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
   };
 
   const handleSubmit = async () => {
-    if (!canSubmit) return Alert.alert('Error', 'Aktivitas minimal 50 karakter');
+    if (!canSubmit) return Alert.alert('Error', 'Aktivitas wajib diisi minimal 50 karakter (tanpa menghitung spasi)');
     setSubmitting(true);
 
     // Upload photos to server
@@ -85,7 +103,14 @@ export default function LaporanHarianScreen({ navigation }: any) {
       ? await uploadEvidencePhotos(fotoUris, user?.id || 'unknown')
       : [];
 
-    addLaporanHarian({
+    // [3-5] Bila ada foto yang GAGAL di-upload (null), JANGAN submit URI lokal.
+    if (uploadedUrls.some((u) => !u)) {
+      setSubmitting(false);
+      Alert.alert('Upload Foto Gagal', 'Sebagian foto gagal diunggah. Periksa koneksi internet lalu coba kirim lagi.');
+      return;
+    }
+
+    const res = await addLaporanHarian({
       userId: user?.id || 'T1',
       nama: user?.nama || 'User',
       nrp: user?.nrp || '220001',
@@ -95,18 +120,37 @@ export default function LaporanHarianScreen({ navigation }: any) {
       kondisi,
       aktivitas,
       temuan,
-      fotos: uploadedUrls,
+      fotos: uploadedUrls as string[],
       status: 'pending',
       catatanKomandan: '',
       waktuSubmit: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
     });
 
     setSubmitting(false);
-    setShowSuccess(true);
+
+    // [3-1] Tampilkan hasil sesungguhnya.
+    if (res.status === 'error') {
+      Alert.alert('Gagal Mengirim', res.error || 'Server menolak laporan. Silakan periksa & coba lagi.');
+      return;
+    }
+    // Sukses / queued → draft tak diperlukan lagi.
+    try { await AsyncStorage.removeItem(draftKey); } catch {}
+
+    if (res.status === 'queued') {
+      Alert.alert('Tersimpan', 'Tidak ada koneksi. Laporan tersimpan & akan dikirim otomatis saat online.', [{ text: 'OK', onPress: () => setShowSuccess(true) }]);
+    } else {
+      setShowSuccess(true);
+    }
   };
 
-  const handleSaveDraft = () => {
-    Alert.alert('Draft Disimpan', 'Laporan tersimpan sebagai draft. Anda bisa melanjutkan nanti.');
+  const handleSaveDraft = async () => {
+    // [3-7] Simpan isian sebagai draft lokal agar bisa dilanjutkan nanti.
+    try {
+      await AsyncStorage.setItem(draftKey, JSON.stringify({ kondisi, aktivitas, temuan, fotoUris }));
+      Alert.alert('Draft Disimpan', 'Laporan tersimpan sebagai draft. Akan dimuat kembali saat Anda membuka layar ini.');
+    } catch {
+      Alert.alert('Gagal', 'Tidak dapat menyimpan draft.');
+    }
   };
 
   return (
@@ -154,8 +198,8 @@ export default function LaporanHarianScreen({ navigation }: any) {
             onChangeText={setAktivitas}
             maxLength={500}
           />
-          <Text style={[styles.charCount, aktivitas.length < 50 && { color: Colors.danger }]}>
-            {aktivitas.length}/500 {aktivitas.length < 50 ? `(min ${50 - aktivitas.length} lagi)` : '✓'}
+          <Text style={[styles.charCount, aktivitas.trim().length < 50 && { color: Colors.danger }]}>
+            {aktivitas.trim().length}/500 {aktivitas.trim().length < 50 ? `(min ${50 - aktivitas.trim().length} lagi)` : '✓'}
           </Text>
         </View>
 

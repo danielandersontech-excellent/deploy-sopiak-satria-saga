@@ -354,7 +354,7 @@ async function executeAction(action: { type: string; data: any }): Promise<void>
     case 'laporan_harian_create': await laporanApi.harianCreate(data); break;
     case 'laporan_kejadian_create': await laporanApi.kejadianCreate(data); break;
     case 'patrol_scan':
-      await patroliApi.scan(data.patroli_id, { checkpoint_id: data.checkpoint_id, foto_url: data.foto_url }); break;
+      await patroliApi.scan(data.patroli_id, { checkpoint_id: data.checkpoint_id, foto_url: data.foto_url, idempotency_key: data.idempotency_key }); break;
     case 'patrol_end':
       await patroliApi.end(data.patroli_id, { checkpoint_scanned: data.checkpoint_scanned, checkpoint_total: data.checkpoint_total }); break;
     case 'panic_create': await dataApi.panic.create(data); break;

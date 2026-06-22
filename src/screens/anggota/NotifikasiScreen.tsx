@@ -18,7 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Card } from '../../components';
-import { useDataStore } from '../../stores/dataStore';
+import { useDataStore, timeAgo } from '../../stores/dataStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
@@ -193,7 +193,7 @@ export default function NotifikasiScreen({ navigation }: any) {
             const nId = getField(n, 'id', '_id');
             const judul = getField(n, 'judul') || '';
             const pesan = getField(n, 'pesan') || '';
-            const waktu = getField(n, 'waktu', 'created_at') || '';
+            const waktu = timeAgo(getField(n, 'waktu', 'created_at') || '');
             const targetRole = getField(n, 'target_role', 'targetRole');
 
             return (

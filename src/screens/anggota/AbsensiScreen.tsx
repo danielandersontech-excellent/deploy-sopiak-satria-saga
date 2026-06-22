@@ -157,6 +157,12 @@ export default function AbsensiScreen({ navigation }: any) {
       customText: `ABSENSI ${tipe.toUpperCase()}`,
     };
     const uploadedUrl = await uploadAbsensiPhoto(photoUri!, user?.id || 'unknown', wmInfo);
+    // [3-5] Upload foto gagal → JANGAN submit URI lokal (foto akan hilang di server).
+    if (!uploadedUrl) {
+      setSubmitting(false);
+      Alert.alert('Upload Foto Gagal', 'Foto selfie gagal diunggah. Periksa koneksi internet lalu coba lagi.');
+      return;
+    }
 
     const now = new Date();
     const shiftStart = user?.shift?.split('-')[0] || '08:00';
@@ -164,11 +170,19 @@ export default function AbsensiScreen({ navigation }: any) {
     const isLate = tipe === 'masuk' && (now.getHours() > shiftH || (now.getHours() === shiftH && now.getMinutes() > shiftM + 5));
     const isInsideRadius = geofence ? geofence.isInside : true;
 
-    addAbsensi({
+    const res = await addAbsensi({
       userId: user?.id || 'T1', nama: user?.nama || 'User', nrp: user?.nrp || '000000', tipe, waktu: jam, tanggal: tanggalPendek, fotoUri: uploadedUrl,
       latitude: location.coords.latitude, longitude: location.coords.longitude, alamat: location.address,
       posJaga: geofence?.posName || '-', status: isLate ? 'terlambat' : 'hadir', dalamRadius: isInsideRadius,
     });
+
+    setSubmitting(false);
+
+    // [3-1] Server menolak → tampilkan error, JANGAN tampilkan sukses.
+    if (res.status === 'error') {
+      Alert.alert('Absensi Gagal', res.error || 'Server menolak absensi. Silakan coba lagi.');
+      return;
+    }
 
     if (!isInsideRadius && geofence) {
       useDataStore.getState().addNotifikasi({
@@ -177,8 +191,13 @@ export default function AbsensiScreen({ navigation }: any) {
         waktu: new Date().toISOString(), targetRole: ['komandan', 'supervisor'], targetUserId: null, dibaca: false,
       });
     }
-    setSubmitting(false);
-    setSuccess(true);
+
+    if (res.status === 'queued') {
+      // [3-1] Offline → tersimpan di antrian, dikirim otomatis saat online (tanpa duplikat berkat idempotency).
+      Alert.alert('Tersimpan', 'Tidak ada koneksi. Absensi tersimpan & akan dikirim otomatis saat online.', [{ text: 'OK', onPress: () => setSuccess(true) }]);
+    } else {
+      setSuccess(true);
+    }
   };
 
   if (isAlreadyDone) {

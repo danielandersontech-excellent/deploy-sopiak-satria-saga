@@ -152,6 +152,24 @@ export default function SerahTerimaPage() {
               </div>
             </div>
           )}
+          {detail.tanda_tangan && (
+            <div style={{ marginTop: 12 }}>
+              <div className="detail-label">Tanda Tangan</div>
+              <img
+                src={detail.tanda_tangan}
+                style={{
+                  marginTop: 8,
+                  maxWidth: 260,
+                  width: "100%",
+                  height: "auto",
+                  background: "#fff",
+                  border: "1px solid var(--border, #e5e7eb)",
+                  borderRadius: 8,
+                }}
+                alt="Tanda tangan serah terima"
+              />
+            </div>
+          )}
         </Modal>
       )}
     </div>

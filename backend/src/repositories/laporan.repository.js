@@ -49,6 +49,17 @@ class LaporanRepository {
   }
 
   async createHarian(data) {
+    // [3-2] idempotency (lihat absensi.repository untuk pola).
+    if (data.idempotency_key) {
+      const row = await queryOne(
+        `INSERT INTO laporan_harian (user_id, tanggal, shift, pos_jaga, kondisi, aktivitas, temuan, perhatian_khusus, fotos, foto_dokumentasi, status, lokasi_id, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11,$12)
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [data.user_id, data.tanggal || null, data.shift, data.pos_jaga, data.kondisi, data.aktivitas, data.temuan, data.perhatian_khusus || null, data.fotos || [], data.foto_dokumentasi || [], data.lokasi_id || null, data.idempotency_key]
+      );
+      if (row) return row;
+      return queryOne('SELECT * FROM laporan_harian WHERE idempotency_key = $1', [data.idempotency_key]);
+    }
     return queryOne(
       `INSERT INTO laporan_harian (user_id, tanggal, shift, pos_jaga, kondisi, aktivitas, temuan, perhatian_khusus, fotos, foto_dokumentasi, status, lokasi_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'pending',$11) RETURNING *`,
@@ -84,6 +95,17 @@ class LaporanRepository {
   }
 
   async createKejadian(data) {
+    // [3-2] idempotency (lihat absensi.repository untuk pola).
+    if (data.idempotency_key) {
+      const row = await queryOne(
+        `INSERT INTO laporan_kejadian (user_id, jenis, prioritas, lokasi_text, latitude, longitude, kronologi, bukti_media, status, lokasi_id, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9,$10)
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [data.user_id, data.jenis, data.prioritas || 'sedang', data.lokasi_text, data.latitude, data.longitude, data.kronologi, data.bukti_media || [], data.lokasi_id || null, data.idempotency_key]
+      );
+      if (row) return row;
+      return queryOne('SELECT * FROM laporan_kejadian WHERE idempotency_key = $1', [data.idempotency_key]);
+    }
     return queryOne(
       `INSERT INTO laporan_kejadian (user_id, jenis, prioritas, lokasi_text, latitude, longitude, kronologi, bukti_media, status, lokasi_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,'pending',$9) RETURNING *`,

@@ -69,8 +69,20 @@ class OperasionalRepository {
   }
   async createSerahTerima(data) {
     const invJson = typeof data.inventaris === 'string' ? data.inventaris : JSON.stringify(data.inventaris || []);
-    return queryOne(`INSERT INTO serah_terima (user_id, penerima_id, kondisi_area, inventaris, catatan) VALUES ($1,$2,$3,$4,$5) RETURNING *`,
-      [data.user_id, data.penerima_id || null, data.kondisi_area, invJson, data.catatan || null]);
+    const ttd = data.tanda_tangan || null; // [3-3] data URI tanda tangan
+    // [3-2] idempotency (lihat absensi.repository untuk pola).
+    if (data.idempotency_key) {
+      const row = await queryOne(
+        `INSERT INTO serah_terima (user_id, penerima_id, kondisi_area, inventaris, catatan, tanda_tangan, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [data.user_id, data.penerima_id || null, data.kondisi_area, invJson, data.catatan || null, ttd, data.idempotency_key]);
+      if (row) return row;
+      return queryOne('SELECT * FROM serah_terima WHERE idempotency_key = $1', [data.idempotency_key]);
+    }
+    return queryOne(
+      `INSERT INTO serah_terima (user_id, penerima_id, kondisi_area, inventaris, catatan, tanda_tangan) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
+      [data.user_id, data.penerima_id || null, data.kondisi_area, invJson, data.catatan || null, ttd]);
   }
 
   // ===== PANIC ALERTS =====
@@ -93,6 +105,17 @@ class OperasionalRepository {
     return queryAll(sql, params);
   }
   async createPanic(data) {
+    // [3-2] idempotency (lihat absensi.repository untuk pola).
+    if (data.idempotency_key) {
+      const row = await queryOne(`INSERT INTO panic_alerts (user_id, latitude, longitude, alamat, pesan, jenis_darurat, lokasi_text, foto_url, nomor_kontak, lokasi_id, idempotency_key)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
+        ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [data.user_id, data.latitude || null, data.longitude || null, data.alamat || null,
+         data.pesan || null, data.jenis_darurat || 'umum', data.lokasi_text || null, data.foto_url || null,
+         data.nomor_kontak || null, data.lokasi_id || null, data.idempotency_key]);
+      if (row) return row;
+      return queryOne('SELECT * FROM panic_alerts WHERE idempotency_key = $1', [data.idempotency_key]);
+    }
     return queryOne(`INSERT INTO panic_alerts (user_id, latitude, longitude, alamat, pesan, jenis_darurat, lokasi_text, foto_url, nomor_kontak, lokasi_id)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) RETURNING *`,
       [data.user_id, data.latitude || null, data.longitude || null, data.alamat || null,

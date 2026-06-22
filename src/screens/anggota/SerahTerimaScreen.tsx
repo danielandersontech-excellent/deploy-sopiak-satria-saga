@@ -35,13 +35,25 @@ export default function SerahTerimaScreen({ navigation }: any) {
       return;
     }
     setSubmitting(true);
-    await new Promise((r) => setTimeout(r, 1000));
-    addSerahTerima({
+    // [3-1] Tunggu hasil API sebenarnya (hapus delay setTimeout palsu).
+    // [3-3] Alirkan tanda tangan (signature) ke backend agar tersimpan.
+    const res = await addSerahTerima({
       userId: user?.id || 'T1', nama: user?.nama || 'User', kondisiArea: kondisi,
       inventaris: INVENTARIS_ITEMS.map((nama) => ({ nama, tersedia: inventaris[nama] })),
       catatan, waktu: new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' }),
-    });
+    }, signature);
     setSubmitting(false);
+
+    if (res.status === 'error') {
+      Alert.alert('Gagal', res.error || 'Server menolak serah terima. Silakan coba lagi.');
+      return;
+    }
+    if (res.status === 'queued') {
+      Alert.alert('Tersimpan', 'Tidak ada koneksi. Serah terima tersimpan & akan dikirim otomatis saat online.', [
+        { text: 'OK', onPress: () => navigation.goBack() },
+      ]);
+      return;
+    }
     Alert.alert('✅ Serah Terima Berhasil', 'Shift berikutnya akan menerima notifikasi.', [
       { text: 'OK', onPress: () => navigation.goBack() },
     ]);

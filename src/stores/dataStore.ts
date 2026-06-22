@@ -141,8 +141,10 @@ const fmtDate = (d: Date | string) => {
   return `${String(dt.getDate()).padStart(2, '0')} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
 };
 
-const timeAgo = (d: string) => {
-  const diff = Date.now() - new Date(d).getTime();
+export const timeAgo = (d: string) => {
+  const t = new Date(d).getTime();
+  if (!d || isNaN(t)) return d || '';
+  const diff = Date.now() - t;
   const min = Math.floor(diff / 60000);
   if (min < 1) return 'Baru saja';
   if (min < 60) return `${min} menit lalu`;
@@ -155,6 +157,17 @@ const todayStr = () => fmtDate(new Date());
 
 let _idCounter = 9000;
 const genId = (prefix: string) => `${prefix}-${++_idCounter}`;
+
+// [3-1] Hasil submit yang dikembalikan addX ke layar agar UI tahu apakah
+// benar-benar sukses di server, tertahan di antrian offline, atau ditolak.
+export type SubmitResult = { status: 'success' | 'queued' | 'error'; id?: string; data?: any; error?: string };
+
+// [3-2] Idempotency key STABIL untuk satu submission. Dibuat sekali saat aksi
+// pertama dibuat, ikut dalam payload → retry (online maupun dari antrian
+// offline) memakai key yang SAMA sehingga backend men-dedup (tidak ganda).
+// Tanpa dependency uuid: timestamp + 2 segmen acak (cukup unik untuk dedup).
+const genIdemKey = () =>
+  `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}-${Math.random().toString(36).slice(2, 10)}`;
 
 // ==================== STORE INTERFACE ====================
 
@@ -176,7 +189,7 @@ interface DataStore {
   removeTeamMember: (id: string) => void;
 
   absensiRecords: AbsensiRecord[];
-  addAbsensi: (r: Omit<AbsensiRecord, 'id'>) => string;
+  addAbsensi: (r: Omit<AbsensiRecord, 'id'>) => Promise<SubmitResult>;
   getAbsensiByUser: (userId: string) => AbsensiRecord[];
   todayAbsensi: (userId: string) => { masuk?: AbsensiRecord; keluar?: AbsensiRecord };
 
@@ -196,15 +209,15 @@ interface DataStore {
   endPatrol: () => void;
 
   laporanHarian: LaporanHarianData[];
-  addLaporanHarian: (l: Omit<LaporanHarianData, 'id'>) => string;
+  addLaporanHarian: (l: Omit<LaporanHarianData, 'id'>) => Promise<SubmitResult>;
   updateLaporanHarianStatus: (id: string, status: LaporanHarianData['status'], catatan?: string) => void;
 
   laporanKejadian: LaporanKejadianData[];
-  addLaporanKejadian: (l: Omit<LaporanKejadianData, 'id'>) => string;
+  addLaporanKejadian: (l: Omit<LaporanKejadianData, 'id'>) => Promise<SubmitResult>;
   updateLaporanKejadianStatus: (id: string, status: LaporanKejadianData['status'], catatan?: string) => void;
 
   serahTerimaRecords: SerahTerimaData[];
-  addSerahTerima: (s: Omit<SerahTerimaData, 'id'>) => void;
+  addSerahTerima: (s: Omit<SerahTerimaData, 'id'>, signature?: string | null) => Promise<SubmitResult>;
 
   notifikasi: NotifikasiData[];
   addNotifikasi: (n: Omit<NotifikasiData, 'id'>) => void;
@@ -338,7 +351,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
       // Map notifikasi
       const notifikasi: NotifikasiData[] = extractArray(notifData).map((n: any) => ({
         id: n.id, tipe: n.tipe || 'info', judul: n.judul, pesan: n.pesan || '',
-        waktu: n.created_at ? timeAgo(n.created_at) : '', dibaca: n.dibaca ?? false,
+        waktu: n.created_at || '', dibaca: n.dibaca ?? false, // [3-9] simpan ISO, format saat render
         targetRole: n.target_role || [], targetUserId: n.target_user_id || null,
       }));
 
@@ -455,7 +468,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
           const notifikasi: NotifikasiData[] = cachedNotif.map((n: any) => ({
             id: n.id, tipe: n.tipe || 'info', judul: n.judul, pesan: n.pesan || '',
-            waktu: n.created_at ? timeAgo(n.created_at) : '', dibaca: n.dibaca ?? false,
+            waktu: n.created_at || '', dibaca: n.dibaca ?? false, // [3-9] simpan ISO, format saat render
             targetRole: n.target_role || [], targetUserId: n.target_user_id || null,
           }));
 
@@ -546,31 +559,44 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== ABSENSI ====================
   absensiRecords: [],
-  addAbsensi: (r) => {
+  addAbsensi: async (r) => {
     const id = genId('AB');
+    const idempotency_key = genIdemKey();
     set((s) => ({ absensiRecords: [{ ...r, id }, ...s.absensiRecords] }));
 
-    (async () => {
-      const payload = {
-        tipe: r.tipe, foto_url: r.fotoUri || null,
-        latitude: r.latitude, longitude: r.longitude, alamat: r.alamat,
-        pos_jaga: r.posJaga, status: r.status, dalam_radius: r.dalamRadius,
-      };
-      try {
-        const { queued, result } = await executeOrQueue('absensi_create', payload, () => absensiApi.create(payload));
-        if (!queued && result?.id) set((s) => ({ absensiRecords: s.absensiRecords.map((a) => a.id === id ? { ...a, id: result.id } : a) }));
-        if (queued) console.log('[Absensi] Queued offline');
-      } catch (e) { console.error('[Absensi] API error:', e); }
-    })();
+    const payload = {
+      tipe: r.tipe, foto_url: r.fotoUri || null,
+      latitude: r.latitude, longitude: r.longitude, alamat: r.alamat,
+      pos_jaga: r.posJaga, status: r.status, dalam_radius: r.dalamRadius,
+      idempotency_key, // [3-2]
+    };
+    let outcome: SubmitResult;
+    try {
+      const { queued, result } = await executeOrQueue('absensi_create', payload, () => absensiApi.create(payload));
+      if (!queued && result?.id) {
+        set((s) => ({ absensiRecords: s.absensiRecords.map((a) => a.id === id ? { ...a, id: result.id } : a) }));
+        outcome = { status: 'success', id: result.id, data: result };
+      } else if (queued) {
+        outcome = { status: 'queued', id };
+      } else {
+        outcome = { status: 'success', id, data: result };
+      }
+    } catch (e: any) {
+      // [3-1] Penolakan server (non-jaringan) → rollback optimistik agar tak ada record hantu.
+      set((s) => ({ absensiRecords: s.absensiRecords.filter((a) => a.id !== id) }));
+      outcome = { status: 'error', error: e?.message || 'Gagal menyimpan absensi' };
+    }
 
-    const statusLabel = r.status === 'terlambat' ? ' (Terlambat!)' : '';
-    get().addNotifikasi({
-      tipe: r.status === 'terlambat' ? 'warning' : 'success',
-      judul: `Absensi ${r.tipe === 'masuk' ? 'Masuk' : 'Keluar'}${statusLabel}`,
-      pesan: `${r.nama} absensi ${r.tipe} di ${r.posJaga} pukul ${r.waktu}`,
-      waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null,
-    });
-    return id;
+    if (outcome.status !== 'error') {
+      const statusLabel = r.status === 'terlambat' ? ' (Terlambat!)' : '';
+      get().addNotifikasi({
+        tipe: r.status === 'terlambat' ? 'warning' : 'success',
+        judul: `Absensi ${r.tipe === 'masuk' ? 'Masuk' : 'Keluar'}${statusLabel}`,
+        pesan: `${r.nama} absensi ${r.tipe} di ${r.posJaga} pukul ${r.waktu}`,
+        waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null,
+      });
+    }
+    return outcome;
   },
   getAbsensiByUser: (userId) => get().absensiRecords.filter((r) => r.userId === userId),
   todayAbsensi: (userId) => {
@@ -645,8 +671,9 @@ export const useDataStore = create<DataStore>((set, get) => ({
     set({ activePatrol: { ...ap, checkpoints: updated, currentIndex: nextUnscanned === -1 ? updated.length : nextUnscanned } });
 
     if (ap.patrolDbId) {
-      const scanPayload = { patroli_id: ap.patrolDbId, checkpoint_id: checkpointId, foto_url: fotoUrl || null };
-      executeOrQueue('patrol_scan', scanPayload, () => patroliApi.scan(ap.patrolDbId!, { checkpoint_id: checkpointId, foto_url: fotoUrl || null })).catch(console.error);
+      const idempotency_key = genIdemKey(); // [3-2] stabil lintas retry (online & antrian)
+      const scanPayload = { patroli_id: ap.patrolDbId, checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key };
+      executeOrQueue('patrol_scan', scanPayload, () => patroliApi.scan(ap.patrolDbId!, { checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key })).catch(console.error);
     }
     return true;
   },
@@ -666,15 +693,27 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== LAPORAN HARIAN ====================
   laporanHarian: [],
-  addLaporanHarian: (l) => {
+  addLaporanHarian: async (l) => {
     const id = genId('LH');
+    const idempotency_key = genIdemKey();
     set((s) => ({ laporanHarian: [{ ...l, id }, ...s.laporanHarian] }));
-    (async () => {
-      const payload = { shift: l.shift, pos_jaga: l.posJaga, kondisi: l.kondisi, aktivitas: l.aktivitas, temuan: l.temuan, foto_urls: JSON.stringify(l.fotos), status: 'pending' };
-      try { await executeOrQueue('laporan_harian_create', payload, () => laporanApi.harianCreate(payload)); } catch (e) { console.error('[LH] API error:', e); }
-    })();
-    get().addNotifikasi({ tipe: 'info', judul: 'Laporan Harian Baru', pesan: `${l.nama} mengirim laporan harian (${l.kondisi})`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan'], targetUserId: null });
-    return id;
+    const payload = { shift: l.shift, pos_jaga: l.posJaga, kondisi: l.kondisi, aktivitas: l.aktivitas, temuan: l.temuan, foto_urls: JSON.stringify(l.fotos), status: 'pending', idempotency_key };
+    let outcome: SubmitResult;
+    try {
+      const { queued, result } = await executeOrQueue('laporan_harian_create', payload, () => laporanApi.harianCreate(payload));
+      if (!queued && result?.id) {
+        set((s) => ({ laporanHarian: s.laporanHarian.map((x) => x.id === id ? { ...x, id: result.id } : x) }));
+        outcome = { status: 'success', id: result.id, data: result };
+      } else if (queued) { outcome = { status: 'queued', id }; }
+      else { outcome = { status: 'success', id, data: result }; }
+    } catch (e: any) {
+      set((s) => ({ laporanHarian: s.laporanHarian.filter((x) => x.id !== id) }));
+      outcome = { status: 'error', error: e?.message || 'Gagal mengirim laporan harian' };
+    }
+    if (outcome.status !== 'error') {
+      get().addNotifikasi({ tipe: 'info', judul: 'Laporan Harian Baru', pesan: `${l.nama} mengirim laporan harian (${l.kondisi})`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan'], targetUserId: null });
+    }
+    return outcome;
   },
   updateLaporanHarianStatus: (id, status, catatan) => {
     const laporan = get().laporanHarian.find((l) => l.id === id);
@@ -688,15 +727,27 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== LAPORAN KEJADIAN ====================
   laporanKejadian: [],
-  addLaporanKejadian: (l) => {
+  addLaporanKejadian: async (l) => {
     const id = genId('LK');
+    const idempotency_key = genIdemKey();
     set((s) => ({ laporanKejadian: [{ ...l, id }, ...s.laporanKejadian] }));
-    (async () => {
-      const payload = { jenis: l.jenis, prioritas: l.prioritas, lokasi_text: l.lokasi, latitude: l.latitude, longitude: l.longitude, kronologi: l.kronologi, foto_urls: JSON.stringify(l.buktiMedia), status: 'pending' };
-      try { await executeOrQueue('laporan_kejadian_create', payload, () => laporanApi.kejadianCreate(payload)); } catch (e) { console.error('[LK] API error:', e); }
-    })();
-    get().addNotifikasi({ tipe: 'danger', judul: 'Insiden Baru!', pesan: `${l.nama} melaporkan ${l.jenis} (Prioritas: ${l.prioritas})`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null });
-    return id;
+    const payload = { jenis: l.jenis, prioritas: l.prioritas, lokasi_text: l.lokasi, latitude: l.latitude, longitude: l.longitude, kronologi: l.kronologi, foto_urls: JSON.stringify(l.buktiMedia), status: 'pending', idempotency_key };
+    let outcome: SubmitResult;
+    try {
+      const { queued, result } = await executeOrQueue('laporan_kejadian_create', payload, () => laporanApi.kejadianCreate(payload));
+      if (!queued && result?.id) {
+        set((s) => ({ laporanKejadian: s.laporanKejadian.map((x) => x.id === id ? { ...x, id: result.id } : x) }));
+        outcome = { status: 'success', id: result.id, data: result };
+      } else if (queued) { outcome = { status: 'queued', id }; }
+      else { outcome = { status: 'success', id, data: result }; }
+    } catch (e: any) {
+      set((s) => ({ laporanKejadian: s.laporanKejadian.filter((x) => x.id !== id) }));
+      outcome = { status: 'error', error: e?.message || 'Gagal mengirim laporan kejadian' };
+    }
+    if (outcome.status !== 'error') {
+      get().addNotifikasi({ tipe: 'danger', judul: 'Insiden Baru!', pesan: `${l.nama} melaporkan ${l.jenis} (Prioritas: ${l.prioritas})`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null });
+    }
+    return outcome;
   },
   updateLaporanKejadianStatus: (id, status, catatan) => {
     const laporan = get().laporanKejadian.find((l) => l.id === id);
@@ -710,18 +761,38 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== SERAH TERIMA ====================
   serahTerimaRecords: [],
-  addSerahTerima: (s) => {
+  addSerahTerima: async (s, signature) => {
     const id = genId('ST');
+    const idempotency_key = genIdemKey();
     set((st) => ({ serahTerimaRecords: [{ ...s, id }, ...st.serahTerimaRecords] }));
-    dataApi.serahTerima.create({ kondisi_area: s.kondisiArea, inventaris: s.inventaris, catatan: s.catatan }).catch(console.error);
-    get().addNotifikasi({ tipe: 'info', judul: 'Serah Terima', pesan: `${s.nama} mengirim laporan serah terima shift`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan'], targetUserId: null });
+    const payload: any = { kondisi_area: s.kondisiArea, inventaris: s.inventaris, catatan: s.catatan, idempotency_key };
+    if (signature) payload.tanda_tangan = signature; // [3-3] alirkan tanda tangan ke backend
+    let outcome: SubmitResult;
+    try {
+      const { queued, result } = await executeOrQueue('serah_terima_create', payload, () => dataApi.serahTerima.create(payload));
+      if (!queued && result?.id) {
+        set((st) => ({ serahTerimaRecords: st.serahTerimaRecords.map((x) => x.id === id ? { ...x, id: result.id } : x) }));
+        outcome = { status: 'success', id: result.id, data: result };
+      } else if (queued) { outcome = { status: 'queued', id }; }
+      else { outcome = { status: 'success', id, data: result }; }
+    } catch (e: any) {
+      set((st) => ({ serahTerimaRecords: st.serahTerimaRecords.filter((x) => x.id !== id) }));
+      outcome = { status: 'error', error: e?.message || 'Gagal mengirim serah terima' };
+    }
+    if (outcome.status !== 'error') {
+      get().addNotifikasi({ tipe: 'info', judul: 'Serah Terima', pesan: `${s.nama} mengirim laporan serah terima shift`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan'], targetUserId: null });
+    }
+    return outcome;
   },
 
   // ==================== NOTIFIKASI ====================
   notifikasi: [],
   addNotifikasi: (n) => {
     const id = genId('N');
-    set((s) => ({ notifikasi: [{ ...n, id }, ...s.notifikasi] }));
+    // [3-9] Simpan timestamp ISO yang konsisten (bukan literal 'Baru saja').
+    // Tampilan relatif ("Baru saja", "5 menit lalu") dihitung saat RENDER.
+    const notif = { ...n, id, waktu: new Date().toISOString() };
+    set((s) => ({ notifikasi: [notif, ...s.notifikasi] }));
     dataApi.notifikasi.create({ tipe: n.tipe, judul: n.judul, pesan: n.pesan, target_role: n.targetRole, target_user_id: n.targetUserId || null }).catch(() => {});
   },
   markRead: (id) => {

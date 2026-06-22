@@ -56,6 +56,20 @@ class AbsensiRepository {
   }
 
   async create(data) {
+    // [3-2] Idempotency: bila klien mengirim idempotency_key (retry antrian
+    // offline), dedup via ON CONFLICT. Bila konflik (sudah pernah masuk),
+    // ambil & kembalikan row yang ada → klien tak mendapat duplikat/erro.
+    if (data.idempotency_key) {
+      const row = await queryOne(
+        `INSERT INTO absensi (user_id, tipe, foto_url, latitude, longitude, alamat, pos_jaga, status, dalam_radius, waktu, lokasi_id, idempotency_key)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+         ON CONFLICT (idempotency_key) WHERE idempotency_key IS NOT NULL DO NOTHING RETURNING *`,
+        [data.user_id, data.tipe, data.foto_url, data.latitude, data.longitude,
+         data.alamat, data.pos_jaga, data.status || 'hadir', data.dalam_radius, data.waktu || null, data.lokasi_id || null, data.idempotency_key]
+      );
+      if (row) return row;
+      return queryOne('SELECT * FROM absensi WHERE idempotency_key = $1', [data.idempotency_key]);
+    }
     return queryOne(
       `INSERT INTO absensi (user_id, tipe, foto_url, latitude, longitude, alamat, pos_jaga, status, dalam_radius, waktu, lokasi_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING *`,
