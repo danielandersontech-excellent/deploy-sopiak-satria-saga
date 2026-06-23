@@ -33,6 +33,7 @@ export default function PanicButtonScreen({ navigation }: any) {
   }, [team, myLokasi]);
 
   const [phase, setPhase] = useState<'confirm' | 'activating' | 'active'>(panicActive ? 'active' : 'confirm');
+  const [panicQueued, setPanicQueued] = useState<boolean | null>(null); // [4-1] true=ter-antri offline
   const [holdProgress, setHoldProgress] = useState(0);
   const [timer, setTimer] = useState(0);
   const holdRef = useRef<any>(null);
@@ -69,7 +70,11 @@ export default function PanicButtonScreen({ navigation }: any) {
         clearInterval(holdRef.current);
         Vibration.vibrate(500);
         setPhase('activating');
-        setTimeout(() => { activatePanic(); setPhase('active'); setTimer(0); }, 2000);
+        setTimeout(async () => {
+          try { const r = await activatePanic(); setPanicQueued(r.queued); }
+          catch { setPanicQueued(true); }
+          setPhase('active'); setTimer(0);
+        }, 2000);
       }
     }, 100);
   };
@@ -113,9 +118,11 @@ export default function PanicButtonScreen({ navigation }: any) {
         </View>
         <View style={styles.activeContent}>
           <View style={styles.activeCard}>
-            <Ionicons name="shield-checkmark" size={32} color={Colors.primary} />
-            <Text style={styles.activeCardTitle}>Bantuan Sedang Dikirim</Text>
-            <Text style={styles.activeCardText}>Komandan sudah dihubungi dan mengirim bantuan ke lokasi Anda</Text>
+            <Ionicons name={panicQueued ? 'cloud-offline' : 'shield-checkmark'} size={32} color={panicQueued ? Colors.warning : Colors.primary} />
+            <Text style={styles.activeCardTitle}>{panicQueued ? 'Sinyal Lemah — Menunggu Koneksi' : 'Bantuan Sedang Dikirim'}</Text>
+            <Text style={styles.activeCardText}>{panicQueued
+              ? 'Alert darurat & lokasi Anda TERSIMPAN dan akan otomatis dikirim ke Komandan begitu koneksi tersedia. Bila memungkinkan, telepon kontak darurat di bawah sekarang.'
+              : 'Komandan sudah dihubungi dan mengirim bantuan ke lokasi Anda'}</Text>
           </View>
           <View style={styles.activeCard}>
             <Ionicons name="location" size={32} color={Colors.success} />

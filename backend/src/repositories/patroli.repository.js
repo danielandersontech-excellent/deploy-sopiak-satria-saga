@@ -47,11 +47,29 @@ class PatroliRepository {
     return patrol;
   }
 
-  async start(userId, routeId, routeName) {
+  async start(userId, routeId, routeName, clientPatrolId) {
+    // [4-2] Idempotent pada client_patrol_id → start yang di-replay dari antrian
+    // offline tidak membuat patroli ganda; mengembalikan patroli yang sama.
+    if (clientPatrolId) {
+      const row = await queryOne(
+        `INSERT INTO patroli (user_id, route_id, route_name, status, client_patrol_id)
+         VALUES ($1,$2,$3,'active',$4)
+         ON CONFLICT (client_patrol_id) WHERE client_patrol_id IS NOT NULL DO NOTHING RETURNING *`,
+        [userId, routeId || null, routeName || null, clientPatrolId]
+      );
+      if (row) return row;
+      return queryOne('SELECT * FROM patroli WHERE client_patrol_id = $1', [clientPatrolId]);
+    }
     return queryOne(
       `INSERT INTO patroli (user_id, route_id, route_name, status) VALUES ($1,$2,$3,'active') RETURNING *`,
       [userId, routeId || null, routeName || null]
     );
+  }
+
+  // [4-2] Menautkan scan/end yang di-antri offline ke patroli yang benar
+  // setelah start tersinkron (resolusi referensi lokal → PK server).
+  async findIdByClientPatrolId(clientPatrolId) {
+    return queryOne('SELECT id, user_id FROM patroli WHERE client_patrol_id = $1', [clientPatrolId]);
   }
 
   async addScan(patroliId, checkpointId, fotoUrl, idempotencyKey) {

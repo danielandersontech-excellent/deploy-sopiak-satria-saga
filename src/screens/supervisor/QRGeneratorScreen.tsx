@@ -119,7 +119,6 @@ function generateQRPrintHTML(checkpoints: any[]) {
       const nama = escapeHtml(cp.nama || '-');
       const area = escapeHtml(cp.area || '-');
       const lokasi = escapeHtml(cp.lokasi || '-');
-      const qrCode = escapeHtml(cp.qrCode || '');
 
       return `
       <div class="qr-card">
@@ -127,13 +126,12 @@ function generateQRPrintHTML(checkpoints: any[]) {
           <img src="${qrUrl}" alt="QR" width="180" height="180" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';" />
           <div class="qr-fallback" style="display:none;">
             <div style="font-size:48px;color:#2980b9;">&#9633;</div>
-            <div style="font-size:10px;color:#666;">QR: ${qrCode}</div>
+            <div style="font-size:10px;color:#666;">QR tidak dapat dimuat</div>
           </div>
         </div>
         <div class="qr-info">
           <div class="qr-name">${nama}</div>
           <div class="qr-area">${area} &bull; ${lokasi}</div>
-          <div class="qr-code">${qrCode}</div>
         </div>
       </div>
     `;
@@ -151,7 +149,6 @@ function generateQRPrintHTML(checkpoints: any[]) {
     .qr-fallback { align-items:center; justify-content:center; flex-direction:column; }
     .qr-name { font-size:12px; font-weight:700; color:#2c3e50; }
     .qr-area { font-size:10px; color:#888; margin-top:2px; }
-    .qr-code { font-size:9px; color:#2980b9; font-weight:600; margin-top:4px; font-family:monospace; }
     .footer { margin-top:20px; text-align:center; font-size:9px; color:#aaa; border-top:1px solid #ddd; padding-top:8px; }
   </style></head><body>
     <div class="header">
@@ -169,7 +166,6 @@ function generateSingleQRHTML(cp: any) {
   const nama = escapeHtml(cp.nama || '-');
   const area = escapeHtml(cp.area || '-');
   const lokasi = escapeHtml(cp.lokasi || '-');
-  const qrCode = escapeHtml(cp.qrCode || '');
 
   return `<!DOCTYPE html><html><head><meta charset="utf-8"><style>
     body { font-family: 'Helvetica Neue', sans-serif; display:flex; align-items:center; justify-content:center; min-height:100vh; }
@@ -177,14 +173,12 @@ function generateSingleQRHTML(cp: any) {
     .card h2 { color:#2980b9; font-size:16px; margin-bottom:4px; }
     .card .area { color:#888; font-size:12px; margin-bottom:16px; }
     .card img { margin:0 auto; display:block; }
-    .card .code { font-family:monospace; font-size:14px; color:#2980b9; margin-top:12px; font-weight:700; letter-spacing:1px; }
     .card .footer { font-size:9px; color:#aaa; margin-top:12px; }
   </style></head><body>
     <div class="card">
       <h2>${nama}</h2>
       <div class="area">${area} &bull; ${lokasi}</div>
       <img src="${qrUrl}" alt="QR" width="280" height="280" />
-      <div class="code">${qrCode}</div>
       <div class="footer">PT Sopiak Satria Saga - Scan saat patroli</div>
     </div>
   </body></html>`;

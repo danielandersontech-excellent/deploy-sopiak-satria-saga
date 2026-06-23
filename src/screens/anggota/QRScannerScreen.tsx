@@ -107,16 +107,9 @@ export default function QRScannerScreen({ navigation, route }: any) {
     if (cp) {
       setHasScanned(true);
       onMatched(cp);
-    } else if (checkpointId) {
-      // If we have a target checkpoint, accept any scan as a match for that checkpoint
-      const target = checkpoints.find((c) => c.id === checkpointId);
-      if (target) {
-        setHasScanned(true);
-        onMatched(target);
-      } else {
-        showUnrecognizedAlert(data);
-      }
     } else {
+      // [4-3] Tidak ada lagi fallback "terima scan apa pun": QR yang tidak cocok
+      // checkpoint manapun SELALU ditolak — verifikasi kehadiran fisik dijaga.
       showUnrecognizedAlert(data);
     }
   }, [hasScanned, phase, checkpoints, checkpointId, onMatched]);
@@ -304,22 +297,10 @@ export default function QRScannerScreen({ navigation, route }: any) {
               <Text style={s.actLabel}>Flash</Text>
             </TouchableOpacity>
 
-            {/* Main scan button - simulate scan for target checkpoint */}
-            <TouchableOpacity
-              style={s.mainBtn}
-              onPress={() => {
-                if (hasScanned) return;
-                const target = checkpoints.find((c) => c.id === checkpointId);
-                if (target) {
-                  setHasScanned(true);
-                  onMatched(target);
-                }
-              }}
-            >
-              <View style={s.mainBtnInner}>
-                <Ionicons name="scan" size={30} color="#fff" />
-              </View>
-            </TouchableOpacity>
+            {/* [4-3] Tombol "simulate scan" DIHAPUS: sebelumnya menandai checkpoint
+                target tanpa scan QR apa pun (bypass verifikasi kehadiran fisik).
+                Pemindaian sah dilakukan otomatis oleh kamera (handleBarcodeScanned);
+                fallback resmi adalah Input Manual yang tetap wajib cocok kode. */}
 
             {/* Manual input */}
             <TouchableOpacity style={s.actBtn} onPress={() => setShowManual(true)}>

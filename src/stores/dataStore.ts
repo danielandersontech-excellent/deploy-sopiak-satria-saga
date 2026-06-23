@@ -14,7 +14,7 @@
 import { create } from 'zustand';
 import { useAuthStore } from './authStore';
 import { api, usersApi, absensiApi, patroliApi, laporanApi, dataApi } from '../lib/apiClient';
-import { executeOrQueue, isOnline } from '../services/offlineSync';
+import { executeOrQueue, isOnline, addToQueue } from '../services/offlineSync';
 import {
   cacheAllData, getCachedUsers, getCachedAbsensiToday, getCachedCheckpoints,
   getCachedRoutes, getCachedLaporanHarian, getCachedLaporanKejadian,
@@ -37,7 +37,7 @@ export interface AbsensiRecord {
   id: string; userId: string; nama: string; nrp: string;
   tipe: 'masuk' | 'keluar'; waktu: string; tanggal: string; fotoUri: string;
   latitude: number; longitude: number; alamat: string; posJaga: string;
-  status: 'hadir' | 'terlambat' | 'tidak_hadir' | 'libur'; dalamRadius: boolean;
+  status: 'hadir' | 'terlambat' | 'tidak_hadir' | 'libur'; dalamRadius: boolean | null;
   lokasiId?: string | null;
 }
 
@@ -53,7 +53,7 @@ export interface PatrolRouteData {
 }
 
 export interface ActivePatrol {
-  routeId: string; routeName: string; startTime: number; patrolDbId?: string;
+  routeId: string; routeName: string; startTime: number; patrolDbId?: string; clientPatrolId?: string;
   checkpoints: { id: string; nama: string; scanned: boolean; scanTime?: string }[];
   currentIndex: number; isActive: boolean;
 }
@@ -238,7 +238,7 @@ interface DataStore {
 
   panicActive: boolean;
   panicTime: number;
-  activatePanic: () => void;
+  activatePanic: () => Promise<{ queued: boolean; hasLocation: boolean }>;
   deactivatePanic: () => void;
 }
 
@@ -311,7 +311,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
         id: a.id, userId: a.user_id, nama: a.nama || '-', nrp: a.nrp || '-', tipe: a.tipe,
         waktu: a.waktu ? fmtTime(a.waktu) : fmtTime(a.created_at), tanggal: fmtDate(a.created_at),
         fotoUri: a.foto_url || '', latitude: a.latitude, longitude: a.longitude,
-        alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: a.dalam_radius ?? true, lokasiId: a.lokasi_id || null,
+        alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: a.dalam_radius ?? null, lokasiId: a.lokasi_id || null,
       }));
 
       // Map checkpoints
@@ -452,7 +452,7 @@ export const useDataStore = create<DataStore>((set, get) => ({
             id: a.id, userId: a.user_id, nama: a.nama || '-', nrp: a.nrp || '-', tipe: a.tipe,
             waktu: a.waktu ? fmtTime(a.waktu) : fmtTime(a.created_at), tanggal: fmtDate(a.created_at),
             fotoUri: a.foto_url || '', latitude: a.latitude, longitude: a.longitude,
-            alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: !!a.dalam_radius, lokasiId: a.lokasi_id || null,
+            alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: a.dalam_radius ?? null, lokasiId: a.lokasi_id || null,
           }));
 
           const checkpoints: CheckpointData[] = cachedCP.map((c: any) => ({
@@ -648,16 +648,24 @@ export const useDataStore = create<DataStore>((set, get) => ({
       const cp = get().checkpoints.find((c) => c.id === cid);
       return { id: cid, nama: cp?.nama || cid, scanned: false };
     });
-    set({ activePatrol: { routeId, routeName: route.nama, startTime: Date.now(), checkpoints: cps, currentIndex: 0, isActive: true } });
+    // [4-2] Referensi lokal stabil → backend dapat menautkan scan/end ke patroli
+    // ini setelah start tersinkron, walau start dimulai OFFLINE.
+    const clientPatrolId = genIdemKey();
+    set({ activePatrol: { routeId, routeName: route.nama, startTime: Date.now(), checkpoints: cps, currentIndex: 0, isActive: true, clientPatrolId } });
 
     get().addNotifikasi({ tipe: 'info', judul: 'Patroli Dimulai', pesan: `Patroli rute "${route.nama}" sedang berlangsung (${cps.length} checkpoint)`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan'], targetUserId: null });
 
-    (async () => {
-      try {
-        const data = await patroliApi.start({ route_id: routeId, route_name: route.nama });
-        if (data?.id) set((s) => s.activePatrol ? { activePatrol: { ...s.activePatrol, patrolDbId: data.id } } : {});
-      } catch (e) { console.error('[Patroli] Start error:', e); }
-    })();
+    // Start RESILIENT: online → langsung & simpan patrolDbId; offline → antri
+    // (prioritas patrol_start < patrol_scan, jadi start tersinkron lebih dulu).
+    const startPayload = { route_id: routeId, route_name: route.nama, client_patrol_id: clientPatrolId };
+    executeOrQueue('patrol_start', startPayload, () => patroliApi.start(startPayload))
+      .then((res) => {
+        if (res && !res.queued && res.result?.id) {
+          set((s) => (s.activePatrol && s.activePatrol.clientPatrolId === clientPatrolId)
+            ? { activePatrol: { ...s.activePatrol, patrolDbId: res.result.id } } : {});
+        }
+      })
+      .catch((e) => console.error('[Patroli] Start error:', e));
   },
   scanCheckpoint: (checkpointId, fotoUrl) => {
     const ap = get().activePatrol;
@@ -670,10 +678,16 @@ export const useDataStore = create<DataStore>((set, get) => ({
     const nextUnscanned = updated.findIndex((c) => !c.scanned);
     set({ activePatrol: { ...ap, checkpoints: updated, currentIndex: nextUnscanned === -1 ? updated.length : nextUnscanned } });
 
+    // [4-2] Scan TIDAK lagi bergantung mutlak pada patrolDbId. Bawa client_patrol_id
+    // + idempotency_key. Jika start belum sinkron (offline/race) → antri langsung
+    // (backend menautkan via client_patrol_id setelah start sinkron). Idempotency
+    // mencegah duplikasi saat replay.
+    const idempotency_key = genIdemKey();
+    const scanData: any = { patroli_id: ap.patrolDbId || null, client_patrol_id: ap.clientPatrolId, checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key };
     if (ap.patrolDbId) {
-      const idempotency_key = genIdemKey(); // [3-2] stabil lintas retry (online & antrian)
-      const scanPayload = { patroli_id: ap.patrolDbId, checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key };
-      executeOrQueue('patrol_scan', scanPayload, () => patroliApi.scan(ap.patrolDbId!, { checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key })).catch(console.error);
+      executeOrQueue('patrol_scan', scanData, () => patroliApi.scan(ap.patrolDbId!, scanData)).catch(console.error);
+    } else {
+      addToQueue('patrol_scan', scanData).catch(console.error);
     }
     return true;
   },
@@ -685,9 +699,14 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
     get().addNotifikasi({ tipe: scannedCount === totalCount ? 'success' : 'warning', judul: 'Patroli Selesai', pesan: `Rute "${ap?.routeName || '-'}" selesai. ${scannedCount}/${totalCount} checkpoint dipindai.`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null });
 
-    if (ap?.patrolDbId) {
-      const endPayload = { patroli_id: ap.patrolDbId, checkpoint_scanned: scannedCount, checkpoint_total: totalCount };
-      executeOrQueue('patrol_end', endPayload, () => patroliApi.end(ap.patrolDbId!, { checkpoint_scanned: scannedCount, checkpoint_total: totalCount })).catch(console.error);
+    // [4-2] End juga tidak bergantung mutlak pada patrolDbId (offline patrol).
+    if (ap) {
+      const endData: any = { patroli_id: ap.patrolDbId || null, client_patrol_id: ap.clientPatrolId, checkpoint_scanned: scannedCount, checkpoint_total: totalCount };
+      if (ap.patrolDbId) {
+        executeOrQueue('patrol_end', endData, () => patroliApi.end(ap.patrolDbId!, endData)).catch(console.error);
+      } else {
+        addToQueue('patrol_end', endData).catch(console.error);
+      }
     }
   },
 
@@ -844,24 +863,34 @@ export const useDataStore = create<DataStore>((set, get) => ({
   // ==================== PANIC ====================
   panicActive: false,
   panicTime: 0,
-  activatePanic: () => {
+  activatePanic: async () => {
     set({ panicActive: true, panicTime: Date.now() });
-    (async () => {
-      try {
-        let lat: number | null = null, lng: number | null = null, alamat: string | null = null;
-        try {
-          const Location = require('expo-location');
-          const { status } = await Location.requestForegroundPermissionsAsync();
-          if (status === 'granted') {
-            const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
-            lat = pos.coords.latitude; lng = pos.coords.longitude;
-            try { const [geo] = await Location.reverseGeocodeAsync({ latitude: lat!, longitude: lng! }); if (geo) alamat = [geo.street, geo.district, geo.city].filter(Boolean).join(', '); } catch {}
-          }
-        } catch {}
-        await dataApi.panic.create({ latitude: lat, longitude: lng, alamat });
-      } catch (e) { console.error('[Panic] API error:', e); }
-    })();
+    const idempotency_key = genIdemKey(); // [3-2] replay aman (tak menggandakan alert)
+    let lat: number | null = null, lng: number | null = null, alamat: string | null = null;
+    try {
+      const Location = require('expo-location');
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status === 'granted') {
+        const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High });
+        lat = pos.coords.latitude; lng = pos.coords.longitude;
+        try { const [geo] = await Location.reverseGeocodeAsync({ latitude: lat!, longitude: lng! }); if (geo) alamat = [geo.street, geo.district, geo.city].filter(Boolean).join(', '); } catch {}
+      }
+    } catch {}
+
+    const payload = { latitude: lat, longitude: lng, alamat, idempotency_key };
+    // [4-1] Panic WAJIB offline-capable: masuk antrian prioritas-0 bila offline,
+    // dan TETAP di-antri walau server menolak (non-jaringan) — alert darurat
+    // tidak boleh hilang senyap. GPS ikut terkirim. Idempotency cegah duplikat.
+    let queued = false;
+    try {
+      const res = await executeOrQueue('panic_create', payload, () => dataApi.panic.create(payload));
+      queued = !!res.queued;
+    } catch (e) {
+      try { await addToQueue('panic_create', payload); queued = true; } catch (e2) { console.error('[Panic] enqueue gagal:', e2); }
+    }
+
     get().addNotifikasi({ tipe: 'danger', judul: '🚨 PANIC ALERT!', pesan: 'Tombol darurat diaktifkan! Segera kirim bantuan!', waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null });
+    return { queued, hasLocation: lat != null };
   },
   deactivatePanic: () => {
     set({ panicActive: false, panicTime: 0 });

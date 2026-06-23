@@ -29,6 +29,29 @@ import {
   type GeofenceResult,
 } from '../../services/locationService';
 
+// [4-6] Menit wall-clock di Asia/Jakarta. WIB = UTC+7 tetap (tanpa DST),
+// dihitung dari epoch UTC → tidak bergantung zona perangkat maupun Intl timeZone.
+function jakartaMinutes(d: Date): number {
+  const utcMin = d.getUTCHours() * 60 + d.getUTCMinutes();
+  return (utcMin + 7 * 60) % 1440;
+}
+// [4-6] Keterlambatan untuk absen "masuk", relatif jam mulai shift di WIB,
+// dengan dukungan shift yang melewati tengah malam (akhir <= mulai).
+function computeIsLate(tipe: string, shift: string | undefined, now: Date): boolean {
+  if (tipe !== 'masuk') return false;
+  const parts = (shift || '08:00-16:00').split('-');
+  const [sH, sM] = (parts[0] || '08:00').split(':').map((x) => parseInt(x, 10));
+  if (isNaN(sH) || isNaN(sM)) return false;
+  const startMin = sH * 60 + sM;
+  const endRaw = (parts[1] || '').split(':').map((x) => parseInt(x, 10));
+  const hasEnd = endRaw.length === 2 && !isNaN(endRaw[0]) && !isNaN(endRaw[1]);
+  const overnight = hasEnd && (endRaw[0] * 60 + endRaw[1]) <= startMin; // menyeberang tengah malam
+  let nowMin = jakartaMinutes(now);
+  if (overnight && nowMin < startMin) nowMin += 1440; // bagian setelah tengah malam
+  const GRACE = 5; // toleransi 5 menit (sama seperti sebelumnya)
+  return (nowMin - startMin) > GRACE;
+}
+
 export default function AbsensiScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t } = useI18n();
@@ -165,10 +188,13 @@ export default function AbsensiScreen({ navigation }: any) {
     }
 
     const now = new Date();
-    const shiftStart = user?.shift?.split('-')[0] || '08:00';
-    const [shiftH, shiftM] = shiftStart.split(':').map(Number);
-    const isLate = tipe === 'masuk' && (now.getHours() > shiftH || (now.getHours() === shiftH && now.getMinutes() > shiftM + 5));
-    const isInsideRadius = geofence ? geofence.isInside : true;
+    // [4-6] Keterlambatan dihitung pada zona waktu Asia/Jakarta (UTC+7 tetap,
+    // tanpa bergantung zona perangkat/Intl) & mendukung shift lintas tengah malam.
+    const isLate = computeIsLate(tipe, user?.shift, now);
+    // [4-5] Bila geofence/pos jaga TIDAK diketahui, JANGAN klaim "dalam radius":
+    // kirim null (tidak diketahui) agar tak otomatis dianggap patuh.
+    const isInsideRadius: boolean | null = geofence ? geofence.isInside : null;
+    const radiusUnknown = isInsideRadius === null;
 
     const res = await addAbsensi({
       userId: user?.id || 'T1', nama: user?.nama || 'User', nrp: user?.nrp || '000000', tipe, waktu: jam, tanggal: tanggalPendek, fotoUri: uploadedUrl,
@@ -191,10 +217,21 @@ export default function AbsensiScreen({ navigation }: any) {
         waktu: new Date().toISOString(), targetRole: ['komandan', 'supervisor'], targetUserId: null, dibaca: false,
       });
     }
+    // [4-5] Pos jaga tidak terdeteksi → beri tahu komandan secara jujur (status radius tidak diketahui).
+    if (radiusUnknown) {
+      useDataStore.getState().addNotifikasi({
+        tipe: 'warning', judul: 'Pos Jaga Tidak Terdeteksi',
+        pesan: `${user?.nama} absen ${tipe} tanpa verifikasi radius (pos jaga/geofence tidak terdeteksi).`,
+        waktu: new Date().toISOString(), targetRole: ['komandan', 'supervisor'], targetUserId: null, dibaca: false,
+      });
+    }
 
+    const radiusNote = radiusUnknown ? '\n\nCatatan: Pos jaga tidak terdeteksi — absensi dicatat tanpa verifikasi radius.' : '';
     if (res.status === 'queued') {
       // [3-1] Offline → tersimpan di antrian, dikirim otomatis saat online (tanpa duplikat berkat idempotency).
-      Alert.alert('Tersimpan', 'Tidak ada koneksi. Absensi tersimpan & akan dikirim otomatis saat online.', [{ text: 'OK', onPress: () => setSuccess(true) }]);
+      Alert.alert('Tersimpan', 'Tidak ada koneksi. Absensi tersimpan & akan dikirim otomatis saat online.' + radiusNote, [{ text: 'OK', onPress: () => setSuccess(true) }]);
+    } else if (radiusUnknown) {
+      Alert.alert('Absensi Tercatat', 'Absensi berhasil dikirim.' + radiusNote, [{ text: 'OK', onPress: () => setSuccess(true) }]);
     } else {
       setSuccess(true);
     }

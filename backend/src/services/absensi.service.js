@@ -52,7 +52,13 @@ class AbsensiService {
       alamat: data.alamat || null,
       pos_jaga: data.pos_jaga || null,
       status: data.status || 'hadir',
-      dalam_radius: data.dalam_radius !== 'false' && data.dalam_radius !== false,
+      // [4-5] Nilai "tidak diketahui" (geofence/pos tak terdeteksi) TIDAK lagi
+      // otomatis jadi true. Hanya boolean/string eksplisit yang dipetakan; selain
+      // itu → null (unknown). Klien lama selalu kirim boolean → tetap kompatibel.
+      dalam_radius:
+        (data.dalam_radius === false || data.dalam_radius === 'false') ? false :
+        (data.dalam_radius === true || data.dalam_radius === 'true') ? true :
+        null,
       waktu: data.waktu || null,
       lokasi_id: data.lokasi_id || user.lokasi_id || null,
       idempotency_key: data.idempotency_key || null, // [3-2]

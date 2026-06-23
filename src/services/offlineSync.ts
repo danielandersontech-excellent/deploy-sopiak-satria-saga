@@ -48,6 +48,7 @@ const PRIORITY: Record<string, number> = {
   panic_resolve: 1,
   absensi_create: 2,
   location_ping: 3,
+  patrol_start: 3,
   patrol_scan: 4,
   patrol_end: 5,
   laporan_kejadian_create: 6,
@@ -353,10 +354,11 @@ async function executeAction(action: { type: string; data: any }): Promise<void>
     case 'absensi_create': await absensiApi.create(data); break;
     case 'laporan_harian_create': await laporanApi.harianCreate(data); break;
     case 'laporan_kejadian_create': await laporanApi.kejadianCreate(data); break;
+    case 'patrol_start': await patroliApi.start(data); break;
     case 'patrol_scan':
-      await patroliApi.scan(data.patroli_id, { checkpoint_id: data.checkpoint_id, foto_url: data.foto_url, idempotency_key: data.idempotency_key }); break;
+      await patroliApi.scan(data.patroli_id || 'offline', { checkpoint_id: data.checkpoint_id, foto_url: data.foto_url, idempotency_key: data.idempotency_key, client_patrol_id: data.client_patrol_id }); break;
     case 'patrol_end':
-      await patroliApi.end(data.patroli_id, { checkpoint_scanned: data.checkpoint_scanned, checkpoint_total: data.checkpoint_total }); break;
+      await patroliApi.end(data.patroli_id || 'offline', { checkpoint_scanned: data.checkpoint_scanned, checkpoint_total: data.checkpoint_total, client_patrol_id: data.client_patrol_id }); break;
     case 'panic_create': await dataApi.panic.create(data); break;
     case 'panic_resolve': await dataApi.panic.resolve(data.id, data.status); break;
     case 'serah_terima_create': await dataApi.serahTerima.create(data); break;

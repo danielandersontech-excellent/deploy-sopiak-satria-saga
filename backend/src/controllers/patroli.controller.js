@@ -48,7 +48,7 @@ exports.scan = async (req, res) => {
       fotoUrl = getFileUrl(req.file.path);
     }
 
-    res.status(201).json(await patroliService.scan(req.user, req.params.id, req.body.checkpoint_id, fotoUrl, req.body.idempotency_key));
+    res.status(201).json(await patroliService.scan(req.user, req.params.id, req.body.checkpoint_id, fotoUrl, req.body.idempotency_key, req.body.client_patrol_id));
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
