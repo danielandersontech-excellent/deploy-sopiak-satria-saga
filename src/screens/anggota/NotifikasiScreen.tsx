@@ -130,20 +130,22 @@ export default function NotifikasiScreen({ navigation }: any) {
   return (
     <View style={[styles.container, { backgroundColor: theme.bg }]}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }, { backgroundColor: theme.bgCard, borderBottomColor: theme.border }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
-          <Ionicons name="arrow-back" size={24} color={theme.text} />
-        </TouchableOpacity>
+        <View style={styles.headerSide}>
+          <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}>
+            <Ionicons name="arrow-back" size={24} color={theme.text} />
+          </TouchableOpacity>
+        </View>
         <View style={styles.headerCenter}>
           <Text style={[styles.headerTitle, { color: theme.text }]}>Notifikasi</Text>
           <Text style={[styles.headerRole, { color: theme.textMuted }]}>{getRoleLabel()} • {unread} belum dibaca</Text>
         </View>
-        {unread > 0 ? (
-          <TouchableOpacity onPress={markAllRead}>
-            <Text style={[styles.readAll, { color: theme.primary }]}>Baca Semua</Text>
-          </TouchableOpacity>
-        ) : (
-          <View style={{ width: 70 }} />
-        )}
+        <View style={styles.headerSideEnd}>
+          {unread > 0 && (
+            <TouchableOpacity onPress={markAllRead}>
+              <Text style={[styles.readAll, { color: theme.primary }]} numberOfLines={1}>Baca Semua</Text>
+            </TouchableOpacity>
+          )}
+        </View>
       </View>
 
       {/* Filter Tabs */}
@@ -250,6 +252,8 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerCenter: { flex: 1, alignItems: 'center' },
+  headerSide: { width: 72, justifyContent: 'center' },
+  headerSideEnd: { width: 72, justifyContent: 'center', alignItems: 'flex-end' },
   headerTitle: { ...Typography.h3, color: Colors.textPrimary },
   headerRole: { ...Typography.caption, color: Colors.textMuted, marginTop: 1 },
   readAll: { ...Typography.smallBold, color: Colors.primary },

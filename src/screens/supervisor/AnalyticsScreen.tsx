@@ -106,7 +106,7 @@ function MiniBar({ label, value, max, color }: { label: string; value: number; m
   const pct = max > 0 ? Math.min((value / max) * 100, 100) : 0;
   return (
     <View style={st.barRow}>
-      <Text style={st.barLabel}>{label}</Text>
+      <Text style={st.barLabel} numberOfLines={1} ellipsizeMode="tail">{label}</Text>
       <View style={st.barBg}>
         <View style={[st.barFill, { width: `${pct}%`, backgroundColor: color }]} />
       </View>

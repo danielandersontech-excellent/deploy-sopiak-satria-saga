@@ -259,7 +259,7 @@ export default function SetupCheckpointScreen({ navigation }: any) {
         <Text style={[styles.headerTitle, { color: theme.text }]}>
           {lang === 'en' ? 'Setup Checkpoint' : 'Setup Checkpoint'}
         </Text>
-        <TouchableOpacity onPress={openAddModal}>
+        <TouchableOpacity onPress={openAddModal} style={styles.headerAction}>
           <Ionicons name="add-circle" size={28} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -557,6 +557,7 @@ const styles = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, flex: 1, textAlign: 'center' },
+  headerAction: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',

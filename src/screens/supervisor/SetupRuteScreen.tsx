@@ -184,7 +184,7 @@ export default function SetupRuteScreen({ navigation }: any) {
         <Text style={[st.headerTitle, { color: theme.text }]}>
           {lang === 'en' ? 'Setup Route' : 'Setup Rute'}
         </Text>
-        <TouchableOpacity onPress={openAddModal}>
+        <TouchableOpacity onPress={openAddModal} style={st.headerAction}>
           <Ionicons name="add-circle" size={28} color={Colors.primary} />
         </TouchableOpacity>
       </View>
@@ -464,6 +464,7 @@ const st = StyleSheet.create({
   },
   backBtn: { width: 40, height: 40, justifyContent: 'center' },
   headerTitle: { ...Typography.h3, flex: 1, textAlign: 'center' },
+  headerAction: { width: 40, height: 40, justifyContent: 'center', alignItems: 'flex-end' },
   searchRow: {
     flexDirection: 'row',
     alignItems: 'center',
