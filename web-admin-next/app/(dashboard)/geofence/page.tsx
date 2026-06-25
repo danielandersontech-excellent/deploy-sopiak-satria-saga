@@ -108,13 +108,13 @@ export default function GeofencePage() {
             <tbody>
               {izinList.map((iz) => (
                 <tr key={iz.id}>
-                  <td>
+                  <td className="cell-ellipsis" title={iz.user_nama}>
                     <strong>{iz.user_nama}</strong>
                   </td>
                   <td>
                     <code>{iz.nrp}</code>
                   </td>
-                  <td>{iz.alasan}</td>
+                  <td className="cell-ellipsis-lg" title={iz.alasan}>{iz.alasan}</td>
                   <td>{iz.durasi_menit ? `${iz.durasi_menit} mnt` : "-"}</td>
                   <td>{iz.batas_waktu ? fmtDateTime(iz.batas_waktu) : "-"}</td>
                   <td>

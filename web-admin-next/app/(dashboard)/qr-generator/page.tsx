@@ -126,9 +126,9 @@ export default function QRGeneratorPage() {
                       <span style={{ color: "var(--text-muted)", fontSize: 12 }}>-</span>
                     )}
                   </td>
-                  <td style={{ fontWeight: 600 }}>{cp.nama}</td>
-                  <td>{cp.area || "-"}</td>
-                  <td>{lokasi.find((l: any) => l.id === cp.lokasi_id)?.nama || "-"}</td>
+                  <td className="cell-ellipsis" style={{ fontWeight: 600 }} title={cp.nama}>{cp.nama}</td>
+                  <td className="cell-ellipsis-sm" title={cp.area || "-"}>{cp.area || "-"}</td>
+                  <td className="cell-ellipsis" title={lokasi.find((l: any) => l.id === cp.lokasi_id)?.nama || "-"}>{lokasi.find((l: any) => l.id === cp.lokasi_id)?.nama || "-"}</td>
                   <td><code style={{ fontSize: 11, color: "var(--primary)" }}>{cp.qr_code || cp.id}</code></td>
                   <td><span className={`badge badge-${isGen ? "success" : "default"}`}>{isGen ? "Ready" : "Pending"}</span></td>
                   <td>

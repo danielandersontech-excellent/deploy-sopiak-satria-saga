@@ -281,7 +281,7 @@ export default function LiveMapPage() {
             <tbody>
               {data.personnel.map((p: any) => (
                 <tr key={p.id}>
-                  <td>
+                  <td className="cell-ellipsis" title={p.nama}>
                     <strong>{p.nama}</strong>
                   </td>
                   <td>
@@ -293,7 +293,7 @@ export default function LiveMapPage() {
                       {p.status}
                     </span>
                   </td>
-                  <td>{p.lokasi_nama || "-"}</td>
+                  <td className="cell-ellipsis" title={p.lokasi_nama || "-"}>{p.lokasi_nama || "-"}</td>
                   <td>{p.jarak !== null ? `${p.jarak}m` : "-"}</td>
                   <td>{p.dalam_radius ? "✅" : "❌"}</td>
                   <td>{fmtDateTime(p.last_seen)}</td>

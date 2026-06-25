@@ -228,7 +228,7 @@ export default function PanicPage() {
                     className="avatar avatar-sm"
                     src={avatarUrl(p.user?.foto_url)}
                    alt="avatar" />
-                  <span>{p.user?.nama || "?"}</span>
+                  <span title={p.user?.nama || "?"}>{p.user?.nama || "?"}</span>
                 </td>
                 <td>
                   <code>{p.user?.nrp || "-"}</code>
@@ -249,7 +249,7 @@ export default function PanicPage() {
                 >
                   {p.pesan || "-"}
                 </td>
-                <td>{p.jenis_darurat || "umum"}</td>
+                <td className="cell-ellipsis-sm" title={p.jenis_darurat || "umum"}>{p.jenis_darurat || "umum"}</td>
                 <td
                   style={{
                     maxWidth: 120,

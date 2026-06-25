@@ -275,13 +275,13 @@ export default function ClientsPage() {
                     <td>
                       <code>{r.kode_klien}</code>
                     </td>
-                    <td>
+                    <td className="cell-ellipsis" title={r.nama_klien}>
                       <strong>{r.nama_klien}</strong>
                     </td>
-                    <td>{r.kontak_person || "-"}</td>
+                    <td className="cell-ellipsis-sm" title={r.kontak_person || "-"}>{r.kontak_person || "-"}</td>
                     <td>{r.nomor_telepon || "-"}</td>
-                    <td>{r.email || "-"}</td>
-                    <td>{r.jenis_jasa || "-"}</td>
+                    <td className="cell-ellipsis" title={r.email || "-"}>{r.email || "-"}</td>
+                    <td className="cell-ellipsis-sm" title={r.jenis_jasa || "-"}>{r.jenis_jasa || "-"}</td>
                     <td>
                       {r.tgl_mulai_kontrak
                         ? `${fmtDate(r.tgl_mulai_kontrak)} - ${fmtDate(r.tgl_habis_kontrak)}`

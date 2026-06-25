@@ -119,7 +119,7 @@ export default function LaporanHarianPage() {
                     className="avatar avatar-sm"
                     src={avatarUrl(r.users?.foto_url)}
                    alt="avatar" />
-                  <span>{r.users?.nama}</span>
+                  <span title={r.users?.nama}>{r.users?.nama}</span>
                 </td>
                 <td>{fmtDate(r.tanggal)}</td>
                 <td>

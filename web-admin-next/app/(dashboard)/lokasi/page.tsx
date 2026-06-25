@@ -191,7 +191,7 @@ export default function LokasiPage() {
                   const kl = klienUsers.find((k) => k.id == r.client_id);
                   return (
                     <tr key={r.id}>
-                      <td>
+                      <td className="cell-ellipsis" title={r.nama}>
                         <strong>{r.nama}</strong>
                       </td>
                       <td>
@@ -201,7 +201,7 @@ export default function LokasiPage() {
                           <span className="muted">-</span>
                         )}
                       </td>
-                      <td>{r.alamat}</td>
+                      <td className="cell-ellipsis-lg" title={r.alamat}>{r.alamat}</td>
                       <td style={{ fontFamily: "monospace", fontSize: 12 }}>
                         {r.latitude?.toFixed?.(4)}, {r.longitude?.toFixed?.(4)}
                       </td>

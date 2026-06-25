@@ -55,9 +55,9 @@ export default function SerahTerimaPage() {
                     className="avatar avatar-sm"
                     src={avatarUrl(r.user?.foto_url)}
                    alt="avatar" />
-                  <span>{r.user?.nama || r.dari_nama || "-"}</span>
+                  <span title={r.user?.nama || r.dari_nama || "-"}>{r.user?.nama || r.dari_nama || "-"}</span>
                 </td>
-                <td>{r.penerima?.nama || r.ke_nama || "-"}</td>
+                <td className="cell-ellipsis" title={r.penerima?.nama || r.ke_nama || "-"}>{r.penerima?.nama || r.ke_nama || "-"}</td>
                 <td>
                   <span
                     className={`badge badge-${statusColor(r.kondisi_area)}`}

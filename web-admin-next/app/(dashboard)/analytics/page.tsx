@@ -223,7 +223,7 @@ export default function AnalyticsPage() {
               {topPerformers.map((u: any, i) => (
                 <tr key={u.id}>
                   <td><span className={`badge badge-${i === 0 ? "warning" : i < 3 ? "info" : "default"}`}>#{i + 1}</span></td>
-                  <td className="user-cell"><img className="avatar avatar-sm" src={avatarUrl(u.foto_url)} alt="avatar" /><span>{u.nama}</span></td>
+                  <td className="user-cell"><img className="avatar avatar-sm" src={avatarUrl(u.foto_url)} alt="avatar" /><span title={u.nama}>{u.nama}</span></td>
                   <td><span className="badge badge-default">{u.role}</span></td>
                   <td>{u.shift || "-"}</td>
                   <td><span className="badge badge-success">{u.skor || 0}</span></td>

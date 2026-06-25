@@ -356,7 +356,7 @@ export default function PersonilPage() {
                       alt=""
                     />
                     <div>
-                      <div className="user-name">{u.nama}</div>
+                      <div className="user-name" title={u.nama}>{u.nama}</div>
                       <div className="user-sub">
                         Bergabung {fmtDate(u.tanggal_bergabung || u.created_at)}
                       </div>

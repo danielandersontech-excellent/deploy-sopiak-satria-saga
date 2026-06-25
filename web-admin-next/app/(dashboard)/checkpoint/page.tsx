@@ -173,11 +173,11 @@ export default function CheckpointPage() {
           <tbody>
             {pagedData.map((r) => (
               <tr key={r.id}>
-                <td>
+                <td className="cell-ellipsis" title={r.nama}>
                   <strong>{r.nama}</strong>
                 </td>
-                <td>{lokasiName(r.lokasi_id)}</td>
-                <td>{r.area || "-"}</td>
+                <td className="cell-ellipsis" title={lokasiName(r.lokasi_id)}>{lokasiName(r.lokasi_id)}</td>
+                <td className="cell-ellipsis-sm" title={r.area || "-"}>{r.area || "-"}</td>
                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>
                   {r.latitude?.toFixed?.(4)}, {r.longitude?.toFixed?.(4)}
                 </td>

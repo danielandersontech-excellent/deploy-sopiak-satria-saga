@@ -114,9 +114,9 @@ export default function LaporanKejadianPage() {
                         className="avatar avatar-sm"
                         src={avatarUrl(r.users?.foto_url)}
                        alt="avatar" />
-                      <span>{r.users?.nama}</span>
+                      <span title={r.users?.nama}>{r.users?.nama}</span>
                     </td>
-                    <td>
+                    <td className="cell-ellipsis-sm" title={r.jenis}>
                       <strong>{r.jenis}</strong>
                     </td>
                     <td>
@@ -124,7 +124,7 @@ export default function LaporanKejadianPage() {
                         {r.prioritas}
                       </span>
                     </td>
-                    <td>{r.lokasi_text || "-"}</td>
+                    <td className="cell-ellipsis" title={r.lokasi_text || "-"}>{r.lokasi_text || "-"}</td>
                     <td>{fmtDateTime(r.waktu_kejadian)}</td>
                     <td
                       style={{

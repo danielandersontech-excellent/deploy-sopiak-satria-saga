@@ -73,12 +73,12 @@ export default function PatroliPage() {
                     className="avatar avatar-sm"
                     src={avatarUrl(p.users?.foto_url)}
                    alt="avatar" />
-                  <span>{p.users?.nama || p.nama}</span>
+                  <span title={p.users?.nama || p.nama}>{p.users?.nama || p.nama}</span>
                 </td>
                 <td>
                   <code>{p.users?.nrp || "-"}</code>
                 </td>
-                <td>{p.route_name || "-"}</td>
+                <td className="cell-ellipsis" title={p.route_name || "-"}>{p.route_name || "-"}</td>
                 <td>{fmtDateTime(p.start_time)}</td>
                 <td>
                   {p.end_time ? (

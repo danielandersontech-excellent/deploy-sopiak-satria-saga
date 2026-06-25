@@ -567,6 +567,41 @@ tbody tr:last-child td {
   font-style: italic;
 }
 
+/* ===== Cell truncation (Fase V1 / V3-1) =====
+   Kolom TEKS PANJANG dipotong rapi dengan ellipsis agar tinggi baris seragam
+   & kolom tak melebar tak proporsional (mis. email/URL tanpa spasi). thead th
+   sudah `white-space:nowrap`; ini melengkapi sisi tbody.
+   OPT-IN: dipasang HANYA pada <td> teks panjang (Nama/Alamat/Email/Catatan/
+   Kronologi/dll). JANGAN pada kolom Aksi/Status/Badge/angka — agar deretan
+   tombol & badge tidak ikut terpotong. .section-card{overflow-x:auto} tetap
+   jadi jaring pengaman horizontal. Tetap berfungsi di mode terang & gelap
+   (murni layout teks, tak menyentuh warna). */
+.cell-ellipsis,
+.cell-ellipsis-sm,
+.cell-ellipsis-lg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  vertical-align: middle;
+}
+.cell-ellipsis    { max-width: 220px; }
+.cell-ellipsis-sm { max-width: 140px; }
+.cell-ellipsis-lg { max-width: 340px; }
+
+/* User-cell di tabel (avatar + nama): batasi & potong NAMA panjang tanpa
+   mengganggu avatar. min-width:0 agar anak flex boleh menyusut di bawah lebar
+   kontennya (syarat agar ellipsis bekerja di dalam flex). Hanya di tbody —
+   user-cell pada modal/kartu detail tidak terdampak. */
+tbody .user-cell { min-width: 0; }
+tbody .user-cell > * { min-width: 0; }
+tbody .user-cell .user-name,
+tbody .user-cell > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
 /* ============ BADGES ============ */
 .badge {
   display: inline-flex;

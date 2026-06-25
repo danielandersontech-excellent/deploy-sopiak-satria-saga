@@ -145,10 +145,10 @@ export default function RoutesPage() {
           <tbody>
             {filtered.map((r) => (
               <tr key={r.id}>
-                <td>
+                <td className="cell-ellipsis" title={r.nama}>
                   <strong>{r.nama}</strong>
                 </td>
-                <td>{lokasiName(r.lokasi_id)}</td>
+                <td className="cell-ellipsis" title={lokasiName(r.lokasi_id)}>{lokasiName(r.lokasi_id)}</td>
                 <td>{(r.checkpoint_ids || []).length} titik</td>
                 <td>{r.waktu_estimasi} mnt</td>
                 <td>{r.assigned_shift || "-"}</td>

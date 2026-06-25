@@ -74,7 +74,7 @@ export default function BroadcastPage() {
           <tbody>
             {pagedData.map((r) => (
               <tr key={r.id}>
-                <td>
+                <td className="cell-ellipsis" title={r.judul}>
                   <strong>{r.judul}</strong>
                 </td>
                 <td
@@ -87,13 +87,13 @@ export default function BroadcastPage() {
                 >
                   {r.pesan}
                 </td>
-                <td>{r.pengirim?.nama || r.pengirim_nama || "-"}</td>
+                <td className="cell-ellipsis-sm" title={r.pengirim?.nama || r.pengirim_nama || "-"}>{r.pengirim?.nama || r.pengirim_nama || "-"}</td>
                 <td>
                   <span className={`badge badge-${statusColor(r.prioritas)}`}>
                     {r.prioritas}
                   </span>
                 </td>
-                <td>{r.target}</td>
+                <td className="cell-ellipsis-sm" title={r.target}>{r.target}</td>
                 <td>{fmtDateTime(r.created_at)}</td>
               </tr>
             ))}

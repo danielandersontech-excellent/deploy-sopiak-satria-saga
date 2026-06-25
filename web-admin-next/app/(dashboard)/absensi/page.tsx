@@ -185,7 +185,7 @@ export default function AbsensiPage() {
                 <tr key={r.id}>
                   <td className="user-cell">
                     <img className="avatar avatar-sm" src={avatarUrl(r.users?.foto_url)} alt="avatar" />
-                    <span>{r.users?.nama || r.nama || "-"}</span>
+                    <span title={r.users?.nama || r.nama || "-"}>{r.users?.nama || r.nama || "-"}</span>
                   </td>
                   <td><code style={{ fontSize: 11 }}>{r.users?.nrp || r.nrp || "-"}</code></td>
                   <td><span className={`badge badge-${r.tipe === "masuk" ? "success" : "info"}`}>{r.tipe}</span></td>

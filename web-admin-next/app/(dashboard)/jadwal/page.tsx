@@ -138,10 +138,10 @@ export default function JadwalPage() {
               })();
               return (
                 <tr key={r.id}>
-                  <td>
+                  <td className="cell-ellipsis" title={r.nama}>
                     <strong>{r.nama}</strong>
                   </td>
-                  <td>{lokasiName(r.lokasi_id)}</td>
+                  <td className="cell-ellipsis" title={lokasiName(r.lokasi_id)}>{lokasiName(r.lokasi_id)}</td>
                   <td>{r.waktu_mulai}</td>
                   <td>{r.waktu_selesai}</td>
                   <td>{durasi}</td>

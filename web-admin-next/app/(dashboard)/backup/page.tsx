@@ -94,7 +94,7 @@ export default function BackupPage() {
           <tbody>
             {backups.map((b: any, i: number) => (
               <tr key={i}>
-                <td>
+                <td className="cell-ellipsis" title={b.filename}>
                   <code>{b.filename}</code>
                 </td>
                 <td>{b.size || "-"}</td>

@@ -176,9 +176,9 @@ export default function ShiftAssignmentPage() {
                 <td>
                   <strong>{fmtDate(r.tanggal)}</strong>
                 </td>
-                <td>{userName(r.user_id)}</td>
+                <td className="cell-ellipsis" title={userName(r.user_id)}>{userName(r.user_id)}</td>
                 <td>{shiftName(r.shift_id)}</td>
-                <td>{posName(r.pos_jaga_id)}</td>
+                <td className="cell-ellipsis" title={posName(r.pos_jaga_id)}>{posName(r.pos_jaga_id)}</td>
                 <td>{fmtDate(r.created_at)}</td>
                 <td>
                   <div className="btn-group">
