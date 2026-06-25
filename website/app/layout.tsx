@@ -2,6 +2,10 @@ import type { Metadata, Viewport } from 'next'
 import '@/styles/globals.css'
 
 export const metadata: Metadata = {
+  // [6-9 finalisasi] Domain produksi terkonfirmasi (sopiaksatriasaga.com) →
+  // metadataBase membuat URL openGraph/canonical absolut, canonical eksplisit.
+  metadataBase: new URL('https://sopiaksatriasaga.com'),
+  alternates: { canonical: '/' },
   title: 'PT Sopiak Satria Saga - Jasa Keamanan Profesional & Terpercaya',
   description: 'PT Sopiak Satria Saga menyediakan layanan jasa keamanan profesional dengan teknologi terdepan. Sistem manajemen security berbasis AI, GPS tracking, dan real-time monitoring di Pekanbaru, Riau.',
   keywords: 'jasa keamanan, security, satpam profesional, PT Sopiak Satria Saga, pekanbaru, riau, GPS tracking, patroli',
@@ -15,8 +19,9 @@ export const metadata: Metadata = {
 }
 
 // [6-9] Viewport + themeColor (navy brand) sesuai konvensi Next 14 (terpisah
-// dari metadata). metadataBase/alternates.canonical SENGAJA dilewati karena
-// domain produksi belum dipastikan; favicon app/icon dilewati (aset belum ada).
+// dari metadata). metadataBase + alternates.canonical kini DIISI (domain
+// produksi sopiaksatriasaga.com terkonfirmasi). Favicon app/icon masih dilewati
+// (aset belum ada) — tambah saat aset siap.
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,

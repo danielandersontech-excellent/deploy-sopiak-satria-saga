@@ -9,8 +9,13 @@
 --
 -- Semua perintah memakai IF NOT EXISTS → migrasi idempotent & aman dijalankan
 -- ulang. JANGAN mengedit file migrasi lama.
-
-BEGIN;
+--
+-- CATATAN TRANSAKSI: TANPA BEGIN/COMMIT eksplisit. migrationRunner (applyOne di
+-- backend/src/utils/migrationRunner.js) SUDAH membungkus setiap migrasi dalam
+-- satu transaksi (BEGIN...INSERT schema_migrations...COMMIT). Menambah BEGIN/
+-- COMMIT di sini akan MENUMPUK transaksi: inner COMMIT menutup transaksi runner
+-- lebih awal lalu COMMIT runner memicu warning "no transaction in progress".
+-- Biarkan runner yang mengelola transaksi agar DDL + pencatatan tracker atomik.
 
 -- ============ [3-2] idempotency_key ============
 ALTER TABLE absensi          ADD COLUMN IF NOT EXISTS idempotency_key TEXT;
@@ -37,5 +42,3 @@ CREATE UNIQUE INDEX IF NOT EXISTS ux_serah_terima_idem
 
 -- ============ [3-3] tanda tangan serah terima ============
 ALTER TABLE serah_terima ADD COLUMN IF NOT EXISTS tanda_tangan TEXT;
-
-COMMIT;

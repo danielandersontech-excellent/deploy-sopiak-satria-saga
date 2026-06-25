@@ -9,12 +9,11 @@
 -- Kolom nullable + unique index PARSIAL (hanya untuk baris yang punya nilai)
 -- → SEMUA baris patroli lama tetap valid (client_patrol_id = NULL).
 -- IF NOT EXISTS → idempotent, aman dijalankan ulang. JANGAN edit migrasi lama.
-
-BEGIN;
+--
+-- CATATAN TRANSAKSI: TANPA BEGIN/COMMIT eksplisit — migrationRunner (applyOne)
+-- sudah membungkus migrasi ini dalam satu transaksi. Lihat catatan di 006.
 
 ALTER TABLE patroli ADD COLUMN IF NOT EXISTS client_patrol_id TEXT;
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_patroli_client_patrol_id
   ON patroli (client_patrol_id) WHERE client_patrol_id IS NOT NULL;
-
-COMMIT;
