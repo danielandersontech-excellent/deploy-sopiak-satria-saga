@@ -16,12 +16,14 @@ function RoleGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   // Dashboard root "/" is allowed for all authenticated users
-  if (pathname === "/") return <>{children}</>;
-  
-  if (!isMenuAllowed(pathname)) {
-    router.replace("/unauthorized");
-    return null;
-  }
+  const allowed = pathname === "/" || isMenuAllowed(pathname);
+  // [6-3] Redirect dipindah ke useEffect (bukan saat render) agar tidak memicu
+  // anti-pattern React "Cannot update a component while rendering". Proteksi
+  // tetap: user tak berwenang diarahkan ke /unauthorized, render null sementara.
+  useEffect(() => {
+    if (!allowed) router.replace("/unauthorized");
+  }, [allowed, router]);
+  if (!allowed) return null;
   return <>{children}</>;
 }
 

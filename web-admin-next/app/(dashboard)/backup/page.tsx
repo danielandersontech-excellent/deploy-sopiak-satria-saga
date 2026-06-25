@@ -4,12 +4,14 @@ import { backupApi } from "@/lib/api";
 import { fmtDate, fmtDateTime } from "@/lib/formatters";
 import { useToast } from "@/hooks/useToast";
 import { useSettings } from "@/hooks/useSettings";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 
 export default function BackupPage() {
   const { toast } = useToast();
   const { t } = useSettings();
   const [backups, setBackups] = useState<any[]>([]);
   const [loading, setLoading] = useState("");
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null); // [6-1] ConfirmDialog target
   const load = async () => {
     try {
       const d = await backupApi.list();
@@ -41,13 +43,12 @@ export default function BackupPage() {
     }
     setLoading("");
   };
-  const restoreDB = async (filename: string) => {
-    if (
-      !window.confirm(
-        "PERHATIAN: Restore akan menimpa database saat ini. Lanjutkan?",
-      )
-    )
-      return;
+  // [6-1] Buka ConfirmDialog (konsisten dgn halaman lain) alih-alih window.confirm.
+  const restoreDB = (filename: string) => setRestoreTarget(filename);
+  const doRestore = async () => {
+    const filename = restoreTarget;
+    if (!filename) return;
+    setRestoreTarget(null);
     setLoading("restore");
     try {
       await backupApi.restore(filename);
@@ -159,6 +160,15 @@ export default function BackupPage() {
           Jika pg_dump tidak tersedia, backup dilakukan via SQL query otomatis.
         </p>
       </div>
+      {restoreTarget && (
+        <ConfirmDialog
+          title="Restore Database?"
+          msg={`PERHATIAN: Restore dari "${restoreTarget}" akan MENIMPA seluruh database saat ini. Tindakan ini tidak dapat dibatalkan.`}
+          confirmLabel="Restore"
+          onConfirm={doRestore}
+          onCancel={() => setRestoreTarget(null)}
+        />
+      )}
     </div>
   );
 }

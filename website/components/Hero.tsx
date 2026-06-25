@@ -38,11 +38,11 @@ export default function Hero() {
           </p>
 
           <div className="hero-actions">
-            <a href="#kontak" className="btn-primary">
+            <a href="/#kontak" className="btn-primary">
               <span>Konsultasi Gratis</span>
               <ArrowRight size={16} />
             </a>
-            <a href="#teknologi" className="btn-ghost">
+            <a href="/#teknologi" className="btn-ghost">
               <Play size={14} />
               <span>Lihat Teknologi Kami</span>
             </a>

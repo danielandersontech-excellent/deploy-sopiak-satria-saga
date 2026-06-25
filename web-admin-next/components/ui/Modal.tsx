@@ -15,7 +15,9 @@ export function Modal({
   wide?: boolean;
 }) {
   return (
-    <div className="modal-overlay">
+    // [6-2] Klik area overlay (di luar konten) = tutup. Konten ber-stopPropagation
+    // agar klik di dalam tidak ikut menutup modal.
+    <div className="modal-overlay" onClick={onClose}>
       <div
         className={`modal-content ${wide ? "modal-wide" : ""}`}
         onClick={(e) => e.stopPropagation()}

@@ -1,15 +1,26 @@
-import type { Metadata } from 'next'
+import type { Metadata, Viewport } from 'next'
 import '@/styles/globals.css'
 
 export const metadata: Metadata = {
   title: 'PT Sopiak Satria Saga - Jasa Keamanan Profesional & Terpercaya',
   description: 'PT Sopiak Satria Saga menyediakan layanan jasa keamanan profesional dengan teknologi terdepan. Sistem manajemen security berbasis AI, GPS tracking, dan real-time monitoring di Pekanbaru, Riau.',
   keywords: 'jasa keamanan, security, satpam profesional, PT Sopiak Satria Saga, pekanbaru, riau, GPS tracking, patroli',
+  // [6-9] Robots eksplisit (index,follow) untuk SEO dasar.
+  robots: { index: true, follow: true },
   openGraph: {
     title: 'PT Sopiak Satria Saga - Jasa Keamanan Profesional',
     description: 'Layanan keamanan terpercaya dengan teknologi modern di Pekanbaru, Riau.',
     type: 'website',
   },
+}
+
+// [6-9] Viewport + themeColor (navy brand) sesuai konvensi Next 14 (terpisah
+// dari metadata). metadataBase/alternates.canonical SENGAJA dilewati karena
+// domain produksi belum dipastikan; favicon app/icon dilewati (aset belum ada).
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  themeColor: '#0A0F1C',
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
