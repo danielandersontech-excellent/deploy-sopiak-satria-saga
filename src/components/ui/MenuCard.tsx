@@ -43,7 +43,7 @@ export function MenuCard({
       <Text style={[styles.label, size === 'small' && styles.labelSmall, { color: theme.text }]} numberOfLines={2}>{label}</Text>
       {displayBadge && (
         <View style={styles.badgeWrap}>
-          <Badge text={displayBadge} variant={badgeVariant} />
+          <Badge text={displayBadge} variant={badgeVariant} numberOfLines={1} />
         </View>
       )}
       {progress && <Text style={[styles.progress, { color: theme.textMuted }]}>{progress}</Text>}
@@ -73,6 +73,6 @@ const styles = StyleSheet.create({
     textAlign: 'center', lineHeight: 16,
   },
   labelSmall: { fontSize: 11 },
-  badgeWrap: { position: 'absolute', top: 4, right: 4 },
+  badgeWrap: { position: 'absolute', top: 4, right: 4, maxWidth: '64%' },
   progress: { ...Typography.caption },
 });

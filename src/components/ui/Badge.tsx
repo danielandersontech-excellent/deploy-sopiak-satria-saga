@@ -10,6 +10,8 @@ interface BadgeProps {
   size?: 'small' | 'medium';
   dot?: boolean;
   style?: any;
+  /** Batasi teks ke N baris (mis. 1) + ellipsis. Default: tanpa batas (perilaku lama). */
+  numberOfLines?: number;
 }
 
 const variantColors: Record<BadgeVariant, { bg: string; text: string; dot: string }> = {
@@ -21,13 +23,14 @@ const variantColors: Record<BadgeVariant, { bg: string; text: string; dot: strin
   purple: { bg: Colors.purpleSoft, text: Colors.purple, dot: Colors.purple },
 };
 
-export function Badge({ text, variant = 'default', size = 'small', dot, style }: BadgeProps) {
+export function Badge({ text, variant = 'default', size = 'small', dot, style, numberOfLines }: BadgeProps) {
   const v = variantColors[variant];
 
   return (
     <View style={[styles.base, { backgroundColor: v.bg }, size === 'medium' && styles.medium, style]}>
       {dot && <View style={[styles.dot, { backgroundColor: v.dot }]} />}
       <Text
+        numberOfLines={numberOfLines}
         style={[
           size === 'small' ? Typography.caption : Typography.badge,
           { color: v.text, fontWeight: '600' },

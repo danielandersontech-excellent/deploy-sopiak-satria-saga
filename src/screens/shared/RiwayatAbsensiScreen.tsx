@@ -316,7 +316,9 @@ export default function RiwayatAbsensiScreen({ navigation }: any) {
                   {lang === 'en' ? 'Out' : 'Keluar'}: <Text style={[st.timeVal, { color: theme.text }]}>{h.keluar}</Text>
                 </Text>
               </View>
-              <Badge text={statusLabel(h.status)} variant={statusVariant(h.status)} />
+              <View style={st.statusCol}>
+                <Badge text={statusLabel(h.status)} variant={statusVariant(h.status)} numberOfLines={1} style={{ alignSelf: 'flex-end' }} />
+              </View>
             </View>
             {h.metode !== '-' && h.status !== 'libur' && (
               <Text style={[st.metode, { color: Colors.primary }]}>
@@ -366,6 +368,7 @@ const st = StyleSheet.create({
   cardDate: { ...Typography.bodyBold },
   cardDay: { ...Typography.caption },
   times: { gap: 2 },
+  statusCol: { width: 96, alignItems: 'flex-end' },
   timeLabel: { ...Typography.caption },
   timeVal: { fontWeight: '700' },
   metode: { ...Typography.caption, marginTop: 6 },

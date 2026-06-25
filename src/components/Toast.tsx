@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Dimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../constants/theme';
 
 interface ToastProps {
@@ -27,6 +28,11 @@ const TOAST_ICONS = {
 export default function Toast({ visible, message, type = 'info', duration = 4000, onDismiss }: ToastProps) {
   const translateY = useRef(new Animated.Value(-100)).current;
   const opacity = useRef(new Animated.Value(0)).current;
+  const insets = useSafeAreaInsets();
+  // Posisi atas mengikuti safe-area (notch/Dynamic Island). Math.max menjaga
+  // jarak minimum bila insets.top = 0 (mis. di luar SafeAreaProvider), seperti
+  // pola di CameraModal. Tetap di bawah status bar pada semua perangkat.
+  const topOffset = Math.max(insets.top, 12) + 8;
 
   useEffect(() => {
     if (visible) {
@@ -51,7 +57,7 @@ export default function Toast({ visible, message, type = 'info', duration = 4000
   const accentColor = TOAST_COLORS[type];
 
   return (
-    <Animated.View style={[styles.container, { transform: [{ translateY }], opacity, borderLeftColor: accentColor }]}>
+    <Animated.View style={[styles.container, { top: topOffset, transform: [{ translateY }], opacity, borderLeftColor: accentColor }]}>
       <View style={[styles.icon, { backgroundColor: accentColor + '20' }]}>
         <Text style={[styles.iconText, { color: accentColor }]}>{TOAST_ICONS[type]}</Text>
       </View>
@@ -65,7 +71,6 @@ const { width } = Dimensions.get('window');
 const styles = StyleSheet.create({
   container: {
     position: 'absolute',
-    top: 50,
     left: 16,
     right: 16,
     maxWidth: width - 32,
