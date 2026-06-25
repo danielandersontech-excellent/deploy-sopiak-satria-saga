@@ -5,6 +5,7 @@ import { fmtDate, fmtDateTime, statusColor } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/hooks/useToast";
+import { onRealtimeEvent } from "@/lib/socketClient";
 
 export default function BroadcastPage() {
   const { toast } = useToast();
@@ -27,6 +28,11 @@ export default function BroadcastPage() {
   };
   useEffect(() => {
     load();
+    // [5-1] Tampilkan broadcast baru realtime (mis. dari admin/lokasi lain).
+    const unsub = onRealtimeEvent((ev) => {
+      if (ev === "broadcast:new") load();
+    });
+    return unsub;
   }, []);
   const send = async () => {
     try {

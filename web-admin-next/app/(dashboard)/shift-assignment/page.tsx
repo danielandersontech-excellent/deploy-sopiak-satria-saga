@@ -84,6 +84,18 @@ export default function ShiftAssignmentPage() {
         await shiftAssignApi.update(edit.id, form);
         toast("Penugasan diperbarui");
       } else {
+        // [5-3] Cegah double-booking sebelum create (selaras filter
+        // unassignedToday di mobile). Backend juga menolak sebagai lapis kedua.
+        const ymd = (form.tanggal || "").split("T")[0];
+        const clash = data.some(
+          (r: any) =>
+            r.user_id === form.user_id &&
+            (r.tanggal || "").split("T")[0] === ymd
+        );
+        if (clash) {
+          toast("Anggota sudah ditugaskan pada tanggal ini.", "error");
+          return;
+        }
         await shiftAssignApi.create(form);
         toast("Penugasan ditambahkan");
       }

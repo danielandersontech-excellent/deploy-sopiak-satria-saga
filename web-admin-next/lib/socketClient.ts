@@ -36,16 +36,26 @@ const REALTIME_EVENTS = [
   'absensi:new',
   'patroli:update',
   'laporan:new',
-  'laporan:validated',
   'laporan:urgent',
   'panic:alert',
   'panic:resolved',
   'broadcast:new',
-  'user:status',
   'stats:update',
   'user:location',
+  // [5-2] Event geofence yang BENAR-BENAR di-emit backend (sebelumnya hanya
+  // 'geofence:izin' generik yang tak pernah dikirim → izin approve/reject &
+  // overtime tak diterima realtime). Halaman geofence me-refresh pada substring
+  // "geofence", jadi semua varian ini menyegarkan UI.
   'geofence:violation',
-  'geofence:izin',
+  'geofence:izin_request',
+  'geofence:izin_approved',
+  'geofence:izin_rejected',
+  'geofence:overtime',
+  'geofence:warning',
+  'geofence:outside_permitted',
+  'geofence:returned',
+  // [5-2] DIHAPUS: 'laporan:validated' & 'user:status' — TIDAK pernah di-emit
+  // backend (validasi via FCM; status via 'user:location'). Listener mati dibuang.
 ];
 
 /**

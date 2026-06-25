@@ -94,6 +94,13 @@ class UserRepository extends BaseRepository {
     }
     if (filters.status) { params.push(filters.status); sql += ` AND u.status = $${params.length}`; }
     if (filters.status_penempatan) { params.push(filters.status_penempatan); sql += ` AND u.status_penempatan = $${params.length}`; }
+    // [5-4] Pencarian server-side nama/NRP (sebelumnya hanya filter klien pada
+    // halaman aktif → user di halaman lain tak ketemu). Parameterized → aman SQLi;
+    // scope per-peran (role/lokasi_ids di atas) tetap dihormati.
+    if (filters.search != null && String(filters.search).trim() !== '') {
+      params.push(`%${String(filters.search).trim()}%`);
+      sql += ` AND (u.nama ILIKE $${params.length} OR u.nrp ILIKE $${params.length})`;
+    }
 
     if (wantAll) {
       sql += ' ORDER BY u.nama';

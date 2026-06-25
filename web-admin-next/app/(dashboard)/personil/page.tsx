@@ -17,6 +17,7 @@ export default function PersonilPage() {
   const [detail, setDetail] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState(""); // [5-4] server-side search
   const [filterRole, setFilterRole] = useState("");
   const [filterPenempatan, setFilterPenempatan] = useState("");
   const [filterLokasi, setFilterLokasi] = useState("");
@@ -72,6 +73,7 @@ export default function PersonilPage() {
       if (filterRole) qs.set("role", filterRole);
       if (filterLokasi) qs.set("lokasi_id", filterLokasi);
       if (filterPenempatan) qs.set("status_penempatan", filterPenempatan);
+      if (debouncedSearch.trim()) qs.set("search", debouncedSearch.trim());
       const d: any = await apiFetch(`/api/users?${qs.toString()}`);
       // Backend returns { data, total, page, limit, totalPages } when paginated,
       // or a raw array when ?all=true is passed. Handle both shapes defensively.
@@ -99,7 +101,7 @@ export default function PersonilPage() {
   useEffect(() => {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentPage, filterRole, filterLokasi, filterPenempatan]);
+  }, [currentPage, filterRole, filterLokasi, filterPenempatan, debouncedSearch]);
 
   // Reset to page 1 whenever a filter changes (otherwise you might land
   // on an empty page beyond totalPages for the new filter).
@@ -108,18 +110,20 @@ export default function PersonilPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filterRole, filterLokasi, filterPenempatan]);
 
-  // Search is client-side and only filters the CURRENT page (server
-  // pagination trade-off). For full-list searches, users should clear
-  // search and use the filter dropdowns, which are server-side.
-  const filtered = data.filter((u) => {
-    const q = search.toLowerCase();
-    return (
-      !q ||
-      u.nama?.toLowerCase().includes(q) ||
-      u.nrp?.toLowerCase().includes(q)
-    );
-  });
-  const pagedData = filtered;
+  // [5-4] Debounce kotak pencarian → kirim ke server (cari di SEMUA halaman,
+  // bukan hanya halaman aktif) + reset ke halaman 1 saat kata kunci berubah.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedSearch(search);
+      setCurrentPage(1);
+    }, 350);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  // Pencarian kini server-side (lihat backend user.repository ILIKE). Data yang
+  // diterima sudah terfilter untuk halaman ini.
+  const pagedData = data;
   const openNew = () => {
     setEdit(null);
     setForm(emptyForm);
@@ -285,7 +289,7 @@ export default function PersonilPage() {
               </option>
             ))}
           </select>
-          <span className="muted">{totalUsers} personil{search ? ` (${filtered.length} match di halaman ini)` : ""}</span>
+          <span className="muted">{totalUsers} personil{debouncedSearch ? ` (hasil pencarian)` : ""}</span>
           <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
             <button className={`btn btn-sm ${viewMode === 'table' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('table')} title="Tampilan Tabel"><i className="fas fa-list" /></button>
             <button className={`btn btn-sm ${viewMode === 'grid' ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setViewMode('grid')} title="Tampilan Grid"><i className="fas fa-th" /></button>
@@ -429,7 +433,7 @@ export default function PersonilPage() {
                 </td>
               </tr>
             ))}
-            {filtered.length === 0 && (
+            {pagedData.length === 0 && (
               <tr>
                 <td colSpan={10} className="empty-row">
                   Tidak ada data personil

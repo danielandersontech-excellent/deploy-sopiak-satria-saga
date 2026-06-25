@@ -35,7 +35,6 @@ export function Sidebar({
       if (
         [
           "laporan:new",
-          "laporan:validated",
           "panic:alert",
           "panic:resolved",
           "stats:update",

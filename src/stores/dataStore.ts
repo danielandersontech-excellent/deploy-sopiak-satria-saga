@@ -210,11 +210,9 @@ interface DataStore {
 
   laporanHarian: LaporanHarianData[];
   addLaporanHarian: (l: Omit<LaporanHarianData, 'id'>) => Promise<SubmitResult>;
-  updateLaporanHarianStatus: (id: string, status: LaporanHarianData['status'], catatan?: string) => void;
 
   laporanKejadian: LaporanKejadianData[];
   addLaporanKejadian: (l: Omit<LaporanKejadianData, 'id'>) => Promise<SubmitResult>;
-  updateLaporanKejadianStatus: (id: string, status: LaporanKejadianData['status'], catatan?: string) => void;
 
   serahTerimaRecords: SerahTerimaData[];
   addSerahTerima: (s: Omit<SerahTerimaData, 'id'>, signature?: string | null) => Promise<SubmitResult>;
@@ -734,16 +732,6 @@ export const useDataStore = create<DataStore>((set, get) => ({
     }
     return outcome;
   },
-  updateLaporanHarianStatus: (id, status, catatan) => {
-    const laporan = get().laporanHarian.find((l) => l.id === id);
-    set((s) => ({ laporanHarian: s.laporanHarian.map((l) => l.id === id ? { ...l, status, catatanKomandan: catatan || l.catatanKomandan } : l) }));
-    if (laporan) {
-      const isApproved = status === 'approved';
-      get().addNotifikasi({ tipe: isApproved ? 'success' : 'warning', judul: isApproved ? 'Laporan Harian Disetujui ✅' : 'Laporan Harian Perlu Revisi ⚠️', pesan: isApproved ? `Laporan harian Anda tanggal ${laporan.tanggal} telah disetujui.` : `Laporan harian Anda perlu direvisi: ${catatan || 'Silakan periksa.'}`, waktu: 'Baru saja', dibaca: false, targetRole: ['anggota'], targetUserId: null });
-    }
-    laporanApi.harianValidate(id, status, catatan).catch(console.error);
-  },
-
   // ==================== LAPORAN KEJADIAN ====================
   laporanKejadian: [],
   addLaporanKejadian: async (l) => {
@@ -768,16 +756,6 @@ export const useDataStore = create<DataStore>((set, get) => ({
     }
     return outcome;
   },
-  updateLaporanKejadianStatus: (id, status, catatan) => {
-    const laporan = get().laporanKejadian.find((l) => l.id === id);
-    set((s) => ({ laporanKejadian: s.laporanKejadian.map((l) => l.id === id ? { ...l, status, catatanKomandan: catatan || l.catatanKomandan } : l) }));
-    if (laporan) {
-      const isApproved = status === 'approved';
-      get().addNotifikasi({ tipe: isApproved ? 'success' : 'warning', judul: isApproved ? 'Laporan Kejadian Disetujui ✅' : 'Laporan Kejadian Perlu Revisi ⚠️', pesan: isApproved ? `Laporan kejadian "${laporan.jenis}" disetujui.` : `Laporan kejadian "${laporan.jenis}" perlu direvisi.`, waktu: 'Baru saja', dibaca: false, targetRole: ['anggota'], targetUserId: null });
-    }
-    laporanApi.kejadianValidate(id, status, catatan).catch(console.error);
-  },
-
   // ==================== SERAH TERIMA ====================
   serahTerimaRecords: [],
   addSerahTerima: async (s, signature) => {

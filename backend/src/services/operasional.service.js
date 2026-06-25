@@ -8,7 +8,7 @@
  *       panic alert across every contract.
  */
 const opRepo = require('../repositories/operasional.repository');
-const { emitToAll, emitToRole } = require('../realtime/socketio');
+const { emitToAll, emitToRole, emitToLokasi } = require('../realtime/socketio');
 const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
 class OperasionalService {
@@ -19,7 +19,19 @@ class OperasionalService {
     return opRepo.findBroadcasts(filters);
   }
   async createBroadcast(user, data) {
-    return opRepo.createBroadcast({ pengirim_id: user.id, ...data });
+    const row = await opRepo.createBroadcast({ pengirim_id: user.id, ...data });
+    // [5-1] Emit realtime agar broadcast langsung muncul di penerima (sebelumnya
+    // tak ada emit → baru terlihat saat fetch ulang). Cakupan mengikuti broadcast:
+    // ber-lokasi → kamar lokasi + staf komando; global → semua. Konsumen mobile
+    // (useRealtimeSync) & web-admin me-refetch saat 'broadcast:new' (tanpa duplikat).
+    const payload = { ...row, pengirim_nama: user.nama };
+    if (row && row.lokasi_id) {
+      emitToLokasi(row.lokasi_id, 'broadcast:new', payload);
+      emitToRole(['admin', 'komandan', 'supervisor'], 'broadcast:new', payload);
+    } else {
+      emitToAll('broadcast:new', payload);
+    }
+    return row;
   }
 
   // Serah Terima

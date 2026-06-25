@@ -140,9 +140,13 @@ export function useRealtimeSync() {
           });
 
           const events = [
-            'absensi:new', 'patroli:update', 'laporan:new', 'laporan:validated',
+            'absensi:new', 'patroli:update', 'laporan:new',
             'laporan:urgent', 'panic:alert', 'panic:resolved', 'broadcast:new',
-            'user:status', 'stats:update',
+            'stats:update',
+            // [5-V1] Tambah 'user:location' → ping lokasi memicu refresh data
+            // sehingga marker MonitorRealtime hidup tanpa pull-to-refresh manual.
+            // [5-2] 'laporan:validated' & 'user:status' DIBUANG (tak pernah di-emit).
+            'user:location',
           ];
           events.forEach((ev) => socket.on(ev, () => debouncedLoadAllData()));
 

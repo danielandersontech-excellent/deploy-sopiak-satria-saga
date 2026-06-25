@@ -57,7 +57,6 @@ export default function DashboardPage() {
           "panic:alert",
           "panic:resolved",
           "stats:update",
-          "user:status",
         ].includes(ev)
       )
         loadDashboard();

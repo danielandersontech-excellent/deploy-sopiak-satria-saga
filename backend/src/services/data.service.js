@@ -148,6 +148,16 @@ class DataService {
 
   async create(table, data) {
     const repo = this.getRepo(table);
+    // [5-3] Pertahanan server: cegah double-booking shift (1 penugasan per
+    // user_id + tanggal). Web-admin juga mengecek di klien; ini lapis kedua
+    // agar race/akses langsung API tetap aman. Tanpa constraint DB keras
+    // (data lama bisa punya duplikat → migrasi keras berisiko gagal saat boot).
+    if (table === 'shift-assignments' && data.user_id && data.tanggal) {
+      const existing = await repo.count({ user_id: data.user_id, tanggal: data.tanggal });
+      if (existing > 0) {
+        throw { status: 409, message: 'Anggota sudah memiliki penugasan shift pada tanggal tersebut.' };
+      }
+    }
     if (table === 'checkpoints' && !data.qr_code) {
       const prefix = await this._getLokasiPrefix(data.lokasi_id);
       const ts = Date.now().toString(36).toUpperCase();

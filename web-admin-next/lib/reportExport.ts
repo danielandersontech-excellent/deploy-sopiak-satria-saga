@@ -25,6 +25,25 @@ import { apiFetch } from '@/lib/api';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || '';
 
+// [5-5] Unduhan biner tidak bisa lewat apiFetch (yang selalu res.json()).
+// Helper ini meniru logika refresh apiFetch: pada 401 (token kedaluwarsa),
+// coba refresh sekali via cookie httpOnly lalu ULANG permintaan — agar export
+// tidak gagal hanya karena access token lama. Tetap mengembalikan Response
+// (caller memanggil .blob()).
+async function exportFetch(url: string): Promise<Response> {
+  const init: RequestInit = { method: 'GET', credentials: 'include' };
+  let res = await fetch(url, init);
+  if (res.status === 401) {
+    let refreshed = false;
+    try {
+      const ref = await fetch(`${API_URL}/api/auth/refresh`, { method: 'POST', credentials: 'include' });
+      refreshed = ref.ok;
+    } catch { /* offline / network */ }
+    if (refreshed) res = await fetch(url, init); // ulang sekali dengan cookie baru
+  }
+  return res;
+}
+
 // ==================== EXCEL (server-backed) ====================
 /**
  * Download an Excel export by calling the backend.
@@ -40,10 +59,7 @@ export async function exportToExcel(
   const qs = new URLSearchParams({ start_date: startDate, end_date: endDate });
   if (lokasiId) qs.set('lokasi_id', lokasiId);
 
-  const res = await fetch(`${API_URL}/api/export/${type}?${qs.toString()}`, {
-    method: 'GET',
-    credentials: 'include',
-  });
+  const res = await exportFetch(`${API_URL}/api/export/${type}?${qs.toString()}`);
 
   if (!res.ok) {
     // Try to surface a useful error from the JSON body if there is one.
