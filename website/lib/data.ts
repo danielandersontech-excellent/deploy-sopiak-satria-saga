@@ -4,6 +4,11 @@ import {
   Fingerprint, ScanLine, FileText, Radio, ClipboardCheck, BarChart3,
   Target, Settings2, Zap, Eye, Award, Diamond,
   Crosshair, Users, Star,
+  // [Konten Profil] ikon tambahan untuk halaman /profil (company profile resmi)
+  Scale, Medal, Timer, ShieldCheck, Lightbulb,
+  UserCheck, Footprints, Crown, Trees,
+  Radar, LayoutDashboard, FileCheck2, Handshake, Landmark, HeartPulse,
+  Wallet, ClipboardList, Server, Banknote, ShoppingBag,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -115,15 +120,111 @@ export const WHY_REASONS = [
 ]
 
 export const COMMITMENTS = [
-  { Icon: Crosshair, title: 'Visi Kami', desc: 'Menjadi perusahaan jasa keamanan terdepan di Indonesia yang mengintegrasikan teknologi modern dengan profesionalisme personil.' },
-  { Icon: Users, title: 'Misi Kami', desc: 'Menyediakan layanan keamanan berkualitas tinggi dengan personil terlatih dan bersertifikat, didukung sistem manajemen berbasis teknologi.' },
-  { Icon: Star, title: 'Nilai Kami', desc: 'Integritas, profesionalisme, dan inovasi menjadi landasan setiap langkah. Keamanan terbaik lahir dari SDM unggul dan teknologi tepat guna.' },
+  // [Konten Profil] Wording diselaraskan dengan Visi/Misi/Nilai RESMI pada
+  // Company Profile perusahaan (detail lengkap di halaman /profil).
+  { Icon: Crosshair, title: 'Visi Kami', desc: 'Menjadi mitra utama dalam menciptakan lingkungan yang aman dan kondusif melalui layanan pengamanan profesional berbasis teknologi.' },
+  { Icon: Users, title: 'Misi Kami', desc: 'Layanan pengamanan profesional sesuai standar operasional kepolisian, personel kompeten dan berintegritas, serta sistem digital yang transparan.' },
+  { Icon: Star, title: 'Nilai Kami', desc: 'Integrity, Professionalism, Discipline, Responsibility, dan Innovation — lima nilai yang melandasi setiap langkah pengamanan kami.' },
 ]
 
 export const NAV_LINKS = [
   { label: 'Beranda', href: '/#hero' },
+  { label: 'Profil', href: '/profil' },
   { label: 'Layanan', href: '/#layanan' },
   { label: 'Teknologi', href: '/#teknologi' },
   { label: 'Keunggulan', href: '/#keunggulan' },
   { label: 'Kontak', href: '/#kontak' },
+]
+
+/* ══════════════════════════════════════════════════════════════
+   [Konten Profil] KONTEN RESMI COMPANY PROFILE — sumber: dokumen
+   "Company Profile PT. Sopiak Satria Saga" (2026). Dipakai oleh
+   halaman /profil dan strip legalitas pada beranda.
+   ══════════════════════════════════════════════════════════════ */
+
+export const PROFILE = {
+  heroTagline: 'Solusi Keamanan Profesional, Terpercaya dan Berbasis Teknologi.',
+  closingTagline: 'Keamanan Anda, Komitmen Kami.',
+  about1:
+    'PT Sopiak Satria Saga adalah perusahaan jasa pengamanan yang berdedikasi untuk memberikan solusi keamanan terintegrasi bagi berbagai sektor industri. Kami percaya bahwa keamanan adalah fondasi utama bagi kelangsungan bisnis dan kenyamanan lingkungan.',
+  aboutQuote:
+    'Berkomitmen menciptakan lingkungan yang aman, tertib, dan kondusif melalui manajemen pengamanan yang profesional dan akuntabel.',
+  about2:
+    'Didukung oleh personel yang terlatih secara fisik dan mental, serta sistem monitoring berbasis teknologi terkini, kami siap menjadi mitra strategis Anda dalam menghadapi tantangan keamanan modern.',
+  visi:
+    'Menjadi mitra utama dalam menciptakan lingkungan yang aman dan kondusif melalui layanan pengamanan profesional berbasis teknologi.',
+  misi: [
+    'Memberikan layanan pengamanan profesional sesuai standar operasional kepolisian.',
+    'Menyediakan personel keamanan yang kompeten, disiplin, dan berintegritas tinggi.',
+    'Mengembangkan sistem pengamanan berbasis teknologi digital yang transparan.',
+    'Memberikan pelayanan yang cepat, responsif, dan berorientasi pada kepuasan pelanggan.',
+    'Menjalin hubungan kerja sama jangka panjang yang saling menguntungkan.',
+  ],
+  managemen:
+    'PT Sopiak Satria Saga dikelola oleh tim manajemen profesional yang memiliki latar belakang kuat dalam bidang keamanan, operasional, dan sumber daya manusia. Kami menerapkan standar manajemen mutu yang ketat untuk memastikan setiap aspek layanan berjalan sesuai dengan regulasi pemerintah dan ekspektasi mitra kerja.',
+  workflowTagline: 'Membangun Kepercayaan Melalui Proses Terukur',
+  partnershipQuote:
+    'Kepercayaan pelanggan adalah aset terbesar kami. Kami membangun kemitraan melalui transparansi, integritas, dan kualitas layanan yang konsisten.',
+}
+
+export const COMPANY_VALUES = [
+  { Icon: Scale, title: 'Integrity', desc: 'Menjunjung tinggi kejujuran, etika, dan transparansi dalam setiap aspek operasional dan hubungan bisnis.' },
+  { Icon: Medal, title: 'Professionalism', desc: 'Memberikan standar pelayanan tertinggi melalui kompetensi, keahlian, dan dedikasi yang tak tergoyahkan.' },
+  { Icon: Timer, title: 'Discipline', desc: 'Melaksanakan setiap tugas dengan ketepatan waktu, ketaatan pada prosedur, dan tanggung jawab penuh.' },
+  { Icon: ShieldCheck, title: 'Responsibility', desc: 'Berkomitmen penuh terhadap keamanan aset pelanggan dan akuntabilitas dalam setiap tindakan pengamanan.' },
+  { Icon: Lightbulb, title: 'Innovation', desc: 'Terus beradaptasi dan mengintegrasikan teknologi keamanan terbaru untuk solusi perlindungan yang lebih cerdas.' },
+]
+
+export const SERVICE_SCOPE = [
+  { Icon: UserCheck, title: 'Pengamanan Personel' },
+  { Icon: Building2, title: 'Pengamanan Perkantoran' },
+  { Icon: CalendarDays, title: 'Pengamanan Event' },
+  { Icon: Footprints, title: 'Patrol Security' },
+  { Icon: Factory, title: 'Kawasan Industri' },
+  { Icon: Crown, title: 'Pengamanan VIP' },
+  { Icon: Siren, title: 'Emergency Response' },
+  { Icon: Trees, title: 'Pengamanan Perkebunan' },
+]
+
+export const MONITORING_PILLARS = [
+  { Icon: Radar, title: 'Monitoring Real-Time', desc: 'Pemantauan kehadiran dan aktivitas personel secara langsung melalui aplikasi PT SSS yang terintegrasi.' },
+  { Icon: FileText, title: 'Pelaporan Digital', desc: 'Sistem pelaporan patroli otomatis yang transparan, akurat, dan dapat diakses kapan saja.' },
+  { Icon: LayoutDashboard, title: 'Dashboard Pelanggan', desc: 'Akses khusus bagi klien untuk memantau status keamanan aset mereka secara komprehensif.' },
+]
+
+export const LEGALITAS = [
+  { Icon: FileCheck2, title: 'NIB', full: 'Nomor Induk Berusaha', desc: 'Terdaftar resmi sebagai badan usaha melalui sistem perizinan pemerintah.' },
+  { Icon: ShieldCheck, title: 'Izin BUJP', full: 'Badan Usaha Jasa Pengamanan', desc: 'Izin operasional jasa pengamanan sesuai regulasi Kepolisian RI.' },
+  { Icon: Handshake, title: 'ABIJAPI', full: 'Keanggotaan Asosiasi', desc: 'Tergabung dalam asosiasi resmi badan usaha jasa pengamanan Indonesia.' },
+  { Icon: Award, title: 'KTA Satpam', full: 'Sertifikasi Personel', desc: 'Seluruh personel mengantongi Kartu Tanda Anggota Satpam tersertifikasi.' },
+  { Icon: Landmark, title: 'NPWP', full: 'NPWP Perusahaan', desc: 'Kepatuhan perpajakan penuh sebagai badan usaha yang taat aturan.' },
+  { Icon: HeartPulse, title: 'BPJS', full: 'BPJS Ketenagakerjaan', desc: 'Perlindungan jaminan sosial ketenagakerjaan bagi seluruh personel.' },
+]
+
+export const DIVISIONS = [
+  { Icon: Users, title: 'Human Resources' },
+  { Icon: Wallet, title: 'Keuangan' },
+  { Icon: ClipboardList, title: 'Administrasi' },
+  { Icon: Server, title: 'Teknologi Informasi' },
+  { Icon: Radar, title: 'Monitoring Center' },
+  { Icon: MapPinned, title: 'Operasional Lapangan' },
+]
+
+export const WORKFLOW = [
+  { title: 'Survey dan Analisis Risiko Keamanan', desc: 'Pemetaan kondisi lapangan dan identifikasi titik rawan di lokasi Anda.' },
+  { title: 'Perencanaan Strategi Pengamanan', desc: 'Penyusunan strategi, penempatan pos, dan SOP sesuai hasil analisis.' },
+  { title: 'Penempatan Personel Terlatih', desc: 'Deployment personel tersertifikasi sesuai kebutuhan dan karakter lokasi.' },
+  { title: 'Pelaksanaan Operasional Sesuai SOP', desc: 'Operasional harian berjalan disiplin mengikuti prosedur standar.' },
+  { title: 'Monitoring Digital dan Pengawasan', desc: 'Pemantauan real-time melalui sistem digital dan supervisi berjenjang.' },
+  { title: 'Pelaporan Berkala dan Transparan', desc: 'Laporan rutin yang akurat dan dapat diakses klien kapan saja.' },
+  { title: 'Evaluasi dan Peningkatan Layanan', desc: 'Review berkala untuk perbaikan berkelanjutan kualitas pengamanan.' },
+]
+
+export const SECTORS = [
+  { Icon: Banknote, title: 'Perbankan & Keuangan' },
+  { Icon: Factory, title: 'Kawasan Industri' },
+  { Icon: ShoppingBag, title: 'Retail & Mall' },
+  { Icon: Home, title: 'Perumahan & Apartemen' },
+  { Icon: Building2, title: 'Perkantoran & Aset' },
+  { Icon: Trees, title: 'Pabrik dan Perkebunan' },
 ]

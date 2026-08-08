@@ -1,6 +1,8 @@
 'use client'
+import Link from 'next/link'
+import { ArrowRight, BadgeCheck } from 'lucide-react'
 import { useInView } from '@/hooks/useInView'
-import { COMMITMENTS } from '@/lib/data'
+import { COMMITMENTS, LEGALITAS } from '@/lib/data'
 
 export default function Commitment() {
   const { ref, inView } = useInView()
@@ -34,6 +36,20 @@ export default function Commitment() {
               <p>{item.desc}</p>
             </div>
           ))}
+        </div>
+
+        {/* [Konten Profil] Strip legalitas resmi + tautan ke profil lengkap */}
+        <div className={`pf-trust-strip reveal ${inView ? 'visible' : ''} d3`}>
+          {LEGALITAS.map((l) => (
+            <span key={l.title} className="pf-trust-chip">
+              <BadgeCheck size={13} color="#00C896" strokeWidth={2.2} /> {l.full}
+            </span>
+          ))}
+        </div>
+        <div className={`pf-home-profile-cta reveal ${inView ? 'visible' : ''} d4`}>
+          <Link href="/profil" className="pf-link-btn">
+            Lihat Profil Perusahaan Lengkap <ArrowRight size={16} />
+          </Link>
         </div>
       </div>
     </section>
