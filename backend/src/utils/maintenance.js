@@ -32,6 +32,28 @@ const PENDING_REMINDER_ENABLED = String(process.env.PENDING_REMINDER_ENABLED || 
 // [Misi V3 / D3] retensi notifikasi: sudah dibaca > 90 hari atau apa pun > 180 hari dihapus.
 const NOTIF_READ_RETENTION_DAYS = parseInt(process.env.NOTIF_READ_RETENTION_DAYS || '90', 10) || 90;
 const NOTIF_RETENTION_DAYS = parseInt(process.env.NOTIF_RETENTION_DAYS || '180', 10) || 180;
+// [Misi V3 / E] retensi berkas backup di volume backend_backups: hapus yang lebih tua dari
+// BACKUP_RETENTION_DAYS (default 30) tetapi selalu sisakan BACKUP_KEEP_MIN berkas terbaru (default 7).
+// 0 = nonaktif. Tidak menyentuh berkas yang sudah diunggah ke Drive (ada .meta.json).
+const BACKUP_RETENTION_DAYS = parseInt(process.env.BACKUP_RETENTION_DAYS || '30', 10);
+const BACKUP_KEEP_MIN = Math.max(1, parseInt(process.env.BACKUP_KEEP_MIN || '7', 10) || 7);
+
+async function pruneBackups() {
+  if (!(BACKUP_RETENTION_DAYS > 0)) return 0;
+  const backupService = require('../services/backup.service');
+  const files = backupService.listBackups(); // sudah terurut terbaru → terlama
+  const batas = Date.now() - BACKUP_RETENTION_DAYS * 86400000;
+  let dihapus = 0;
+  files.forEach((f, idx) => {
+    if (idx < BACKUP_KEEP_MIN) return;               // sisakan N terbaru apa pun umurnya
+    if (f.drive_url) return;                          // sudah tersalin ke Drive → biarkan
+    if (new Date(f.created_at).getTime() >= batas) return;
+    try { if (backupService.deleteBackup(f.filename)) dihapus++; }
+    catch (e) { logger.warn(`[Maintenance] gagal hapus backup ${f.filename}: ${e.message}`); }
+  });
+  if (dihapus > 0) logger.info(`[Maintenance] backup lama dihapus: ${dihapus} (retensi ${BACKUP_RETENTION_DAYS} hari, sisakan ${BACKUP_KEEP_MIN})`);
+  return dihapus;
+}
 
 /**
  * Kirim satu notifikasi per komandan per hari untuk lokasi yang memiliki
@@ -108,6 +130,10 @@ async function runMaintenance() {
     summary.pengingat_pending = await remindPendingLaporan();
   } catch (e) { logger.warn(`[Maintenance] pengingat laporan pending: ${e.message}`); }
 
+  try {
+    summary.backup_dihapus = await pruneBackups();
+  } catch (e) { logger.warn(`[Maintenance] retensi backup: ${e.message}`); }
+
   logger.info(`[Maintenance] Selesai: ${JSON.stringify(summary)}`);
   return summary;
 }
@@ -128,4 +154,4 @@ function scheduleMaintenance() {
   logger.info(`[Maintenance] Terjadwal (stale patroli > ${STALE_HOURS} jam, location_history > ${HISTORY_DAYS} hari, izin expired tiap ${IZIN_EXPIRE_MINUTES} menit)`);
 }
 
-module.exports = { runMaintenance, scheduleMaintenance, expireIzin, remindPendingLaporan };
+module.exports = { runMaintenance, scheduleMaintenance, expireIzin, remindPendingLaporan, pruneBackups };
