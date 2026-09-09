@@ -33,6 +33,9 @@ export default function QRScannerScreen({ navigation, route }: any) {
   const [flashOn, setFlashOn] = useState(false);
   const [hasScanned, setHasScanned] = useState(false);
   const [matchedCp, setMatchedCp] = useState<any>(null);
+  // [P1-2] true bila checkpoint berhasil DIANTREKAN offline (bukan langsung
+  // dikonfirmasi server) — layar sukses menampilkan pesan berbeda.
+  const [wasQueued, setWasQueued] = useState(false);
   const scanLineY = useRef(new Animated.Value(0)).current;
   const successScale = useRef(new Animated.Value(0)).current;
 
@@ -76,18 +79,28 @@ export default function QRScannerScreen({ navigation, route }: any) {
   }, [phase]);
 
   /**
-   * Ketika QR cocok: langsung scan checkpoint dan tampilkan sukses
+   * Ketika QR cocok: kirim scan checkpoint ke server dan tampilkan hasil
+   * SESUNGGUHNYA — sukses hanya bila server menerima (atau menerima antrean
+   * offline); penolakan server TIDAK menandai checkpoint berhasil dan
+   * mengizinkan scan ulang. [P1-2]
    */
-  const onMatched = useCallback((cp: any) => {
+  const onMatched = useCallback(async (cp: any) => {
     setMatchedCp(cp);
-    const ok = scanCheckpoint(cp.id, null);
-    if (ok) {
+    const res = await scanCheckpoint(cp.id, null);
+    if (res.status === 'success' || res.status === 'queued') {
+      setWasQueued(res.status === 'queued');
       setPhase('success');
-    } else {
+    } else if (res.error === 'Checkpoint sudah pernah di-scan sebelumnya') {
       Alert.alert(
         '⚠️ Sudah Di-scan',
         `Checkpoint "${cp.nama}" sudah pernah di-scan sebelumnya.`,
         [{ text: 'Kembali', onPress: () => navigation.goBack() }]
+      );
+    } else {
+      Alert.alert(
+        'Gagal Menyimpan Checkpoint',
+        res.error || 'Server menolak checkpoint ini. Silakan coba lagi.',
+        [{ text: 'Coba Lagi', onPress: () => setHasScanned(false) }]
       );
     }
   }, [scanCheckpoint, navigation]);
@@ -190,11 +203,15 @@ export default function QRScannerScreen({ navigation, route }: any) {
             <Ionicons name="checkmark" size={48} color="#fff" />
           </Animated.View>
 
-          <Text style={s.successTitle}>Checkpoint Berhasil! ✅</Text>
+          <Text style={s.successTitle}>{wasQueued ? 'Tersimpan Offline' : 'Checkpoint Berhasil! ✅'}</Text>
           <Text style={s.successCpName}>{matchedCp.nama}</Text>
 
           {matchedCp.area && (
             <Text style={s.successArea}>{matchedCp.area}</Text>
+          )}
+
+          {wasQueued && (
+            <Text style={s.successArea}>Tersimpan offline, akan dikirim saat online</Text>
           )}
 
           {/* Scan time */}
@@ -330,6 +347,8 @@ export default function QRScannerScreen({ navigation, route }: any) {
               placeholderTextColor={Colors.textMuted}
               autoCapitalize="characters"
               autoFocus
+              returnKeyType="done"
+              onSubmitEditing={handleManualSubmit}
             />
             <View style={s.modalActs}>
               <Button

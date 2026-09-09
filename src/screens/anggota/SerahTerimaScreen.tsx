@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Switch, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
@@ -60,13 +60,13 @@ export default function SerahTerimaScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Serah Terima</Text>
         <View style={{ width: 40 }} />
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <Text style={styles.fieldLabel}>Kondisi Area</Text>
         <View style={styles.chipRow}>
           {KONDISI.map((k) => (
@@ -103,10 +103,10 @@ export default function SerahTerimaScreen({ navigation }: any) {
           </View>
         ) : null}
 
-        <Button title={submitting ? 'Mengirim...' : t('handover.submit').toUpperCase()} variant="primary" size="large" fullWidth icon="swap-horizontal-outline" onPress={handleSubmit} disabled={submitting || !signature} style={{ marginTop: 8 }} />
+        <Button title={submitting ? 'Mengirim...' : t('handover.submit').toUpperCase()} variant="primary" size="large" fullWidth icon="swap-horizontal-outline" onPress={handleSubmit} disabled={submitting || !signature} loading={submitting} style={{ marginTop: 8 }} />
         <View style={{ height: 32 }} />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

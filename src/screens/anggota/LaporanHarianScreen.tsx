@@ -180,7 +180,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
         <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
         {/* Auto Info */}
         <Card variant="bordered" borderColor={Colors.primary} style={styles.infoCard}>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Nama</Text><Text style={styles.infoValue}>{user?.nama}</Text></View>
@@ -213,10 +213,10 @@ export default function LaporanHarianScreen({ navigation }: any) {
             placeholderTextColor={Colors.textMuted}
             value={aktivitas}
             onChangeText={setAktivitas}
-            maxLength={500}
+            maxLength={2000}
           />
           <Text style={[styles.charCount, aktivitas.trim().length < 50 && { color: Colors.danger }]}>
-            {aktivitas.trim().length}/500 {aktivitas.trim().length < 50 ? `(min ${50 - aktivitas.trim().length} lagi)` : '✓'}
+            {aktivitas.trim().length}/2000 {aktivitas.trim().length < 50 ? `(min ${50 - aktivitas.trim().length} lagi)` : '✓'}
           </Text>
         </View>
 
@@ -230,6 +230,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
           placeholderTextColor={Colors.textMuted}
           value={temuan}
           onChangeText={setTemuan}
+          maxLength={2000}
         />
 
         {/* Foto Dokumentasi - Real Camera & Gallery */}

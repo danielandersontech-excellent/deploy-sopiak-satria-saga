@@ -37,7 +37,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, Alert, TextInput, Modal,
-  RefreshControl, ActivityIndicator,
+  RefreshControl, ActivityIndicator, KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -819,7 +819,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
           }
         }}
       >
-        <View style={styles.modalOverlay}>
+        <KeyboardAvoidingView style={styles.modalOverlay} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
           <View style={[styles.modalCard, { backgroundColor: theme.bgCard }]}>
             <Text style={[styles.modalTitle, { color: theme.text }]}>
               {lang === 'en' ? 'Request Revision' : 'Minta Revisi'}
@@ -872,7 +872,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
               />
             </View>
           </View>
-        </View>
+        </KeyboardAvoidingView>
       </Modal>
     </View>
   );

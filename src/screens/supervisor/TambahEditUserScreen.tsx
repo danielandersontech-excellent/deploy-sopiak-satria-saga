@@ -5,7 +5,7 @@
  * EDIT: PUT /api/users/:id → updates user data (termasuk lokasi & pos jaga)
  */
 import React, { useState, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, KeyboardAvoidingView, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography, Spacing, Radius } from '../../constants';
@@ -77,7 +77,9 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
       }
     } catch (err: any) {
       setSaving(false);
-      setErrorMsg(`Error: ${err.message || 'Unknown'}`);
+      // [P1-3] Sertakan detail validasi backend (array pesan per-field) bila ada.
+      const details = Array.isArray(err?.details) ? ` (${err.details.join(', ')})` : '';
+      setErrorMsg(`Error: ${(err.message || 'Unknown')}${details}`);
     }
   };
 
@@ -159,7 +161,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
   };
 
   return (
-    <View style={st.container}>
+    <KeyboardAvoidingView style={st.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <View style={[st.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={st.backBtn}>
           <Ionicons name="arrow-back" size={24} color={Colors.textPrimary} />
@@ -285,7 +287,7 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
         />
         <View style={{ height: 32 }} />
       </ScrollView>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

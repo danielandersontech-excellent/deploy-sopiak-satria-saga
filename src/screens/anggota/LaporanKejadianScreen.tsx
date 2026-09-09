@@ -5,6 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Image, ActivityIndicator,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -14,6 +15,7 @@ import { Card, Badge, Button, CameraModal } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
 import { uploadKejadianPhotos } from '../../services/photoUpload';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useClock } from '../../hooks/useClock';
 import { getCurrentLocation } from '../../services/locationService';
 import { useI18n } from '../../lib/i18n';
@@ -56,6 +58,34 @@ export default function LaporanKejadianScreen({ navigation }: any) {
   const [showCamera, setShowCamera] = useState(false);
 
   const canSubmit = jenis && kronologi.trim().length >= 100; // [3-8] abaikan spasi
+
+  // [P1-1] Persistensi draft lokal (AsyncStorage), per user. Foto bukti TIDAK
+  // ikut disimpan (URI kamera sementara tidak tahan lama) — hanya field teks.
+  const draftKey = `@ptsss_draft_laporan_kejadian_${user?.id || 'anon'}`;
+  useEffect(() => {
+    (async () => {
+      try {
+        const raw = await AsyncStorage.getItem(draftKey);
+        if (!raw) return;
+        const d = JSON.parse(raw);
+        if (typeof d.jenis === 'string') setJenis(d.jenis);
+        if (d.prioritas) setPrioritas(d.prioritas);
+        if (typeof d.kronologi === 'string') setKronologi(d.kronologi);
+      } catch {}
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draftKey]);
+
+  const handleSaveDraft = async () => {
+    try {
+      await AsyncStorage.setItem(draftKey, JSON.stringify({
+        jenis, prioritas, lokasi_text: loc?.address || '', kronologi, waktu: jam,
+      }));
+      Alert.alert('Draft Disimpan', 'Laporan tersimpan sebagai draft (foto bukti tidak ikut tersimpan). Akan dimuat kembali saat Anda membuka layar ini.');
+    } catch {
+      Alert.alert('Gagal', 'Tidak dapat menyimpan draft.');
+    }
+  };
 
   const handleCameraCapture = (uri: string) => {
     if (buktiUris.length < 10) {
@@ -128,6 +158,9 @@ export default function LaporanKejadianScreen({ navigation }: any) {
       Alert.alert('Gagal Mengirim', res.error || 'Server menolak laporan. Silakan periksa & coba lagi.');
       return;
     }
+    // Sukses / queued → draft tak diperlukan lagi.
+    try { await AsyncStorage.removeItem(draftKey); } catch {}
+
     if (res.status === 'queued') {
       Alert.alert('Tersimpan', 'Tidak ada koneksi. Laporan tersimpan & akan dikirim otomatis saat online.', [{ text: 'OK', onPress: () => setShowSuccess(true) }]);
     } else {
@@ -136,7 +169,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
   };
 
   return (
-    <View style={styles.container}>
+    <KeyboardAvoidingView style={styles.container} behavior={Platform.OS === 'ios' ? 'padding' : 'height'} keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}>
       <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} style={styles.backBtn}><Ionicons name="arrow-back" size={24} color={Colors.textPrimary} /></TouchableOpacity>
         <Text style={styles.headerTitle}>Laporan Kejadian</Text>
@@ -241,7 +274,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
 
         {/* Actions */}
         <View style={styles.actionRow}>
-          <Button title="Simpan Draft" variant="outline" size="medium" icon="save-outline" onPress={() => Alert.alert('Draft Disimpan')} style={{ flex: 1 }} />
+          <Button title="Simpan Draft" variant="outline" size="medium" icon="save-outline" onPress={handleSaveDraft} style={{ flex: 1 }} />
           <Button title={submitting ? 'Mengirim...' : 'KIRIM LAPORAN'} variant="danger" size="medium" icon="send-outline" onPress={handleSubmit} disabled={!canSubmit || submitting} style={{ flex: 1.5 }} />
         </View>
         <View style={{ height: 32 }} />
@@ -272,7 +305,7 @@ export default function LaporanKejadianScreen({ navigation }: any) {
           </View>
         </View>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 }
 

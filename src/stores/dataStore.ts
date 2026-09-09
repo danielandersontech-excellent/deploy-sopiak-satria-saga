@@ -229,9 +229,11 @@ interface DataStore {
   deleteRoute: (id: string) => Promise<SubmitResult>;
 
   activePatrol: ActivePatrol | null;
-  startPatrol: (routeId: string) => void;
-  scanCheckpoint: (checkpointId: string, fotoUrl?: string | null) => boolean;
-  endPatrol: () => void;
+  // [P1-2] Promise<SubmitResult>: layar dapat membedakan sukses server, hanya
+  // diantrekan offline, atau ditolak server (dan tidak menampilkan sukses palsu).
+  startPatrol: (routeId: string) => Promise<SubmitResult>;
+  scanCheckpoint: (checkpointId: string, fotoUrl?: string | null) => Promise<SubmitResult>;
+  endPatrol: () => Promise<SubmitResult>;
 
   laporanHarian: LaporanHarianData[];
   addLaporanHarian: (l: Omit<LaporanHarianData, 'id'>) => Promise<SubmitResult>;
@@ -768,9 +770,13 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== ACTIVE PATROL ====================
   activePatrol: null,
-  startPatrol: (routeId) => {
+  // [P1-2] Dikembalikan Promise<SubmitResult> agar layar tahu apakah start
+  // BENAR tersinkron ke server, hanya diantrekan offline, atau DITOLAK server
+  // (mis. rute/lokasi tidak valid) — sebelumnya penolakan hanya console.error
+  // dan patroli "aktif" lokal padahal tak pernah tercatat di server.
+  startPatrol: async (routeId) => {
     const route = get().routes.find((r) => r.id === routeId);
-    if (!route) return;
+    if (!route) return { status: 'error', error: 'Rute tidak ditemukan' };
     const cps = route.checkpointIds.map((cid) => {
       const cp = get().checkpoints.find((c) => c.id === cid);
       return { id: cid, nama: cp?.nama || cid, scanned: false };
@@ -785,25 +791,31 @@ export const useDataStore = create<DataStore>((set, get) => ({
     // Start RESILIENT: online → langsung & simpan patrolDbId; offline → antri
     // (prioritas patrol_start < patrol_scan, jadi start tersinkron lebih dulu).
     const startPayload = { route_id: routeId, route_name: route.nama, client_patrol_id: clientPatrolId };
-    executeOrQueue('patrol_start', startPayload, () => patroliApi.start(startPayload))
-      .then((res) => {
-        if (res && !res.queued && res.result?.id) {
-          set((s) => (s.activePatrol && s.activePatrol.clientPatrolId === clientPatrolId)
-            ? { activePatrol: { ...s.activePatrol, patrolDbId: res.result.id } } : {});
-        }
-      })
-      .catch((e) => console.error('[Patroli] Start error:', e));
+    try {
+      const res = await executeOrQueue('patrol_start', startPayload, () => patroliApi.start(startPayload));
+      if (res && !res.queued && res.result?.id) {
+        set((s) => (s.activePatrol && s.activePatrol.clientPatrolId === clientPatrolId)
+          ? { activePatrol: { ...s.activePatrol, patrolDbId: res.result.id } } : {});
+        return { status: 'success', id: res.result.id, data: res.result };
+      }
+      if (res?.queued) return { status: 'queued' };
+      return { status: 'success', data: res?.result };
+    } catch (e: any) {
+      // Server menolak (bukan sekadar offline) → batalkan patroli lokal, jangan
+      // biarkan user terjebak di layar "patroli aktif" yang tak pernah tercatat.
+      set((s) => (s.activePatrol && s.activePatrol.clientPatrolId === clientPatrolId) ? { activePatrol: null } : {});
+      return { status: 'error', error: errText(e, 'Gagal memulai patroli') };
+    }
   },
-  scanCheckpoint: (checkpointId, fotoUrl) => {
+  // [P1-2] scanCheckpoint kini async: hanya menandai checkpoint sebagai
+  // scanned bila server menerima (atau berhasil diantrekan offline). Bila
+  // server MENOLAK, checkpoint TIDAK ditandai berhasil sehingga user dapat
+  // scan ulang.
+  scanCheckpoint: async (checkpointId, fotoUrl) => {
     const ap = get().activePatrol;
-    if (!ap) return false;
+    if (!ap) return { status: 'error', error: 'Tidak ada patroli aktif' };
     const idx = ap.checkpoints.findIndex((c) => c.id === checkpointId && !c.scanned);
-    if (idx === -1) return false;
-    const updated = [...ap.checkpoints];
-    const now = fmtTime(new Date());
-    updated[idx] = { ...updated[idx], scanned: true, scanTime: now };
-    const nextUnscanned = updated.findIndex((c) => !c.scanned);
-    set({ activePatrol: { ...ap, checkpoints: updated, currentIndex: nextUnscanned === -1 ? updated.length : nextUnscanned } });
+    if (idx === -1) return { status: 'error', error: 'Checkpoint sudah pernah di-scan sebelumnya' };
 
     // [4-2] Scan TIDAK lagi bergantung mutlak pada patrolDbId. Bawa client_patrol_id
     // + idempotency_key. Jika start belum sinkron (offline/race) → antri langsung
@@ -811,14 +823,37 @@ export const useDataStore = create<DataStore>((set, get) => ({
     // mencegah duplikasi saat replay.
     const idempotency_key = genIdemKey();
     const scanData: any = { patroli_id: ap.patrolDbId || null, client_patrol_id: ap.clientPatrolId, checkpoint_id: checkpointId, foto_url: fotoUrl || null, idempotency_key };
-    if (ap.patrolDbId) {
-      executeOrQueue('patrol_scan', scanData, () => patroliApi.scan(ap.patrolDbId!, scanData)).catch(console.error);
-    } else {
-      addToQueue('patrol_scan', scanData).catch(console.error);
+    try {
+      let queued = false;
+      let result: any = null;
+      if (ap.patrolDbId) {
+        const r = await executeOrQueue('patrol_scan', scanData, () => patroliApi.scan(ap.patrolDbId!, scanData));
+        queued = !!r.queued; result = r.result;
+      } else {
+        await addToQueue('patrol_scan', scanData);
+        queued = true;
+      }
+      // Server menerima (atau diantrekan) → tandai checkpoint scanned di lokal.
+      const cur = get().activePatrol;
+      if (cur && cur.clientPatrolId === ap.clientPatrolId) {
+        const updated = [...cur.checkpoints];
+        const stillIdx = updated.findIndex((c) => c.id === checkpointId && !c.scanned);
+        if (stillIdx !== -1) {
+          const now = fmtTime(new Date());
+          updated[stillIdx] = { ...updated[stillIdx], scanned: true, scanTime: now };
+          const nextUnscanned = updated.findIndex((c) => !c.scanned);
+          set({ activePatrol: { ...cur, checkpoints: updated, currentIndex: nextUnscanned === -1 ? updated.length : nextUnscanned } });
+        }
+      }
+      return queued ? { status: 'queued' } : { status: 'success', data: result };
+    } catch (e: any) {
+      // Ditolak server → JANGAN tandai checkpoint berhasil, biarkan bisa di-scan ulang.
+      return { status: 'error', error: errText(e, 'Gagal menyimpan checkpoint') };
     }
-    return true;
   },
-  endPatrol: () => {
+  // [P1-2] endPatrol Promise<SubmitResult> agar layar tahu bila server menolak
+  // penutupan patroli (mis. patroli tidak ditemukan) dan bisa memberi tahu user.
+  endPatrol: async () => {
     const ap = get().activePatrol;
     const scannedCount = ap?.checkpoints.filter((c) => c.scanned).length || 0;
     const totalCount = ap?.checkpoints.length || 0;
@@ -827,13 +862,21 @@ export const useDataStore = create<DataStore>((set, get) => ({
     get().addNotifikasi({ tipe: scannedCount === totalCount ? 'success' : 'warning', judul: 'Patroli Selesai', pesan: `Rute "${ap?.routeName || '-'}" selesai. ${scannedCount}/${totalCount} checkpoint dipindai.`, waktu: 'Baru saja', dibaca: false, targetRole: ['komandan', 'supervisor'], targetUserId: null });
 
     // [4-2] End juga tidak bergantung mutlak pada patrolDbId (offline patrol).
-    if (ap) {
-      const endData: any = { patroli_id: ap.patrolDbId || null, client_patrol_id: ap.clientPatrolId, checkpoint_scanned: scannedCount, checkpoint_total: totalCount };
+    if (!ap) return { status: 'success' };
+    const endData: any = { patroli_id: ap.patrolDbId || null, client_patrol_id: ap.clientPatrolId, checkpoint_scanned: scannedCount, checkpoint_total: totalCount };
+    try {
+      let queued = false;
+      let result: any = null;
       if (ap.patrolDbId) {
-        executeOrQueue('patrol_end', endData, () => patroliApi.end(ap.patrolDbId!, endData)).catch(console.error);
+        const r = await executeOrQueue('patrol_end', endData, () => patroliApi.end(ap.patrolDbId!, endData));
+        queued = !!r.queued; result = r.result;
       } else {
-        addToQueue('patrol_end', endData).catch(console.error);
+        await addToQueue('patrol_end', endData);
+        queued = true;
       }
+      return queued ? { status: 'queued' } : { status: 'success', data: result };
+    } catch (e: any) {
+      return { status: 'error', error: errText(e, 'Gagal menyimpan akhir patroli') };
     }
   },
 

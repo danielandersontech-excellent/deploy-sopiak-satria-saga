@@ -216,9 +216,11 @@ export default function SetupCheckpointScreen({ navigation }: any) {
       setShowModal(false);
     } catch (e: any) {
       console.log('[Checkpoint] save err:', e);
+      // [P2-2] Sertakan detail validasi backend (array pesan per-field) bila ada.
+      const details = Array.isArray(e?.details) ? ` (${e.details.join(', ')})` : '';
       Alert.alert(
         'Error',
-        e?.message || (lang === 'en' ? 'Failed to save checkpoint' : 'Gagal menyimpan checkpoint')
+        (e?.message || (lang === 'en' ? 'Failed to save checkpoint' : 'Gagal menyimpan checkpoint')) + details
       );
     } finally {
       setSubmitting(false);

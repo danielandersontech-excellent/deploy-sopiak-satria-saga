@@ -166,6 +166,8 @@ export default function UbahPINScreen({ navigation }: any) {
     } catch (err: any) {
       setSaving(false);
       const raw = String(err?.message || '');
+      // [P2-7] Sertakan detail validasi backend (array pesan per-field) bila ada.
+      const details = Array.isArray(err?.details) ? ` (${err.details.join(', ')})` : '';
       // Translate common errors
       let msg = raw;
       if (/pin.*lama.*salah|incorrect|wrong/i.test(raw)) {
@@ -175,7 +177,7 @@ export default function UbahPINScreen({ navigation }: any) {
           ? 'Network error. Check your connection.'
           : 'Gagal konek ke server. Cek koneksi internet.';
       }
-      setErrorMsg(msg || (lang === 'en' ? 'Failed to change PIN' : 'Gagal mengubah PIN'));
+      setErrorMsg((msg || (lang === 'en' ? 'Failed to change PIN' : 'Gagal mengubah PIN')) + details);
     }
   };
 

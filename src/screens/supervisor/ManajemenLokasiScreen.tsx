@@ -172,9 +172,11 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       );
     } catch (e: any) {
       console.log('[Lokasi] add pos err:', e);
+      // [P2-2] Sertakan detail validasi backend (array pesan per-field) bila ada.
+      const details = Array.isArray(e?.details) ? ` (${e.details.join(', ')})` : '';
       Alert.alert(
         'Error',
-        e?.message || (lang === 'en' ? 'Failed to add post. Try again.' : 'Gagal menambah pos. Coba lagi.')
+        (e?.message || (lang === 'en' ? 'Failed to add post. Try again.' : 'Gagal menambah pos. Coba lagi.')) + details
       );
     } finally {
       setSubmitting(false);
@@ -289,7 +291,9 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
       Alert.alert('✅', lang === 'en' ? 'Post updated' : 'Pos berhasil diperbarui');
     } catch (e: any) {
       console.log('[Lokasi] edit pos err:', e);
-      Alert.alert('Error', e?.message || (lang === 'en' ? 'Failed to update post' : 'Gagal memperbarui pos'));
+      // [P2-2] Sertakan detail validasi backend (array pesan per-field) bila ada.
+      const details = Array.isArray(e?.details) ? ` (${e.details.join(', ')})` : '';
+      Alert.alert('Error', (e?.message || (lang === 'en' ? 'Failed to update post' : 'Gagal memperbarui pos')) + details);
     } finally {
       setSubmitting(false);
     }

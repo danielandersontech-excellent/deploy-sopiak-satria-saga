@@ -221,6 +221,19 @@ export default function PatroliScreen({ navigation }: any) {
   };
 
   // ═══ Handlers ═══
+  // [P1-2] startPatrol/endPatrol kini Promise<SubmitResult> — tampilkan hasil
+  // sesungguhnya (sukses/diantrekan offline/ditolak server), jangan berasumsi sukses.
+  const doStart = async (routeId: string) => {
+    const res = await startPatrol(routeId);
+    if (res.status === 'error') {
+      Alert.alert('Gagal Memulai Patroli', res.error || 'Server menolak memulai patroli. Silakan coba lagi.');
+      return;
+    }
+    if (res.status === 'queued') {
+      Alert.alert('Tersimpan Offline', 'Tidak ada koneksi. Patroli dimulai secara lokal & akan disinkronkan saat online.');
+    }
+  };
+
   const handleStart = (routeId: string) => {
     const cnt = routeCount(routeId);
     const name = routes.find(r => r.id === routeId)?.nama || 'Rute';
@@ -228,8 +241,22 @@ export default function PatroliScreen({ navigation }: any) {
       cnt > 0
         ? `Anda sudah patroli "${name}" sebanyak ${cnt}x hari ini.\n\nMulai patroli lagi?`
         : `Mulai patroli "${name}". Pastikan Anda siap.`,
-      [{ text: 'Batal', style: 'cancel' }, { text: 'Mulai', onPress: () => startPatrol(routeId) }]
+      [{ text: 'Batal', style: 'cancel' }, { text: 'Mulai', onPress: () => doStart(routeId) }]
     );
+  };
+
+  const doEnd = async (info: { name: string; scanned: number; total: number; time: string }, allDone: boolean) => {
+    const res = await endPatrol();
+    if (res.status === 'error') {
+      Alert.alert('Gagal Menyimpan Patroli', res.error || 'Server menolak data akhir patroli. Silakan hubungi supervisor bila diperlukan.');
+      return;
+    }
+    const queuedNote = res.status === 'queued' ? '\n\nTersimpan offline, akan dikirim saat online.' : '';
+    if (allDone) {
+      Alert.alert('Patroli Selesai! 🎉', `${info.name}\nSemua ${info.total} CP berhasil! • ${info.time}\n\nAnda bisa patroli lagi jika diperlukan.${queuedNote}`);
+    } else {
+      Alert.alert('Patroli Diakhiri', `${info.name}\n${info.scanned}/${info.total} CP • ${info.time}${queuedNote}`);
+    }
   };
 
   const handleEnd = () => {
@@ -237,14 +264,10 @@ export default function PatroliScreen({ navigation }: any) {
     if (scanned < total) {
       Alert.alert('Patroli Belum Selesai', `Masih ada ${total - scanned} checkpoint belum di-scan. Yakin akhiri?`, [
         { text: 'Lanjutkan', style: 'cancel' },
-        { text: 'Akhiri', style: 'destructive', onPress: () => {
-          endPatrol();
-          Alert.alert('Patroli Diakhiri', `${info.name}\n${info.scanned}/${info.total} CP • ${info.time}`);
-        }},
+        { text: 'Akhiri', style: 'destructive', onPress: () => doEnd(info, false) },
       ]);
     } else {
-      endPatrol();
-      Alert.alert('Patroli Selesai! 🎉', `${info.name}\nSemua ${info.total} CP berhasil! • ${info.time}\n\nAnda bisa patroli lagi jika diperlukan.`);
+      doEnd(info, true);
     }
   };
 

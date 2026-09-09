@@ -263,6 +263,8 @@ export default function LoginScreen({ navigation }: any) {
                   keyboardType="number-pad"
                   maxLength={6}
                   editable={!loading}
+                  returnKeyType="done"
+                  onSubmitEditing={handleLogin}
                 />
                 <TouchableOpacity onPress={() => setShowPin(!showPin)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                   <Ionicons name={showPin ? 'eye-off-outline' : 'eye-outline'} size={20} color={C.textMuted} />

@@ -175,8 +175,12 @@ export default function BroadcastPesanScreen({ navigation }: any) {
           {
             text: 'OK',
             onPress: () => {
+              // [P2-3] Reset penuh (termasuk target & prioritas) agar broadcast
+              // berikutnya tidak diam-diam memakai target/prioritas terakhir.
               setJudul('');
               setPesan('');
+              setTarget(defaultTarget);
+              setPrioritas('normal');
             },
           },
         ]
@@ -322,7 +326,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
           placeholder={lang === 'en' ? 'Message title...' : 'Judul pesan...'}
           placeholderTextColor={theme.textMuted}
           editable={!submitting}
-          maxLength={120}
+          maxLength={200}
         />
 
         <Text style={[s.fieldLabel, { color: theme.text }]}>
@@ -343,7 +347,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
           }
           placeholderTextColor={theme.textMuted}
           editable={!submitting}
-          maxLength={2000}
+          maxLength={5000}
         />
 
         <Button

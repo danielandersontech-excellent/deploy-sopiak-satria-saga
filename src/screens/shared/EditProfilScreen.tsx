@@ -295,11 +295,13 @@ export default function EditProfilScreen({ navigation }: any) {
       setSaving(false);
       setUploadProgress(null);
       const raw = String(err?.message || '');
+      // [P2-1] Sertakan detail validasi backend (array pesan per-field), selaras jalur klien di atas.
+      const details = Array.isArray(err?.details) ? ` (${err.details.join(', ')})` : '';
       let msg = raw;
       if (/network|fetch|timeout/i.test(raw)) {
         msg = lang === 'en' ? 'Network error. Check your connection.' : 'Gagal konek server. Cek koneksi.';
       }
-      setErrorMsg(msg || (lang === 'en' ? 'Failed to save profile' : 'Gagal menyimpan profil'));
+      setErrorMsg((msg || (lang === 'en' ? 'Failed to save profile' : 'Gagal menyimpan profil')) + details);
     }
   };
 
