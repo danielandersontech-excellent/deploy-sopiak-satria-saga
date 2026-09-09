@@ -13,7 +13,10 @@ const TABS = ['Semua', 'Harian', 'Kejadian'];
 const SHORT_MONTHS_ID = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
 function fmtTanggal(iso?: string): string {
   if (!iso) return '-';
-  const d = new Date(iso);
+  // [Audit 2D] Kolom DATE kini string 'YYYY-MM-DD' (backend audit 2A) → parse
+  // sebagai tanggal LOKAL agar tidak bergeser sehari & tampil "DD MMM YYYY".
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso.trim());
+  const d = m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)) : new Date(iso);
   if (isNaN(d.getTime())) return '-';
   return `${d.getDate()} ${SHORT_MONTHS_ID[d.getMonth()]} ${d.getFullYear()}`;
 }
@@ -54,7 +57,7 @@ export default function RiwayatLaporanScreen({ navigation }: any) {
       const kRows: any[] = Array.isArray(kRes) ? kRes : (kRes?.data || kRes?.items || []);
       setHarian(hRows.map((l: any) => ({
         id: l.id, tipe: 'Harian' as const, desc: l.kondisi || l.aktivitas || '-', status: l.status || 'pending',
-        tanggal: l.tanggal || fmtTanggal(l.created_at), waktuSubmit: fmtJam(l.created_at), catatanKomandan: l.catatan_komandan || '',
+        tanggal: fmtTanggal(l.tanggal || l.created_at), waktuSubmit: fmtJam(l.created_at), catatanKomandan: l.catatan_komandan || '', // [Audit 2D] format DATE
         _ts: new Date(l.created_at).getTime() || 0,
       })));
       setKejadian(kRows.map((l: any) => ({

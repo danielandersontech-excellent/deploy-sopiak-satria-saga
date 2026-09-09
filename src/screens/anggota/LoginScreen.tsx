@@ -26,7 +26,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, StyleSheet, TextInput, TouchableOpacity,
   KeyboardAvoidingView, Platform, ScrollView, Animated,
-  ActivityIndicator, Image, Dimensions, StatusBar,
+  ActivityIndicator, Image, Dimensions, StatusBar, Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -119,7 +119,20 @@ export default function LoginScreen({ navigation }: any) {
       if (ok) {
         try { await loadAllData(); } catch (dataErr) { console.log('[Login] loadAllData warning:', dataErr); }
         setLoading(false);
-        navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+        // [Audit 2D] Backend mengirim must_change_pin=true (PIN awal acak / reset
+        // oleh admin) untuk user maupun klien. Sebelumnya diabaikan → pengguna
+        // terus memakai PIN sementara. Arahkan langsung ke layar Ubah PIN (bisa
+        // ditunda dengan tombol kembali) dan beri tahu alasannya.
+        const mustChange = !!(useAuthStore.getState().user as any)?.must_change_pin;
+        if (mustChange) {
+          navigation.reset({ index: 1, routes: [{ name: 'MainTabs' }, { name: 'UbahPIN' }] });
+          Alert.alert(
+            'Ganti PIN Diperlukan',
+            'Akun Anda masih memakai PIN awal/sementara. Demi keamanan, silakan buat PIN baru sekarang.'
+          );
+        } else {
+          navigation.reset({ index: 0, routes: [{ name: 'MainTabs' }] });
+        }
       } else {
         setLoading(false);
         const msg = useAuthStore.getState().error || 'Login gagal. Periksa NRP dan PIN Anda.';

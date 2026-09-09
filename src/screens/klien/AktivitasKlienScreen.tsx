@@ -143,7 +143,10 @@ export default function AktivitasKlienScreen() {
       let filtered = arr;
       if (myLokasiId) {
         filtered = arr.filter((p: any) => {
-          const pLokasiId = getField(p, 'lokasi_id', 'lokasiId');
+          // [Audit 2D] Baris patroli (audit 2A) kini FLAT: lokasi petugas ada di
+          // `user_lokasi_id` (tak ada objek `p.user`, dan tabel patroli tak punya
+          // lokasi_id) → filter lama selalu false → tab Patroli klien kosong.
+          const pLokasiId = getField(p, 'lokasi_id', 'lokasiId', 'user_lokasi_id');
           const userLokasiId = getField(p.user || {}, 'lokasi_id', 'lokasiId'); // guard against undefined
           return String(pLokasiId || '') === String(myLokasiId) ||
                  String(userLokasiId || '') === String(myLokasiId);
@@ -157,7 +160,7 @@ export default function AktivitasKlienScreen() {
           const stEpoch = stRaw ? new Date(stRaw).getTime() : Date.now();
           return {
             id: String(p.id),
-            userName: getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas'),
+            userName: getField(p, 'nama', 'user_nama') || getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas'), // [Audit 2D] nama flat
             routeName: getField(p, 'route_name', 'routeName') || (lang === 'en' ? 'Patrol Route' : 'Rute Patroli'),
             startTime: stRaw
               ? new Date(stRaw).toLocaleTimeString(dateLocale, { hour: '2-digit', minute: '2-digit' })

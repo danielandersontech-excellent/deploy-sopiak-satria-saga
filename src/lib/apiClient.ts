@@ -175,6 +175,21 @@ export async function testConnection(url: string): Promise<{ ok: boolean; ms: nu
 let _isRefreshing = false;
 let _refreshPromise: Promise<boolean> | null = null;
 
+// [Audit 2D] Handler "sesi berakhir" — dipasang oleh AppNavigator. Dipanggil
+// saat refresh token gagal atau akun dinonaktifkan (401 ACCOUNT_DEACTIVATED)
+// agar aplikasi kembali ke layar Login, bukan diam di layar lama dengan
+// setiap request gagal. Diberi flag agar hanya dipicu sekali per sesi.
+let _onSessionExpired: ((reason: 'expired' | 'deactivated') => void) | null = null;
+let _sessionExpiredNotified = false;
+export function setSessionExpiredHandler(fn: ((reason: 'expired' | 'deactivated') => void) | null) {
+  _onSessionExpired = fn;
+}
+function notifySessionExpired(reason: 'expired' | 'deactivated') {
+  if (_sessionExpiredNotified) return;
+  _sessionExpiredNotified = true;
+  try { _onSessionExpired?.(reason); } catch {}
+}
+
 async function tryRefreshToken(): Promise<boolean> {
   const rt = await getRefreshToken();
   if (!rt) return false;
@@ -188,7 +203,15 @@ async function tryRefreshToken(): Promise<boolean> {
     const data = await res.json();
     await setToken(data.token);
     if (data.refresh_token) await setRefreshToken(data.refresh_token);
-    if (data.user) await saveUser(data.user);
+    // [Audit 2D] Respons /auth/refresh hanya memuat user ringkas
+    // ({id,nrp,nama,role[,client_id]}). Sebelumnya objek ringkas ini MENIMPA
+    // user lengkap di AsyncStorage → saat restore offline, lokasi_id/foto/
+    // shift/pos hilang. Sekarang di-merge di atas user tersimpan.
+    if (data.user) {
+      let prev: any = null;
+      try { prev = await getSavedUser(); } catch {}
+      await saveUser(prev && prev.id === data.user.id ? { ...prev, ...data.user } : data.user);
+    }
     console.log('[API] Token refreshed successfully');
     return true;
   } catch { return false; }
@@ -251,23 +274,43 @@ export async function api<T = any>(endpoint: string, opts: ApiOpts = {}): Promis
           }
         } else {
           await clearToken();
-          throw new Error('Session expired. Silakan login ulang.');
+          notifySessionExpired('expired'); // [Audit 2D] kembali ke Login
+          throw new Error('Session expired. Sesi berakhir, silakan login ulang.');
         }
+      } else if (errData.code === 'ACCOUNT_DEACTIVATED') {
+        // [Audit 2D] Backend (audit 2A) menolak SETIAP request akun nonaktif
+        // dengan 401 ACCOUNT_DEACTIVATED. Token tidak berguna lagi → hapus dan
+        // arahkan ke Login dengan pesan yang jelas (bukan error per layar).
+        await clearToken();
+        notifySessionExpired('deactivated');
+        throw new Error(errData.error || 'Akun Anda dinonaktifkan. Hubungi admin.');
       } else {
         // 401 but NOT token expired - throw the error directly (don't fall through)
         throw new Error(errData.error || 'Unauthorized');
       }
     }
-    
+
     const contentType = res.headers.get('content-type') || '';
     if (!contentType.includes('application/json')) {
       const text = await res.text();
       console.log(`[API] Non-JSON response (${res.status}):`, text.substring(0, 200));
-      throw new Error(`Server error: ${text.substring(0, 100)}`);
+      // [Audit 2D] 502/503/504 dari proxy (HTML) = server tidak terjangkau →
+      // pesan Indonesia + kode status agar offlineSync menganggapnya retriable.
+      if (res.status === 502 || res.status === 503 || res.status === 504) {
+        throw new Error(`Gagal konek ke server (HTTP ${res.status}). Coba lagi beberapa saat.`);
+      }
+      throw new Error(`Server error (HTTP ${res.status}): ${text.substring(0, 100)}`);
     }
     
     const data = await res.json();
-    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+    if (!res.ok) {
+      // [Audit 2D] Sertakan status & details (400 validasi backend mengirim
+      // { error, details: [] }) agar layar bisa menampilkan daftar kesalahan.
+      const err: any = new Error(data.error || `HTTP ${res.status}`);
+      err.status = res.status;
+      if (data.details) err.details = data.details;
+      throw err;
+    }
     return data as T;
   } catch (err: any) {
     clearTimeout(timer);
@@ -313,8 +356,14 @@ export async function apiUpload<T = any>(endpoint: string, formData: FormData): 
         res = await doFetch(await getToken()); // retry once with the fresh token
       } else {
         await clearToken();
-        throw new Error('Session expired. Silakan login ulang.');
+        notifySessionExpired('expired'); // [Audit 2D]
+        throw new Error('Session expired. Sesi berakhir, silakan login ulang.');
       }
+    } else if (errData.code === 'ACCOUNT_DEACTIVATED') {
+      // [Audit 2D] samakan dengan api(): akun nonaktif → keluar ke Login.
+      await clearToken();
+      notifySessionExpired('deactivated');
+      throw new Error(errData.error || 'Akun Anda dinonaktifkan. Hubungi admin.');
     } else {
       throw new Error(errData.error || 'Unauthorized');
     }
@@ -329,7 +378,12 @@ export async function apiUpload<T = any>(endpoint: string, formData: FormData): 
   }
 
   const data = await res.json();
-  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const err: any = new Error(data.error || `HTTP ${res.status}`); // [Audit 2D] status+details
+    err.status = res.status;
+    if (data.details) err.details = data.details;
+    throw err;
+  }
   return data as T;
 }
 
@@ -339,6 +393,7 @@ export const authApi = {
     const data = await api('/api/auth/login', { method: 'POST', body: { nrp, pin }, noAuth: true });
     if (data.token) await setToken(data.token);
     if (data.refresh_token) await setRefreshToken(data.refresh_token);
+    _sessionExpiredNotified = false; // [Audit 2D] sesi baru → handler boleh dipicu lagi
     return data;
   },
   me: () => api('/api/auth/me'),

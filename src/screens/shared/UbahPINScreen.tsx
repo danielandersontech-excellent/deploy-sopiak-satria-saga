@@ -148,6 +148,9 @@ export default function UbahPINScreen({ navigation }: any) {
     setSaving(true);
     try {
       await authApi.changePin(pinLama, pinBaru);
+      // [Audit 2D] PIN sudah diganti → flag PIN-awal di sesi lokal dimatikan agar
+      // prompt "Ganti PIN" (LoginScreen) tidak muncul lagi pada sesi ini.
+      try { useAuthStore.getState().updateUser({ must_change_pin: false } as any); } catch {}
       setSaving(false);
       // Reset so beforeRemove guard doesn't trigger on success path
       setPinLama('');

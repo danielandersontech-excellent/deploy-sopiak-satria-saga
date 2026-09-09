@@ -41,8 +41,16 @@ export default function PanicButtonScreen({ navigation }: any) {
   const [loc, setLoc] = useState<any>(null);
 
   // Get GPS immediately
+  const mountedRef = useRef(true);
   useEffect(() => {
-    getCurrentLocation().then(l => l && setLoc(l));
+    mountedRef.current = true;
+    getCurrentLocation().then(l => l && mountedRef.current && setLoc(l));
+    // [Audit 2D] Bersihkan interval "tahan tombol" saat layar ditutup di tengah
+    // tekanan (sebelumnya bocor & setState pada komponen yang sudah unmount).
+    return () => {
+      mountedRef.current = false;
+      if (holdRef.current) { clearInterval(holdRef.current); holdRef.current = null; }
+    };
   }, []);
 
   useEffect(() => {
@@ -71,8 +79,13 @@ export default function PanicButtonScreen({ navigation }: any) {
         Vibration.vibrate(500);
         setPhase('activating');
         setTimeout(async () => {
-          try { const r = await activatePanic(); setPanicQueued(r.queued); }
-          catch { setPanicQueued(true); }
+          // [Audit 2D] Panic tetap dikirim walau layar sudah ditutup; hanya
+          // pembaruan state UI yang dilewati bila komponen sudah unmount.
+          let queued = true;
+          try { const r = await activatePanic(); queued = r.queued; }
+          catch { queued = true; }
+          if (!mountedRef.current) return;
+          setPanicQueued(queued);
           setPhase('active'); setTimer(0);
         }, 2000);
       }

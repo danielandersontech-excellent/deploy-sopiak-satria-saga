@@ -103,9 +103,12 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
   // ===== Fetch from server =====
   const fetchLaporan = useCallback(async () => {
+    // [Audit 2D] Tanpa limit backend hanya memberi 20 laporan terbaru → laporan
+    // pending yang lebih lama tidak pernah muncul di antrian validasi. Ambil
+    // 100 (batas maksimum server).
     let lhData: any[] = [];
     try {
-      const lhResult = await laporanApi.harianList();
+      const lhResult = await laporanApi.harianList('limit=100');
       lhData = extractArray(lhResult);
       console.log('[Validasi] Fetched LH:', lhData.length, 'items');
     } catch (e) {
@@ -114,7 +117,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
 
     let lkData: any[] = [];
     try {
-      const lkResult = await laporanApi.kejadianList();
+      const lkResult = await laporanApi.kejadianList('limit=100');
       lkData = extractArray(lkResult);
       console.log('[Validasi] Fetched LK:', lkData.length, 'items');
     } catch (e) {

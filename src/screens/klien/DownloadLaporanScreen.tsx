@@ -147,7 +147,8 @@ export default function DownloadLaporanScreen({ navigation }: any) {
         let filtered = arr;
         if (myLokasiId) {
           filtered = arr.filter((p: any) => {
-            const pLokasiId = getField(p, 'lokasi_id', 'lokasiId');
+            // [Audit 2D] lokasi petugas kini flat di `user_lokasi_id` (lihat AktivitasKlien).
+            const pLokasiId = getField(p, 'lokasi_id', 'lokasiId', 'user_lokasi_id');
             const userLokasiId = getField(p.user || {}, 'lokasi_id', 'lokasiId');
             return String(pLokasiId || '') === String(myLokasiId) ||
                    String(userLokasiId || '') === String(myLokasiId);
@@ -313,7 +314,7 @@ export default function DownloadLaporanScreen({ navigation }: any) {
     if (type === 'Patroli') {
       // 🚨 Build actual patroli table now (was always empty)
       const rows = patroli.map((p) => {
-        const userName = escapeHtml(getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas'));
+        const userName = escapeHtml(getField(p, 'nama', 'user_nama') || getField(p.user || {}, 'nama', 'name') || (lang === 'en' ? 'Officer' : 'Petugas')); // [Audit 2D]
         const routeName = escapeHtml(getField(p, 'route_name', 'routeName') || '-');
         const stRaw = getField(p, 'start_time', 'startTime');
         const etRaw = getField(p, 'end_time', 'endTime');

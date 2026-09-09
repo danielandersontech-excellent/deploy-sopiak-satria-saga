@@ -49,6 +49,14 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
+// [Audit 2D] Tanggal LOKAL 'YYYY-MM-DD'. Sebelumnya `d.toISOString().slice(0,10)`
+// (UTC): di WIB (UTC+7) tengah malam lokal = 17:00 UTC hari SEBELUMNYA, sehingga
+// penugasan disimpan/ditampilkan mundur satu hari. Backend kini mengembalikan
+// kolom DATE persis 'YYYY-MM-DD', jadi perbandingan harus memakai tanggal lokal.
+function toLocalYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // Get the current Monday-Sunday week based on today
 function buildCurrentWeek(): { dates: Date[]; dayStrs: string[]; todayIdx: number } {
   const today = new Date();
@@ -132,7 +140,7 @@ export default function JadwalShiftScreen({ navigation }: any) {
   // Selected day's date string
   const selectedDateStr = useMemo(() => {
     const d = week.dates[selectedDay];
-    return d ? d.toISOString().slice(0, 10) : '';
+    return d ? toLocalYMD(d) : ''; // [Audit 2D] tanggal lokal, bukan UTC
   }, [week, selectedDay]);
 
   // Assignments for selected day
@@ -206,9 +214,11 @@ export default function JadwalShiftScreen({ navigation }: any) {
       );
     } catch (e: any) {
       console.log('[JadwalShift] assign err:', e);
+      // [Audit 2D] 400 validasi backend membawa `details` → tampilkan agar jelas.
+      const details = Array.isArray(e?.details) && e.details.length ? `\n${e.details.join('\n')}` : '';
       Alert.alert(
         'Error',
-        e?.message || (lang === 'en' ? 'Failed to assign' : 'Gagal melakukan assign')
+        (e?.message || (lang === 'en' ? 'Failed to assign' : 'Gagal melakukan assign')) + details
       );
     } finally {
       setSubmitting(false);

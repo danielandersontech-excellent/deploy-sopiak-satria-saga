@@ -19,7 +19,7 @@
  *  ✅ i18n tab labels reactive to language changes
  */
 import React, { useEffect, useState } from 'react';
-import { View, Text, StyleSheet, Image, Animated, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, Image, Animated, StatusBar, Platform, Alert } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   NavigationContainer, DefaultTheme, DarkTheme,
@@ -39,6 +39,7 @@ import {
   registerForPushNotifications,
   savePushToken,
 } from '../services/pushNotifications';
+import { setSessionExpiredHandler } from '../lib/apiClient';
 
 // ===== ANGGOTA SCREENS =====
 import LoginScreen from '../screens/anggota/LoginScreen';
@@ -472,7 +473,10 @@ export default function AppNavigator() {
           try {
             const token = await registerForPushNotifications();
             const userId = useAuthStore.getState().user?.id;
-            if (token && userId) {
+            const userRole = useAuthStore.getState().user?.role;
+            // [Audit 2D] Klien (id 'client-…') tidak punya baris di tabel users →
+            // PUT /users/:id/push-token selalu gagal; jangan panggil untuk klien.
+            if (token && userId && userRole !== 'klien') {
               await savePushToken(userId, token);
             }
           } catch (pushErr) {
@@ -500,6 +504,31 @@ export default function AppNavigator() {
     })();
 
     return () => { cancelled = true; };
+  }, []);
+
+  // [Audit 2D] Sesi berakhir (refresh token gagal / akun dinonaktifkan) →
+  // bersihkan sesi lokal lalu kembali ke Login. Sebelumnya token dihapus
+  // diam-diam dan pengguna tetap di layar lama dengan semua request gagal.
+  useEffect(() => {
+    setSessionExpiredHandler((reason) => {
+      if (!useAuthStore.getState().isLoggedIn) return; // belum login → tak perlu reset
+      (async () => {
+        try {
+          const { performLogout } = require('../services/sessionCleanup');
+          await performLogout();
+        } catch {
+          try { useAuthStore.setState({ user: null, isLoggedIn: false }); } catch {}
+        }
+        try { navigationRef.current?.reset({ index: 0, routes: [{ name: 'Login' }] }); } catch {}
+        Alert.alert(
+          reason === 'deactivated' ? 'Akun Dinonaktifkan' : 'Sesi Berakhir',
+          reason === 'deactivated'
+            ? 'Akun Anda telah dinonaktifkan. Hubungi admin untuk informasi lebih lanjut.'
+            : 'Sesi login Anda telah berakhir. Silakan login kembali.',
+        );
+      })();
+    });
+    return () => setSessionExpiredHandler(null);
   }, []);
 
   if (initializing) {

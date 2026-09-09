@@ -26,7 +26,7 @@ import { Colors, Typography, Spacing, Radius, Shadows } from '../../constants';
 import { Card, Badge, Button } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
-import { usersApi } from '../../lib/apiClient';
+import { usersApi, authApi } from '../../lib/apiClient';
 import { useTheme } from '../../lib/theme';
 import { useI18n } from '../../lib/i18n';
 // AUDIT-B1A (BUG-01): full logout teardown (state/cache/queue/services/push token)
@@ -65,7 +65,9 @@ export default function ProfilScreen({ navigation }: any) {
     const uid = getField(user, 'id', '_id');
     if (!uid) return;
     try {
-      const data = await usersApi.get(uid);
+      // [Audit 2D] Klien (id 'client-…') tidak ada di /api/users/:id (404) →
+      // ambil profil segar dari /api/auth/me yang memahami akun klien.
+      const data = user?.role === 'klien' ? await authApi.me() : await usersApi.get(uid);
       if (data) {
         setFreshUser(data);
         // FIX: Sync back to authStore menggunakan updateUser (bukan setUser)

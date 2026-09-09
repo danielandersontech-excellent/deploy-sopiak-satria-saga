@@ -2,7 +2,7 @@
  * LAPORAN HARIAN - Real Camera Integration
  * Uses CameraModal for documentation photos + ImagePicker for gallery
  */
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, Modal, Image,
   KeyboardAvoidingView, Platform,
@@ -43,6 +43,23 @@ export default function LaporanHarianScreen({ navigation }: any) {
   const [showCamera, setShowCamera] = useState(false);
 
   const canSubmit = aktivitas.trim().length >= 50; // [3-8] abaikan spasi
+
+  // [Audit 2D] Objek user dari backend memakai `pos_nama` (join pos_jaga), bukan
+  // `posJaga` → sebelumnya selalu jatuh ke literal 'Pos Utama' dan nilai itu
+  // tersimpan di laporan. Fallback: cari nama pos dari store via pos_jaga_id.
+  const allLokasi = useDataStore((s) => s.lokasi);
+  const posJagaNama = useMemo(() => {
+    const u: any = user || {};
+    if (u.pos_nama) return String(u.pos_nama);
+    if (u.posJaga) return String(u.posJaga);
+    if (u.pos_jaga_id) {
+      for (const l of allLokasi) {
+        const p = (l.posList || []).find((x) => x.id === u.pos_jaga_id);
+        if (p) return p.nama;
+      }
+    }
+    return '-';
+  }, [user, allLokasi]);
 
   // [3-7] Persistensi draft lokal (AsyncStorage), per user.
   const draftKey = `@ptsss_draft_laporan_harian_${user?.id || 'anon'}`;
@@ -116,7 +133,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
       nrp: user?.nrp || '220001',
       tanggal,
       shift: user?.shift || '08:00-16:00',
-      posJaga: user?.posJaga || 'Pos Utama',
+      posJaga: posJagaNama, // [Audit 2D]
       kondisi,
       aktivitas,
       temuan,
@@ -170,7 +187,7 @@ export default function LaporanHarianScreen({ navigation }: any) {
           <View style={styles.infoRow}><Text style={styles.infoLabel}>NRP</Text><Text style={styles.infoValue}>{user?.nrp}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Tanggal</Text><Text style={styles.infoValue}>{tanggal}</Text></View>
           <View style={styles.infoRow}><Text style={styles.infoLabel}>Shift</Text><Text style={styles.infoValue}>{user?.shift}</Text></View>
-          <View style={[styles.infoRow, { borderBottomWidth: 0 }]}><Text style={styles.infoLabel}>Pos Jaga</Text><Text style={styles.infoValue}>{user?.posJaga}</Text></View>
+          <View style={[styles.infoRow, { borderBottomWidth: 0 }]}><Text style={styles.infoLabel}>Pos Jaga</Text><Text style={styles.infoValue}>{posJagaNama}</Text></View>
         </Card>
 
         {/* Kondisi Umum */}

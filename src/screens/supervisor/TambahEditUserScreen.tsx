@@ -85,8 +85,14 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
   const handleCreate = async () => {
     // Check duplicate NRP
     try {
-      const allUsers = await usersApi.list();
-      const dup = (Array.isArray(allUsers) ? allUsers : []).find((u: any) => u.nrp === nrp.trim());
+      // [Audit 2D] usersApi.list() tanpa all=true mengembalikan objek berhalaman
+      // ({data,...}, 25 baris) → Array.isArray selalu false → cek duplikat tidak
+      // pernah jalan. Pakai all=true, bongkar {data}, bandingkan tanpa peduli huruf
+      // (backend membandingkan UPPER(nrp)).
+      const allUsersRaw: any = await usersApi.list('all=true');
+      const allUsers: any[] = Array.isArray(allUsersRaw) ? allUsersRaw : (allUsersRaw?.data || []);
+      const wanted = nrp.trim().toUpperCase();
+      const dup = allUsers.find((u: any) => String(u.nrp || '').toUpperCase() === wanted);
       if (dup) {
         setSaving(false);
         setErrorMsg(`NRP ${nrp} sudah terdaftar di sistem`);

@@ -124,13 +124,20 @@ export default function SetupRuteScreen({ navigation }: any) {
         } as any);
         Alert.alert('✅', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
       } else {
-        addRoute({
+        // [Audit 2D] Tunggu hasil server: backend kini mewajibkan lokasi_id dan
+        // menolak 400 bila tidak valid — sebelumnya "berhasil" selalu ditampilkan
+        // walau rute tidak pernah tersimpan (hilang saat refresh).
+        const res = await addRoute({
           nama: fName.trim(),
           checkpointIds: fSelectedCps,
           waktuEstimasi: finalEstimasi,
           assignedShift: fShift,
           status: 'active',
         });
+        if (res.status === 'error') {
+          Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to save route' : 'Gagal menyimpan rute'));
+          return;
+        }
         Alert.alert('✅', lang === 'en' ? 'Route added' : 'Rute baru ditambahkan');
       }
       setShowModal(false);
@@ -141,17 +148,22 @@ export default function SetupRuteScreen({ navigation }: any) {
     }
   };
 
-  const handleDuplicate = (r: any) => {
+  const handleDuplicate = async (r: any) => {
     if (submitting) return;
     setSubmitting(true);
     try {
-      addRoute({
+      const res = await addRoute({ // [Audit 2D] tunggu hasil server
         nama: `${r.nama} (Copy)`,
+        lokasiId: r.lokasiId || null,
         checkpointIds: r.checkpointIds,
         waktuEstimasi: r.waktuEstimasi,
         assignedShift: r.assignedShift,
         status: r.status === 'active' ? 'active' : 'inactive',
       });
+      if (res.status === 'error') {
+        Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to duplicate' : 'Gagal menduplikat rute'));
+        return;
+      }
       Alert.alert('✅', lang === 'en' ? 'Route duplicated' : 'Rute berhasil diduplikat');
     } catch (e: any) {
       Alert.alert('Error', e?.message || 'Failed');

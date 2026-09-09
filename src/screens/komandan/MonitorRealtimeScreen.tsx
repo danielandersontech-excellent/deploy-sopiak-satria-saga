@@ -96,7 +96,8 @@ export default function MonitorRealtimeScreen({ navigation }: any) {
   // CRITICAL FIX: Use extractArray to handle paginated response
   const fetchLiveLocations = useCallback(async () => {
     try {
-      const result = await usersApi.list('role=anggota&role=komandan');
+      // [Audit 2D] all=true: tanpa ini backend memberi 25 baris pertama saja.
+      const result = await usersApi.list('role=anggota&role=komandan&all=true');
       setLiveData(extractArray(result));
     } catch (e) {
       console.log('[Monitor] Fetch error:', e);

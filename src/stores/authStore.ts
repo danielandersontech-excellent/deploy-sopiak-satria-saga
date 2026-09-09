@@ -43,6 +43,8 @@ export interface User {
   noHp?: string;
   client_id?: string;
   lokasiId?: string;
+  // [Audit 2D] dikirim backend saat login (user & klien): true = masih PIN awal.
+  must_change_pin?: boolean;
 }
 
 interface AuthState {
@@ -80,6 +82,8 @@ function isAuthError(msg: string): boolean {
       || m.includes('401')
       || m.includes('403')
       || m.includes('session expired')
+      || m.includes('sesi berakhir')      // [Audit 2D] pesan Indonesia dari apiClient
+      || m.includes('dinonaktifkan')      // [Audit 2D] 401 ACCOUNT_DEACTIVATED
       || m.includes('token');
 }
 

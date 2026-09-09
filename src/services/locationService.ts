@@ -206,6 +206,9 @@ async function sendLocationPing() {
   try {
     const user = useAuthStore.getState().user;
     if (!user) return;
+    // [Audit 2D] Klien bukan personil lapangan: /geofence/check dan
+    // /users/:id/location selalu gagal untuk id 'client-…' (tak ada di tabel users).
+    if (user.role === 'klien') return;
     const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
     // Update location AND check geofence in one call
     try {

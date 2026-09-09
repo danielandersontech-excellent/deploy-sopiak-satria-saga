@@ -77,11 +77,12 @@ export default function DashboardScreen({ navigation }: any) {
       {/* Header */}
       <View style={[s.header, { paddingTop: insets.top + 12 }, { backgroundColor: isDark ? theme.bgCard : Colors.primaryDark }]}>
         <View style={s.headerContent}>
-          <Image source={{ uri: user?.foto || 'https://via.placeholder.com/50' }} style={s.avatar} />
+          {/* [Audit 2D] backend memakai foto_url / pos_nama (bukan foto / posJaga) */}
+          <Image source={{ uri: user?.foto_url || user?.foto || 'https://via.placeholder.com/50' }} style={s.avatar} />
           <View style={s.headerInfo}>
             <Text style={s.greeting}>{t('dash.greeting')} 👋</Text>
             <Text style={s.userName}>{user?.nama || 'Security'}</Text>
-            <Text style={s.userPos}>{user?.posJaga}</Text>
+            <Text style={s.userPos}>{user?.pos_nama || user?.posJaga || user?.lokasi_nama || ''}</Text>
           </View>
           <TouchableOpacity style={s.bellBtn} onPress={() => navigation.navigate('Notifikasi')}>
             <Ionicons name="notifications-outline" size={22} color="#fff" />

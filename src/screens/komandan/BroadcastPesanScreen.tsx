@@ -118,6 +118,11 @@ export default function BroadcastPesanScreen({ navigation }: any) {
       );
       return;
     }
+    // [Audit 2D] Samakan dengan validasi server (judul & pesan minimal 2 karakter).
+    if (judul.trim().length < 2 || pesan.trim().length < 2) {
+      Alert.alert('Error', lang === 'en' ? 'Title and message must be at least 2 characters' : 'Judul dan pesan minimal 2 karakter');
+      return;
+    }
     if (submitting) return;
 
     setSubmitting(true);
@@ -125,13 +130,22 @@ export default function BroadcastPesanScreen({ navigation }: any) {
     const senderName = getField(user, 'nama', 'name') || 'Komandan';
     const nowTime = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit' });
 
+    // [Audit 2D] Backend (audit 2A) memvalidasi `target` ∈ all/anggota/komandan/
+    // supervisor. Label chip ("Semua Anggota (Lokasi X)") dikirim apa adanya →
+    // 400 "Target tidak valid" dan broadcast dari HP selalu gagal. Kirim nilai
+    // API yang valid; label shift disimpan sebagai awalan judul supaya konteks
+    // "Shift Pagi/Siang/Malam" tetap sampai ke penerima.
+    const targetIdx = Math.max(0, BASE_TARGETS.indexOf(target));
+    const apiTarget = targetIdx === 0 ? 'all' : 'anggota';
+    const judulKirim = targetIdx === 0 ? judul.trim() : `[${BASE_TARGETS_ID[targetIdx]}] ${judul.trim()}`;
+
     try {
       // Single API call with lokasi_id scope restriction
       await dataApi.broadcasts.create({
-        judul: judul.trim(),
+        judul: judulKirim,
         pesan: pesan.trim(),
         prioritas,
-        target: targetWithLokasi,
+        target: apiTarget,
         lokasi_id: myLokasiId, // CRITICAL: restrict to this lokasi only
       });
 
@@ -142,7 +156,7 @@ export default function BroadcastPesanScreen({ navigation }: any) {
           {
             id: `tmp-${Date.now()}`,
             pengirim: senderName,
-            judul: judul.trim(),
+            judul: judulKirim,
             pesan: pesan.trim(),
             prioritas,
             target: targetWithLokasi,

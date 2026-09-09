@@ -72,6 +72,12 @@ function getField(obj: any, ...keys: string[]): any {
   return undefined;
 }
 
+// [Audit 2D] 'YYYY-MM-DD' LOKAL. `toISOString()` memakai UTC → setelah 17:00 WIB
+// "hari ini" sudah menjadi tanggal esok / grafik bergeser satu hari.
+function toLocalYMD(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
 // ===== Bar Chart Component =====
 function BarChart({ data, maxVal, color, label, days }: {
   data: number[]; maxVal: number; color: string; label: string; days: string[];
@@ -345,22 +351,26 @@ export default function AnalyticsScreen({ navigation }: any) {
     (async () => {
       setWeeklyLoading(true);
       try {
-        // Fetch totals first
-        const [totalRowsRaw, completedRowsRaw, allPatroliRaw] = await Promise.all([
-          patroliApi.list().catch(() => null),
-          patroliApi.list('status=completed').catch(() => null),
-          patroliApi.list('limit=500').catch(() => null), // get bulk for daily filter
+        // [Audit 2D] Backend (audit 2A): GET /api/patroli TANPA page/limit kini
+        // mengembalikan SEMUA baris (array tak berbatas) — berat; dengan page/limit
+        // hasilnya { data, pagination, summary } dan `summary` sudah memuat hitungan
+        // total/completed seluruh data. Untuk grafik mingguan cukup rentang 7 hari
+        // (start_date/end_date) dengan all=true.
+        const weekStart = new Date();
+        weekStart.setDate(weekStart.getDate() - 6);
+        const [summaryRaw, weekPatroliRaw] = await Promise.all([
+          patroliApi.list('page=1&limit=1').catch(() => null),
+          patroliApi.list(`all=true&start_date=${toLocalYMD(weekStart)}&end_date=${toLocalYMD(new Date())}`).catch(() => null),
         ]);
 
         if (cancelled) return;
 
-        const totalRows = extractArray(totalRowsRaw);
-        const completedRows = extractArray(completedRowsRaw);
-        const allPatroli = extractArray(allPatroliRaw);
+        const allPatroli = extractArray(weekPatroliRaw);
+        const psum = summaryRaw && typeof summaryRaw === 'object' ? (summaryRaw as any).summary : null;
 
         setPatroliStats({
-          total: totalRows.length,
-          completed: completedRows.length,
+          total: Number(psum?.total ?? allPatroli.length) || 0,
+          completed: Number(psum?.completed ?? allPatroli.filter((p: any) => p.status === 'completed').length) || 0,
         });
 
         // Build weekly data
@@ -371,27 +381,33 @@ export default function AnalyticsScreen({ navigation }: any) {
         for (let i = 6; i >= 0; i--) {
           const d = new Date();
           d.setDate(d.getDate() - i);
-          const dayStr = d.toISOString().split('T')[0]; // YYYY-MM-DD
+          const dayStr = toLocalYMD(d); // [Audit 2D] tanggal lokal
 
-          // Fetch attendance + late for this day in parallel
+          // [Audit 2D] Ambil hitungan dari `summary` (seluruh hasil filter), bukan
+          // `rows.length` yang terpotong 20 baris/halaman.
           const [aRowsRaw, lRowsRaw] = await Promise.all([
-            absensiApi.list(`tipe=masuk&date=${dayStr}`).catch(() => null),
-            absensiApi.list(`status=terlambat&date=${dayStr}`).catch(() => null),
+            absensiApi.list(`tipe=masuk&date=${dayStr}&limit=1`).catch(() => null),
+            absensiApi.list(`status=terlambat&date=${dayStr}&limit=1`).catch(() => null),
           ]);
 
           if (cancelled) return;
 
-          const aRows = extractArray(aRowsRaw);
-          const lRows = extractArray(lRowsRaw);
+          const countOf = (raw: any) => {
+            const s = raw && typeof raw === 'object' ? raw.summary : null;
+            if (s && typeof s.total === 'number') return s.total;
+            return extractArray(raw).length;
+          };
 
-          // Filter patroli rows that started on this day
+          // Filter patroli rows that started on this day (bandingkan tanggal LOKAL)
           const patroliOnDay = allPatroli.filter((p: any) => {
-            const ca = getField(p, 'created_at', 'createdAt', 'start_time');
-            return typeof ca === 'string' && ca.startsWith(dayStr);
+            const ca = getField(p, 'start_time', 'created_at', 'createdAt');
+            if (!ca) return false;
+            const dt = new Date(ca);
+            return !isNaN(dt.getTime()) && toLocalYMD(dt) === dayStr;
           });
 
-          days.push(aRows.length);
-          lateD.push(lRows.length);
+          days.push(countOf(aRowsRaw));
+          lateD.push(countOf(lRowsRaw));
           patrolD.push(patroliOnDay.length);
         }
 
@@ -469,7 +485,7 @@ export default function AnalyticsScreen({ navigation }: any) {
       // Generate PDF file
       const { uri } = await Print.printToFileAsync({ html, base64: false });
 
-      const fileName = `Laporan_Mingguan_${now.toISOString().split('T')[0]}.pdf`;
+      const fileName = `Laporan_Mingguan_${toLocalYMD(now)}.pdf`; // [Audit 2D] tanggal lokal
       const docDir = FileSystem.documentDirectory || FileSystem.cacheDirectory;
       if (!docDir) throw new Error('Storage directory not available');
       const newUri = docDir.endsWith('/') ? `${docDir}${fileName}` : `${docDir}/${fileName}`;

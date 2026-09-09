@@ -257,7 +257,7 @@ export default function AbsensiScreen({ navigation }: any) {
             <View style={{ gap: 8, marginTop: 8 }}>
               <View style={styles.shiftRow}><Ionicons name="person" size={16} color={Colors.primary} /><Text style={styles.shiftText}>{user?.nama || '-'} ({user?.nrp || '-'})</Text></View>
               <View style={styles.shiftRow}><Ionicons name="time" size={16} color={Colors.success} /><Text style={styles.shiftText}>Shift: {user?.shift || '08:00-16:00'} WIB</Text></View>
-              <View style={styles.shiftRow}><Ionicons name="location" size={16} color={Colors.primary} /><Text style={styles.shiftText}>Lokasi: {geofence?.posName || user?.posJaga || 'Belum ditentukan'}</Text></View>
+              <View style={styles.shiftRow}><Ionicons name="location" size={16} color={Colors.primary} /><Text style={styles.shiftText}>Lokasi: {geofence?.posName || user?.pos_nama || user?.posJaga || 'Belum ditentukan'}</Text></View>
               <View style={styles.shiftRow}><Ionicons name="shield-checkmark" size={16} color={Colors.success} /><Text style={styles.shiftText}>Status: On Duty</Text></View>
             </View>
           </Card>

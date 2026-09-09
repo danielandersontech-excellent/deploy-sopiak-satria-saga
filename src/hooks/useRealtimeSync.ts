@@ -145,8 +145,12 @@ export function useRealtimeSync() {
             'stats:update',
             // [5-V1] Tambah 'user:location' → ping lokasi memicu refresh data
             // sehingga marker MonitorRealtime hidup tanpa pull-to-refresh manual.
-            // [5-2] 'laporan:validated' & 'user:status' DIBUANG (tak pernah di-emit).
+            // [5-2] 'user:status' DIBUANG (tak pernah di-emit).
             'user:location',
+            // [Audit 2D] Backend (audit 2A) kini emitToUser 'laporan:validated'
+            // saat laporan disetujui/revisi → anggota melihat status baru tanpa
+            // refresh manual.
+            'laporan:validated',
           ];
           events.forEach((ev) => socket.on(ev, () => debouncedLoadAllData()));
 

@@ -80,7 +80,10 @@ export function usePushNotificationManager(navOrRef: any) {
     const register = async () => {
       try {
         await setupNotificationChannels();
-        const token = await registerForPushNotifications(user.id);
+        // [Audit 2D] Klien (id 'client-…') tidak punya baris di tabel users →
+        // PUT /users/:id/push-token gagal & tersimpan sebagai "pending" yang
+        // dicoba ulang setiap resume. Daftarkan izin/kanal saja tanpa simpan token.
+        const token = await registerForPushNotifications(user.role === 'klien' ? undefined : user.id);
         if (token && mounted) {
           console.log('[PushManager] ✅ Registered FCM token for', user.nama);
         }

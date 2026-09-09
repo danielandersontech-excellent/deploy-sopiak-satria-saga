@@ -43,6 +43,7 @@ export interface AbsensiRecord {
 
 export interface CheckpointData {
   id: string; nama: string; area: string; lokasi: string;
+  lokasiId?: string | null; // [Audit 2D] dipakai addRoute untuk lokasi_id (wajib di backend)
   latitude: number; longitude: number; radius: number;
   qrCode: string; status: 'active' | 'inactive';
 }
@@ -136,10 +137,26 @@ const fmtTime = (d: Date | string) => {
 };
 
 const fmtDate = (d: Date | string) => {
-  const dt = typeof d === 'string' ? new Date(d) : d;
+  // [Audit 2D] Kolom DATE (tanggal, tanggal_lahir, …) kini dikirim backend sebagai
+  // string 'YYYY-MM-DD' (bukan ISO datetime). `new Date('YYYY-MM-DD')` = tengah
+  // malam UTC → di zona negatif bergeser sehari; parse sebagai tanggal LOKAL.
+  let dt: Date;
+  if (typeof d === 'string') {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d.trim());
+    dt = m ? new Date(parseInt(m[1], 10), parseInt(m[2], 10) - 1, parseInt(m[3], 10)) : new Date(d);
+  } else {
+    dt = d;
+  }
+  if (isNaN(dt.getTime())) return typeof d === 'string' ? d : '-';
   const months = ['Jan','Feb','Mar','Apr','Mei','Jun','Jul','Agu','Sep','Okt','Nov','Des'];
   return `${String(dt.getDate()).padStart(2, '0')} ${months[dt.getMonth()]} ${dt.getFullYear()}`;
 };
+
+// [Audit 2D] ID buatan lokal (mis. 'N-9001', 'AB-9002') tidak boleh dikirim ke
+// endpoint yang memvalidasi UUID (400 "ID notifikasi tidak valid").
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const isUuid = (v: any) => typeof v === 'string' && UUID_RE.test(v);
+const AUTHORITY_ROLES = ['admin', 'supervisor', 'komandan'];
 
 export const timeAgo = (d: string) => {
   const t = new Date(d).getTime();
@@ -199,7 +216,9 @@ interface DataStore {
   deleteCheckpoint: (id: string) => void;
 
   routes: PatrolRouteData[];
-  addRoute: (r: Omit<PatrolRouteData, 'id'>) => void;
+  // [Audit 2D] addRoute kini mengembalikan hasil server (bisa 400 bila lokasi_id
+  // tidak dapat ditentukan) agar layar tidak menampilkan "berhasil" palsu.
+  addRoute: (r: Omit<PatrolRouteData, 'id'>) => Promise<SubmitResult>;
   updateRoute: (id: string, data: Partial<PatrolRouteData>) => void;
   deleteRoute: (id: string) => void;
 
@@ -275,7 +294,9 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
       // Parallel fetch all data
       const [usersData, absensiData, cpData, routeData, lhData, lkData, notifData, bcData, lokasiData, shiftData, stData, panicData] = await Promise.all([
-        usersApi.list('role=anggota&role=komandan').catch(() => []),
+        // [Audit 2D] Tanpa all=true backend mengembalikan halaman 25 baris →
+        // tim > 25 orang terpotong di semua layar (monitor, jadwal, dll).
+        usersApi.list('role=anggota&role=komandan&all=true').catch(() => []),
         absensiApi.today().catch(() => []),
         dataApi.checkpoints.list().catch(() => []),
         dataApi.routes.list().catch(() => []),
@@ -309,19 +330,22 @@ export const useDataStore = create<DataStore>((set, get) => ({
         id: a.id, userId: a.user_id, nama: a.nama || '-', nrp: a.nrp || '-', tipe: a.tipe,
         waktu: a.waktu ? fmtTime(a.waktu) : fmtTime(a.created_at), tanggal: fmtDate(a.created_at),
         fotoUri: a.foto_url || '', latitude: a.latitude, longitude: a.longitude,
-        alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: a.dalam_radius ?? null, lokasiId: a.lokasi_id || null,
+        alamat: a.alamat || '', posJaga: a.pos_jaga || '-', status: a.status || 'hadir', dalamRadius: a.dalam_radius ?? null,
+        // [Audit 2D] absensi lama bisa tanpa lokasi_id; backend kini ikut mengirim
+        // user_lokasi_id (alias flat) → filter per-lokasi di layar komandan/klien tepat.
+        lokasiId: a.lokasi_id || a.user_lokasi_id || null,
       }));
 
       // Map checkpoints
       const checkpoints: CheckpointData[] = extractArray(cpData).map((c: any) => ({
-        id: c.id, nama: c.nama, area: c.area || '', lokasi: c.lokasi_nama || '',
+        id: c.id, nama: c.nama, area: c.area || '', lokasi: c.lokasi_nama || '', lokasiId: c.lokasi_id || null,
         latitude: c.latitude, longitude: c.longitude, radius: c.radius || 15,
         qrCode: c.qr_code, status: c.status || 'active',
       }));
 
       // Map routes
       const routes: PatrolRouteData[] = extractArray(routeData).map((r: any) => ({
-        id: r.id, nama: r.nama, checkpointIds: r.checkpoint_ids || [],
+        id: r.id, nama: r.nama, lokasiId: r.lokasi_id || null, checkpointIds: r.checkpoint_ids || [],
         waktuEstimasi: r.waktu_estimasi || 30, assignedShift: r.assigned_shift || '', status: r.status || 'active',
       }));
 
@@ -454,13 +478,13 @@ export const useDataStore = create<DataStore>((set, get) => ({
           }));
 
           const checkpoints: CheckpointData[] = cachedCP.map((c: any) => ({
-            id: c.id, nama: c.nama, area: c.area || '', lokasi: c.lokasi_nama || '',
+            id: c.id, nama: c.nama, area: c.area || '', lokasi: c.lokasi_nama || '', lokasiId: c.lokasi_id || null,
             latitude: c.latitude, longitude: c.longitude, radius: c.radius || 15,
             qrCode: c.qr_code, status: c.status || 'active',
           }));
 
           const routes: PatrolRouteData[] = cachedRoutes.map((r: any) => ({
-            id: r.id, nama: r.nama, checkpointIds: r.checkpoint_ids || [],
+            id: r.id, nama: r.nama, lokasiId: r.lokasi_id || null, checkpointIds: r.checkpoint_ids || [],
             waktuEstimasi: r.waktu_estimasi || 30, assignedShift: r.assigned_shift || '', status: r.status || 'active',
           }));
 
@@ -622,14 +646,54 @@ export const useDataStore = create<DataStore>((set, get) => ({
 
   // ==================== ROUTES ====================
   routes: [],
-  addRoute: (r) => {
+  addRoute: async (r) => {
     const id = genId('R');
-    set((s) => ({ routes: [...s.routes, { ...r, id }] }));
-    dataApi.routes.create({ nama: r.nama, checkpoint_ids: r.checkpointIds, waktu_estimasi: r.waktuEstimasi, assigned_shift: r.assignedShift, status: r.status }).catch(console.error);
+    // [Audit 2D] Backend (audit 2A) mewajibkan lokasi_id untuk routes → tanpa
+    // itu POST ditolak 400 "Validasi gagal" dan rute hanya "ada" di memori sampai
+    // refresh. Turunkan lokasi_id dari checkpoint terpilih (semua checkpoint
+    // satu rute seharusnya satu lokasi), fallback lokasi user yang login.
+    const cps = get().checkpoints;
+    const lokasiById = get().lokasi;
+    let lokasiId: string | null = r.lokasiId || null;
+    if (!lokasiId) {
+      for (const cid of r.checkpointIds) {
+        const cp = cps.find((c) => c.id === cid);
+        if (!cp) continue;
+        if (cp.lokasiId) { lokasiId = cp.lokasiId; break; }
+        const byName = cp.lokasi ? lokasiById.find((l) => l.nama === cp.lokasi) : null;
+        if (byName) { lokasiId = byName.id; break; }
+      }
+    }
+    if (!lokasiId) lokasiId = useAuthStore.getState().user?.lokasi_id || null;
+    if (!lokasiId) {
+      return { status: 'error', error: 'Lokasi rute tidak dapat ditentukan. Pastikan checkpoint terpilih memiliki lokasi.' };
+    }
+
+    set((s) => ({ routes: [...s.routes, { ...r, id, lokasiId }] }));
+    try {
+      const created: any = await dataApi.routes.create({
+        nama: r.nama, lokasi_id: lokasiId, checkpoint_ids: r.checkpointIds,
+        waktu_estimasi: r.waktuEstimasi, assigned_shift: r.assignedShift, status: r.status,
+      });
+      if (created?.id) {
+        set((s) => ({ routes: s.routes.map((x) => x.id === id ? { ...x, id: created.id } : x) }));
+        return { status: 'success', id: created.id, data: created };
+      }
+      return { status: 'success', id, data: created };
+    } catch (e: any) {
+      // Ditolak server → rollback agar tidak ada rute hantu.
+      set((s) => ({ routes: s.routes.filter((x) => x.id !== id) }));
+      const details = Array.isArray(e?.details) ? ` (${e.details.join(', ')})` : '';
+      return { status: 'error', error: (e?.message || 'Gagal menyimpan rute') + details };
+    }
   },
   updateRoute: (id, data) => {
     set((s) => ({ routes: s.routes.map((r) => r.id === id ? { ...r, ...data } : r) }));
     const u: any = {}; if (data.nama) u.nama = data.nama; if (data.checkpointIds) u.checkpoint_ids = data.checkpointIds;
+    // [Audit 2D] estimasi & shift hasil edit sebelumnya tidak pernah dikirim ke server.
+    if (data.waktuEstimasi != null) u.waktu_estimasi = data.waktuEstimasi;
+    if (data.assignedShift != null) u.assigned_shift = data.assignedShift;
+    if (data.status) u.status = data.status;
     if (Object.keys(u).length) dataApi.routes.update(id, u).catch(console.error);
   },
   deleteRoute: (id) => {
@@ -790,10 +854,20 @@ export const useDataStore = create<DataStore>((set, get) => ({
     // Tampilan relatif ("Baru saja", "5 menit lalu") dihitung saat RENDER.
     const notif = { ...n, id, waktu: new Date().toISOString() };
     set((s) => ({ notifikasi: [notif, ...s.notifikasi] }));
+    // [Audit 2D] Backend hanya mengizinkan anggota/klien membuat notifikasi
+    // untuk DIRINYA sendiri (target_role → 403). Jangan kirim yang pasti ditolak;
+    // notifikasi tetap tampil lokal, dan komandan menerima event realtime dari
+    // server (absensi:new, laporan:new, panic:alert) — bukan dari mirror ini.
+    const me = useAuthStore.getState().user;
+    const isAuthority = !!me && AUTHORITY_ROLES.includes(me.role);
+    const targetsRole = Array.isArray(n.targetRole) && n.targetRole.length > 0;
+    const targetsOther = !!n.targetUserId && n.targetUserId !== me?.id;
+    if (!isAuthority && (targetsRole || targetsOther)) return;
     dataApi.notifikasi.create({ tipe: n.tipe, judul: n.judul, pesan: n.pesan, target_role: n.targetRole, target_user_id: n.targetUserId || null }).catch(() => {});
   },
   markRead: (id) => {
     set((s) => ({ notifikasi: s.notifikasi.map((n) => n.id === id ? { ...n, dibaca: true } : n) }));
+    if (!isUuid(id)) return; // [Audit 2D] notifikasi lokal tidak ada di server
     dataApi.notifikasi.read(id).catch(() => {});
   },
   markAllRead: () => {
@@ -818,7 +892,10 @@ export const useDataStore = create<DataStore>((set, get) => ({
   addBroadcast: (b) => {
     const id = genId('BC');
     set((s) => ({ broadcasts: [{ ...b, id }, ...s.broadcasts] }));
-    dataApi.broadcasts.create({ judul: b.judul, pesan: b.pesan, prioritas: b.prioritas, target: b.target }).catch(console.error);
+    // [Audit 2D] Backend memvalidasi target ∈ all/anggota/komandan/supervisor;
+    // label bebas (mis. "Semua Anggota") → 400. Normalisasi sebelum kirim.
+    const apiTarget = ['all', 'anggota', 'komandan', 'supervisor'].includes(b.target) ? b.target : 'all';
+    dataApi.broadcasts.create({ judul: b.judul, pesan: b.pesan, prioritas: b.prioritas, target: apiTarget }).catch(console.error);
     get().addNotifikasi({ tipe: 'warning', judul: b.judul, pesan: b.pesan, waktu: 'Baru saja', dibaca: false, targetRole: ['anggota', 'komandan'], targetUserId: null });
   },
 
@@ -876,8 +953,16 @@ export const useDataStore = create<DataStore>((set, get) => ({
     (async () => {
       try {
         const alerts = await dataApi.panic.list();
-        for (const a of extractArray(alerts).filter((p: any) => p.status === 'active')) {
-          await dataApi.panic.resolve(a.id, 'resolved');
+        // [Audit 2D] GET /panic ber-scope lokasi → anggota ikut melihat panic rekan
+        // se-lokasi; backend menolak resolve milik orang lain (403) dan loop lama
+        // berhenti di error pertama sehingga panic MILIK SENDIRI bisa tak ter-resolve.
+        // Non-komando: hanya milik sendiri; error per item tidak menghentikan sisanya.
+        const me = useAuthStore.getState().user;
+        const isAuthority = !!me && AUTHORITY_ROLES.includes(me.role);
+        const mine = extractArray(alerts).filter((p: any) => p.status === 'active' && (isAuthority || p.user_id === me?.id));
+        for (const a of mine) {
+          try { await dataApi.panic.resolve(a.id, 'resolved'); }
+          catch (e) { console.log('[Panic] Resolve gagal untuk', a.id, (e as any)?.message); }
         }
       } catch (e) { console.error('[Panic] Deactivate error:', e); }
     })();

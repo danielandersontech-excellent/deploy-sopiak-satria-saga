@@ -116,14 +116,28 @@ export default function DashboardKomandanScreen({ navigation }: any) {
     const uid = String(getField(user, 'id', '_id') || '');
     // If no user id yet, return empty result to avoid matching records with empty user_id
     if (!uid) return { masuk: undefined, keluar: undefined };
-    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+    // [Audit 2D] Record di store memakai `tanggal` format Indonesia "DD MMM YYYY"
+    // (lihat dataStore.fmtDate), sedangkan pembanding lama adalah 'YYYY-MM-DD'
+    // UTC → tidak pernah cocok → status absen komandan selalu "belum". Bandingkan
+    // berdasarkan tanggal LOKAL: parse "DD MMM YYYY" atau ISO created_at.
+    const now = new Date();
+    const ID_MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+    const parseAny = (v: any): Date | null => {
+      if (!v || typeof v !== 'string') return null;
+      const m = /^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/.exec(v.trim());
+      if (m) {
+        const mi = ID_MONTHS.indexOf(m[2]);
+        if (mi >= 0) return new Date(parseInt(m[3], 10), mi, parseInt(m[1], 10));
+      }
+      const d = new Date(v);
+      return isNaN(d.getTime()) ? null : d;
+    };
+    const sameDay = (a: Date) => a.getFullYear() === now.getFullYear() && a.getMonth() === now.getMonth() && a.getDate() === now.getDate();
     const recs = myAbsensi.filter((r) => {
       const rUserId = String(getField(r, 'user_id', 'userId') || '');
       if (rUserId !== uid) return false;
-      // Check date from created_at or tanggal
-      const createdAt = getField(r, 'created_at', 'createdAt') || '';
-      const tanggalField = getField(r, 'tanggal') || '';
-      return String(createdAt).startsWith(todayStr) || String(tanggalField).includes(todayStr);
+      const d = parseAny(getField(r, 'tanggal')) || parseAny(getField(r, 'created_at', 'createdAt'));
+      return d ? sameDay(d) : false;
     });
     return {
       masuk: recs.find((r) => getField(r, 'tipe') === 'masuk'),

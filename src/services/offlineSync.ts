@@ -207,8 +207,12 @@ export async function executeOrQueue(
 
 function isNetworkError(err: any): boolean {
   const msg = err?.message || '';
+  // [Audit 2D] 502/503/504 dari proxy (server belum siap / restart deploy) juga
+  // kondisi sementara → antrikan & coba lagi, jangan dianggap penolakan permanen.
+  const st = Number(err?.status);
+  if (st === 502 || st === 503 || st === 504) return true;
   return msg.includes('Network') || msg.includes('fetch') || msg.includes('Failed') ||
-    msg.includes('timeout') || msg.includes('Gagal konek') || msg.includes('AbortError');
+    msg.includes('timeout') || msg.includes('Timeout') || msg.includes('Gagal konek') || msg.includes('AbortError');
 }
 
 // ===== PROCESS QUEUE WITH ROBUST RETRY =====
