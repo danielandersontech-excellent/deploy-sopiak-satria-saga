@@ -74,6 +74,16 @@ function extractArray(result: any): any[] {
 const TABS_ID = ['Pending', 'Disetujui', 'Revisi'];
 const TABS_EN = ['Pending', 'Approved', 'Revision'];
 
+// [Misi V3 / C2] Umur laporan (hari) — backend kini mengirim umur_hari; fallback hitung dari created_at.
+const LAMA_HARI = 30;
+function umurHari(l: any): number {
+  const u = Number(l?.umur_hari);
+  if (Number.isFinite(u) && u >= 0) return u;
+  const c = l?.created_at || l?.createdAt;
+  const t = c ? new Date(c).getTime() : NaN;
+  return isNaN(t) ? 0 : Math.max(0, Math.floor((Date.now() - t) / 86400000));
+}
+
 export default function ValidasiLaporanScreen({ navigation }: any) {
   const insets = useSafeAreaInsets();
   const { t, lang } = useI18n();
@@ -85,6 +95,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
   const loadAllData = useDataStore((s) => s.loadAllData);
 
   const [tab, setTab] = useState<string>('Pending');
+  const [onlyLama, setOnlyLama] = useState(false); // [Misi V3 / C2] hanya pending > 30 hari
   const [showDetail, setShowDetail] = useState<any>(null);
   const [showRevisionModal, setShowRevisionModal] = useState(false);
   const [revisionTarget, setRevisionTarget] = useState<any>(null);
@@ -186,6 +197,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',
         foto_url: getField(l, 'foto_url', 'fotoUrl') || null,
         lokasi_id: getField(l, 'lokasi_id', 'lokasiId') || '',
+        umur_hari: umurHari(l),
         source: 'harian' as const,
         tipe: 'Harian' as const,
       });
@@ -237,6 +249,7 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         catatan_komandan: getField(l, 'catatan_komandan', 'catatanKomandan', 'commander_note') || '',
         foto_url: getField(l, 'foto_url', 'fotoUrl') || null,
         lokasi_id: getField(l, 'lokasi_id', 'lokasiId') || '',
+        umur_hari: umurHari(l),
         source: 'kejadian' as const,
         tipe: 'Kejadian' as const,
       });
@@ -255,16 +268,21 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
   // ===== Filter by tab =====
   const filterStatus = tab === 'Pending' ? 'pending' : tab === 'Disetujui' ? 'approved' : 'revision';
 
+  const lamaFilter = (l: any) => !(onlyLama && tab === 'Pending') || umurHari(l) >= LAMA_HARI;
+  const pendingLamaCount = useMemo(
+    () => [...allLaporanH, ...allLaporanK].filter((l) => getField(l, 'status') === 'pending' && umurHari(l) >= LAMA_HARI).length,
+    [allLaporanH, allLaporanK]
+  );
   const filteredLaporan = useMemo(() => {
     return [
-      ...allLaporanH.filter((l) => getField(l, 'status') === filterStatus),
-      ...allLaporanK.filter((l) => getField(l, 'status') === filterStatus),
+      ...allLaporanH.filter((l) => getField(l, 'status') === filterStatus).filter(lamaFilter),
+      ...allLaporanK.filter((l) => getField(l, 'status') === filterStatus).filter(lamaFilter),
     ].sort((a, b) => {
       const dateA = (getField(a, 'tanggal') || '') + 'T' + (getField(a, 'waktuSubmit') || '00:00');
       const dateB = (getField(b, 'tanggal') || '') + 'T' + (getField(b, 'waktuSubmit') || '00:00');
       return dateB.localeCompare(dateA);
     });
-  }, [allLaporanH, allLaporanK, filterStatus]);
+  }, [allLaporanH, allLaporanK, filterStatus, onlyLama, tab]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const pendingCount = useMemo(
     () =>
@@ -485,6 +503,19 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
         })}
       </View>
 
+      {/* [Misi V3 / C2] Filter cepat: pending lama (> 30 hari) */}
+      {tab === 'Pending' && pendingLamaCount > 0 && (
+        <TouchableOpacity
+          onPress={() => setOnlyLama((v) => !v)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, alignSelf: 'flex-start', marginHorizontal: 16, marginTop: 8, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, borderWidth: 1, borderColor: onlyLama ? Colors.danger : theme.border, backgroundColor: onlyLama ? Colors.dangerBg : theme.bgCard }}
+        >
+          <Ionicons name="hourglass-outline" size={14} color={Colors.danger} />
+          <Text style={{ fontSize: 12, fontWeight: '600', color: onlyLama ? Colors.danger : theme.textSecondary }}>
+            {lang === 'en' ? `Pending > ${LAMA_HARI} days (${pendingLamaCount})` : `Pending > ${LAMA_HARI} hari (${pendingLamaCount})`}
+          </Text>
+        </TouchableOpacity>
+      )}
+
       {/* Last refresh info */}
       {lastRefresh && (
         <View style={[styles.refreshInfo, { backgroundColor: isDark ? `${theme.primary}10` : '#f0f9ff' }]}>
@@ -573,6 +604,9 @@ export default function ValidasiLaporanScreen({ navigation }: any) {
                         text={getStatusLabel(itemStatus)}
                         variant={itemStatus === 'approved' ? 'success' : itemStatus === 'revision' ? 'warning' : 'default'}
                       />
+                      {itemStatus === 'pending' && umurHari(item) >= LAMA_HARI && (
+                        <Badge text={`Pending ${umurHari(item)} hari`} variant="danger" />
+                      )}
                       <Text style={[styles.timeText, { color: theme.textMuted }]}>{itemWaktu}</Text>
                     </View>
 
