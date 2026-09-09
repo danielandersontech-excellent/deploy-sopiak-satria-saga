@@ -116,12 +116,17 @@ export default function SetupRuteScreen({ navigation }: any) {
     setSubmitting(true);
     try {
       if (editingId) {
-        updateRoute(editingId, {
+        // [Misi V3] tunggu hasil server; rollback + pesan bila ditolak (pola M2).
+        const upd = await updateRoute(editingId, {
           nama: fName.trim(),
           checkpointIds: fSelectedCps,
           waktuEstimasi: finalEstimasi,
           assignedShift: fShift,
         } as any);
+        if (upd.status === 'error') {
+          Alert.alert('Error', upd.error || (lang === 'en' ? 'Failed to update route' : 'Gagal memperbarui rute'));
+          return;
+        }
         Alert.alert('✅', lang === 'en' ? 'Route updated' : 'Rute berhasil diperbarui');
       } else {
         // [Audit 2D] Tunggu hasil server: backend kini mewajibkan lokasi_id dan
@@ -181,7 +186,10 @@ export default function SetupRuteScreen({ navigation }: any) {
         {
           text: lang === 'en' ? 'Delete' : 'Hapus',
           style: 'destructive',
-          onPress: () => deleteRoute(id),
+          onPress: async () => {
+            const res = await deleteRoute(id);
+            if (res.status === 'error') Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to delete' : 'Gagal menghapus rute'));
+          },
         },
       ]
     );

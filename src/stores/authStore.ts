@@ -70,6 +70,9 @@ function isNetworkError(msg: string): boolean {
       || m.includes('failed to fetch')
       || m.includes('timeout')
       || m.includes('gagal konek')
+      || m.includes('terhubung')          // [Misi V3] pesan produksi apiClient
+      || m.includes('merespons')
+      || m.includes('koneksi')
       || m.includes('backend')
       || m.includes('aborted')
       || m.includes('tidak merespon');
@@ -109,8 +112,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       return true;
     } catch (err: any) {
       const msg = err?.message || 'Login gagal';
+      // [Misi V3] pesan produksi (pesan dev "npm run dev" hanya di __DEV__).
       const displayMsg = isNetworkError(msg)
-        ? 'Gagal konek ke backend. Pastikan backend sudah dijalankan (cd backend && npm run dev)'
+        ? (__DEV__
+            ? 'Gagal konek ke backend. Pastikan backend sudah dijalankan (cd backend && npm run dev)'
+            : 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda, lalu coba lagi.')
         : msg;
       console.log('[Auth] Login failed:', displayMsg);
       set({ loading: false, error: displayMsg, user: null, isLoggedIn: false });

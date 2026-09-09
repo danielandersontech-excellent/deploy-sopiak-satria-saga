@@ -178,6 +178,11 @@ const genId = (prefix: string) => `${prefix}-${++_idCounter}`;
 // [3-1] Hasil submit yang dikembalikan addX ke layar agar UI tahu apakah
 // benar-benar sukses di server, tertahan di antrian offline, atau ditolak.
 export type SubmitResult = { status: 'success' | 'queued' | 'error'; id?: string; data?: any; error?: string };
+// [Misi V3 / M-opt] pesan error server (+ details validasi) untuk pola optimistik-dengan-rollback.
+function errText(e: any, fallback: string): string {
+  const details = Array.isArray(e?.details) ? ` (${e.details.join(', ')})` : '';
+  return (e?.message || fallback) + details;
+}
 
 // [3-2] Idempotency key STABIL untuk satu submission. Dibuat sekali saat aksi
 // pertama dibuat, ikut dalam payload → retry (online maupun dari antrian
@@ -201,9 +206,10 @@ interface DataStore {
   team: TeamMember[];
   getTeamMember: (id: string) => TeamMember | undefined;
   updateTeamStatus: (id: string, status: TeamMember['status']) => void;
-  updateTeamMember: (id: string, data: Partial<TeamMember>) => void;
+  updateTeamMember: (id: string, data: Partial<TeamMember>) => Promise<SubmitResult>;
+  patchTeamMemberLocal: (id: string, data: Partial<TeamMember>) => void;
   addTeamMember: (m: TeamMember) => void;
-  removeTeamMember: (id: string) => void;
+  removeTeamMember: (id: string) => Promise<SubmitResult>;
 
   absensiRecords: AbsensiRecord[];
   addAbsensi: (r: Omit<AbsensiRecord, 'id'>) => Promise<SubmitResult>;
@@ -212,15 +218,15 @@ interface DataStore {
 
   checkpoints: CheckpointData[];
   addCheckpoint: (c: Omit<CheckpointData, 'id'>) => void;
-  updateCheckpoint: (id: string, data: Partial<CheckpointData>) => void;
-  deleteCheckpoint: (id: string) => void;
+  updateCheckpoint: (id: string, data: Partial<CheckpointData>) => Promise<SubmitResult>;
+  deleteCheckpoint: (id: string) => Promise<SubmitResult>;
 
   routes: PatrolRouteData[];
   // [Audit 2D] addRoute kini mengembalikan hasil server (bisa 400 bila lokasi_id
   // tidak dapat ditentukan) agar layar tidak menampilkan "berhasil" palsu.
   addRoute: (r: Omit<PatrolRouteData, 'id'>) => Promise<SubmitResult>;
-  updateRoute: (id: string, data: Partial<PatrolRouteData>) => void;
-  deleteRoute: (id: string) => void;
+  updateRoute: (id: string, data: Partial<PatrolRouteData>) => Promise<SubmitResult>;
+  deleteRoute: (id: string) => Promise<SubmitResult>;
 
   activePatrol: ActivePatrol | null;
   startPatrol: (routeId: string) => void;
@@ -249,7 +255,7 @@ interface DataStore {
 
   lokasi: LokasiData[];
   addLokasi: (l: Omit<LokasiData, 'id'>) => void;
-  updateLokasi: (id: string, data: Partial<LokasiData>) => void;
+  updateLokasi: (id: string, data: Partial<LokasiData>) => Promise<SubmitResult>;
 
   shifts: ShiftData[];
 
@@ -564,19 +570,43 @@ export const useDataStore = create<DataStore>((set, get) => ({
     set((s) => ({ team: s.team.map((m) => m.id === id ? { ...m, status } : m) }));
     usersApi.update(id, { status }).catch(console.error);
   },
-  updateTeamMember: (id, data) => {
+  // [Misi V3 / M-opt] Pola optimistik + rollback (sama seperti addRoute, M2):
+  // state lokal diubah dulu, bila server menolak dikembalikan dan pesan error
+  // dikirim ke layar lewat SubmitResult — tidak lagi ditelan console.error.
+  updateTeamMember: async (id, data) => {
+    const prev = get().team.find((m) => m.id === id);
     set((s) => ({ team: s.team.map((m) => m.id === id ? { ...m, ...data } : m) }));
     const dbData: any = {};
     if (data.status) dbData.status = data.status;
     if (data.noHp) dbData.no_hp = data.noHp;
     if (data.shift) dbData.shift = data.shift;
     if (data.skor !== undefined) dbData.skor = data.skor;
-    if (Object.keys(dbData).length > 0) usersApi.update(id, dbData).catch(console.error);
+    if (Object.keys(dbData).length === 0) return { status: 'success', id };
+    try {
+      const updated = await usersApi.update(id, dbData);
+      return { status: 'success', id, data: updated };
+    } catch (e: any) {
+      if (prev) set((s) => ({ team: s.team.map((m) => m.id === id ? prev : m) }));
+      return { status: 'error', error: errText(e, 'Gagal memperbarui data anggota') };
+    }
+  },
+  // Hanya memperbarui cache lokal (dipakai layar yang sudah memanggil API sendiri).
+  patchTeamMemberLocal: (id, data) => {
+    set((s) => ({ team: s.team.map((m) => m.id === id ? { ...m, ...data } : m) }));
   },
   addTeamMember: (m) => set((s) => ({ team: [...s.team, m] })),
-  removeTeamMember: (id) => {
+  removeTeamMember: async (id) => {
+    const before = get().team;
+    const idx = before.findIndex((m) => m.id === id);
+    const removed = before[idx];
     set((s) => ({ team: s.team.filter((m) => m.id !== id) }));
-    usersApi.delete(id).catch(console.error);
+    try {
+      await usersApi.delete(id);
+      return { status: 'success', id };
+    } catch (e: any) {
+      if (removed) set((s) => { const arr = [...s.team]; arr.splice(Math.min(idx, arr.length), 0, removed); return { team: arr }; });
+      return { status: 'error', error: errText(e, 'Gagal menghapus anggota') };
+    }
   },
 
   // ==================== ABSENSI ====================
@@ -634,14 +664,32 @@ export const useDataStore = create<DataStore>((set, get) => ({
     set((s) => ({ checkpoints: [...s.checkpoints, { ...c, id }] }));
     dataApi.checkpoints.create({ nama: c.nama, area: c.area, latitude: c.latitude, longitude: c.longitude, radius: c.radius, qr_code: c.qrCode, status: c.status }).catch(console.error);
   },
-  updateCheckpoint: (id, data) => {
+  updateCheckpoint: async (id, data) => {
+    const prev = get().checkpoints.find((c) => c.id === id);
     set((s) => ({ checkpoints: s.checkpoints.map((c) => c.id === id ? { ...c, ...data } : c) }));
     const u: any = {}; if (data.nama) u.nama = data.nama; if (data.area) u.area = data.area; if (data.status) u.status = data.status; if (data.radius) u.radius = data.radius;
-    if (Object.keys(u).length) dataApi.checkpoints.update(id, u).catch(console.error);
+    if (data.latitude != null) u.latitude = data.latitude; if (data.longitude != null) u.longitude = data.longitude; if (data.lokasiId) u.lokasi_id = data.lokasiId;
+    if (!Object.keys(u).length) return { status: 'success', id };
+    try {
+      const updated = await dataApi.checkpoints.update(id, u);
+      return { status: 'success', id, data: updated };
+    } catch (e: any) {
+      if (prev) set((s) => ({ checkpoints: s.checkpoints.map((c) => c.id === id ? prev : c) }));
+      return { status: 'error', error: errText(e, 'Gagal memperbarui checkpoint') };
+    }
   },
-  deleteCheckpoint: (id) => {
+  deleteCheckpoint: async (id) => {
+    const before = get().checkpoints;
+    const idx = before.findIndex((c) => c.id === id);
+    const removed = before[idx];
     set((s) => ({ checkpoints: s.checkpoints.filter((c) => c.id !== id) }));
-    dataApi.checkpoints.delete(id).catch(console.error);
+    try {
+      await dataApi.checkpoints.delete(id);
+      return { status: 'success', id };
+    } catch (e: any) {
+      if (removed) set((s) => { const arr = [...s.checkpoints]; arr.splice(Math.min(idx, arr.length), 0, removed); return { checkpoints: arr }; });
+      return { status: 'error', error: errText(e, 'Gagal menghapus checkpoint') };
+    }
   },
 
   // ==================== ROUTES ====================
@@ -687,18 +735,35 @@ export const useDataStore = create<DataStore>((set, get) => ({
       return { status: 'error', error: (e?.message || 'Gagal menyimpan rute') + details };
     }
   },
-  updateRoute: (id, data) => {
+  updateRoute: async (id, data) => {
+    const prev = get().routes.find((r) => r.id === id);
     set((s) => ({ routes: s.routes.map((r) => r.id === id ? { ...r, ...data } : r) }));
     const u: any = {}; if (data.nama) u.nama = data.nama; if (data.checkpointIds) u.checkpoint_ids = data.checkpointIds;
     // [Audit 2D] estimasi & shift hasil edit sebelumnya tidak pernah dikirim ke server.
     if (data.waktuEstimasi != null) u.waktu_estimasi = data.waktuEstimasi;
     if (data.assignedShift != null) u.assigned_shift = data.assignedShift;
     if (data.status) u.status = data.status;
-    if (Object.keys(u).length) dataApi.routes.update(id, u).catch(console.error);
+    if (!Object.keys(u).length) return { status: 'success', id };
+    try {
+      const updated = await dataApi.routes.update(id, u);
+      return { status: 'success', id, data: updated };
+    } catch (e: any) {
+      if (prev) set((s) => ({ routes: s.routes.map((r) => r.id === id ? prev : r) }));
+      return { status: 'error', error: errText(e, 'Gagal memperbarui rute') };
+    }
   },
-  deleteRoute: (id) => {
+  deleteRoute: async (id) => {
+    const before = get().routes;
+    const idx = before.findIndex((r) => r.id === id);
+    const removed = before[idx];
     set((s) => ({ routes: s.routes.filter((r) => r.id !== id) }));
-    dataApi.routes.delete(id).catch(console.error);
+    try {
+      await dataApi.routes.delete(id);
+      return { status: 'success', id };
+    } catch (e: any) {
+      if (removed) set((s) => { const arr = [...s.routes]; arr.splice(Math.min(idx, arr.length), 0, removed); return { routes: arr }; });
+      return { status: 'error', error: errText(e, 'Gagal menghapus rute') };
+    }
   },
 
   // ==================== ACTIVE PATROL ====================
@@ -906,10 +971,19 @@ export const useDataStore = create<DataStore>((set, get) => ({
     set((s) => ({ lokasi: [...s.lokasi, { ...l, id }] }));
     dataApi.lokasi.create({ nama: l.nama, alamat: l.alamat }).catch(console.error);
   },
-  updateLokasi: (id, data) => {
+  updateLokasi: async (id, data) => {
+    const prev = get().lokasi.find((l) => l.id === id);
     set((s) => ({ lokasi: s.lokasi.map((l) => l.id === id ? { ...l, ...data } : l) }));
     const u: any = {}; if (data.nama) u.nama = data.nama; if (data.alamat) u.alamat = data.alamat; if (data.status) u.status = data.status;
-    if (Object.keys(u).length) dataApi.lokasi.update(id, u).catch(console.error);
+    // Perubahan posList hanya cache lokal (pos jaga disimpan lewat endpoint pos-jaga sendiri).
+    if (!Object.keys(u).length) return { status: 'success', id };
+    try {
+      const updated = await dataApi.lokasi.update(id, u);
+      return { status: 'success', id, data: updated };
+    } catch (e: any) {
+      if (prev) set((s) => ({ lokasi: s.lokasi.map((l) => l.id === id ? prev : l) }));
+      return { status: 'error', error: errText(e, 'Gagal memperbarui lokasi') };
+    }
   },
 
   // ==================== SHIFTS ====================

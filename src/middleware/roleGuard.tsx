@@ -53,13 +53,14 @@ export const SCREEN_PERMISSIONS: Record<string, AppRole[]> = {
   DownloadLaporan:  ['supervisor', 'admin'],
 
   // === Shared screens (all roles) ===
-  Notifikasi:       ['anggota', 'komandan', 'supervisor', 'admin'],
-  ProfilDetail:     ['anggota', 'komandan', 'supervisor', 'admin'],
-  EditProfil:       ['anggota', 'komandan', 'supervisor', 'admin'],
-  UbahPIN:          ['anggota', 'komandan', 'supervisor', 'admin'],
+  // [Misi V3] klien ikut: Notifikasi, Profil, Edit Profil (PUT /api/auth/me), Ubah PIN, Tentang.
+  Notifikasi:       ['anggota', 'komandan', 'supervisor', 'admin', 'klien'],
+  ProfilDetail:     ['anggota', 'komandan', 'supervisor', 'admin', 'klien'],
+  EditProfil:       ['anggota', 'komandan', 'supervisor', 'admin', 'klien'],
+  UbahPIN:          ['anggota', 'komandan', 'supervisor', 'admin', 'klien'],
   RiwayatAbsensi:   ['anggota', 'komandan', 'supervisor', 'admin'],
   RiwayatLaporan:   ['anggota', 'komandan', 'supervisor', 'admin'],
-  TentangAplikasi:  ['anggota', 'komandan', 'supervisor', 'admin'],
+  TentangAplikasi:  ['anggota', 'komandan', 'supervisor', 'admin', 'klien'],
 };
 
 /**

@@ -165,18 +165,12 @@ export default function SetupCheckpointScreen({ navigation }: any) {
           radius,
           status: fStatus,
         });
-        // Sync via store helper for fields it supports
-        updateCheckpoint(editingId, {
-          nama: fName.trim(),
-          area: fArea.trim() || 'Area',
-          radius,
-          status: fStatus,
-        } as any);
-        // Also sync lat/lng/lokasi which store doesn't handle
+        // [Misi V3] API sudah dipanggil di atas → cukup perbarui cache lokal sekali
+        // (sebelumnya updateCheckpoint mengirim PUT kedua yang errornya ditelan).
         useDataStore.setState((s) => ({
           checkpoints: s.checkpoints.map((c) =>
             c.id === editingId
-              ? { ...c, latitude: lat, longitude: lng, lokasi: lokasiName }
+              ? { ...c, nama: fName.trim(), area: fArea.trim() || 'Area', radius, status: fStatus, latitude: lat, longitude: lng, lokasi: lokasiName, lokasiId: fLokasiId || c.lokasiId }
               : c
           ),
         }));
@@ -231,8 +225,10 @@ export default function SetupCheckpointScreen({ navigation }: any) {
     }
   };
 
-  const handleToggle = (id: string, current: string) => {
-    updateCheckpoint(id, { status: current === 'active' ? 'inactive' : 'active' });
+  const handleToggle = async (id: string, current: string) => {
+    // [Misi V3] hasil server ditunggu; bila ditolak, state dikembalikan oleh store dan pesan tampil.
+    const res = await updateCheckpoint(id, { status: current === 'active' ? 'inactive' : 'active' });
+    if (res.status === 'error') Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to update status' : 'Gagal mengubah status'));
   };
 
   const handleDelete = (id: string, nama: string) => {
@@ -244,7 +240,10 @@ export default function SetupCheckpointScreen({ navigation }: any) {
         {
           text: lang === 'en' ? 'Delete' : 'Hapus',
           style: 'destructive',
-          onPress: () => deleteCheckpoint(id),
+          onPress: async () => {
+            const res = await deleteCheckpoint(id);
+            if (res.status === 'error') Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to delete' : 'Gagal menghapus checkpoint'));
+          },
         },
       ]
     );

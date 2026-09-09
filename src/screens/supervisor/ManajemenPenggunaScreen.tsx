@@ -70,7 +70,9 @@ export default function ManajemenPenggunaScreen({ navigation }: any) {
           onPress: async () => {
             setSubmitting(true);
             try {
-              removeTeamMember(id);
+              // [Misi V3] tunggu hasil server (403/409 admin terakhir, dsb.) — bukan lagi optimistik buta.
+              const res = await removeTeamMember(id);
+              if (res.status === 'error') throw new Error(res.error);
               Alert.alert(
                 '✅',
                 lang === 'en' ? 'User deleted' : 'Anggota berhasil dihapus'

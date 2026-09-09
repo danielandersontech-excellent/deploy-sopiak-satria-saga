@@ -141,7 +141,8 @@ export default function TambahEditUserScreen({ navigation, route }: any) {
 
     // Update local store (nama/no_hp/role/shift + lokasi/pos untuk tampilan).
     const posNama = posOptions.find((p) => p.id === posJagaId)?.nama || (posJagaId ? existing!.pos : '-');
-    useDataStore.getState().updateTeamMember(existing!.id, {
+    // [Misi V3] API sudah dipanggil di atas → perbarui cache lokal saja (tanpa PUT kedua).
+    useDataStore.getState().patchTeamMemberLocal(existing!.id, {
       nama: nama.trim(),
       noHp: noHp.trim(),
       role: role as any,

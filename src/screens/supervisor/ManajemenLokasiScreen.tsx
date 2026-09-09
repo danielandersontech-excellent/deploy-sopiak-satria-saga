@@ -203,12 +203,16 @@ export default function ManajemenLokasiScreen({ navigation }: any) {
 
     setSubmitting(true);
     try {
-      // updateLokasi already calls dataApi.lokasi.update for nama/alamat/status
-      updateLokasi(editLokasiId, {
+      // [Misi V3] updateLokasi kini menunggu hasil server (rollback + pesan bila ditolak).
+      const res = await updateLokasi(editLokasiId, {
         nama: editNama.trim(),
         alamat: editAlamat.trim(),
         status: editStatus,
       });
+      if (res.status === 'error') {
+        Alert.alert('Error', res.error || (lang === 'en' ? 'Failed to update' : 'Gagal memperbarui lokasi'));
+        return;
+      }
       setShowEditLokasi(false);
       Alert.alert(
         '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),

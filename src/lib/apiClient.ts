@@ -316,14 +316,25 @@ export async function api<T = any>(endpoint: string, opts: ApiOpts = {}): Promis
     clearTimeout(timer);
     console.log(`[API] ERROR: ${err.name}: ${err.message}`);
     
+    // [Misi V3] Pesan produksi yang manusiawi; petunjuk dev hanya di __DEV__.
+    // Kata kunci "Timeout"/"terhubung"/"koneksi" dipakai authStore & offlineSync
+    // untuk mengenali error jaringan (retriable) — jangan diubah sembarangan.
     if (err.name === 'AbortError') {
-      throw new Error('Timeout: Backend tidak merespon. Pastikan backend berjalan.');
+      throw new Error(__DEV__
+        ? 'Timeout: Backend tidak merespon. Pastikan backend berjalan.'
+        : 'Timeout: server tidak merespons. Periksa koneksi internet Anda, lalu coba lagi.');
     }
     if (err.message?.includes('Backend tidak berjalan') || err.message?.includes('502')) {
-      throw new Error('Backend belum dijalankan. Buka terminal baru: cd backend && npm run dev');
+      const e502: any = new Error(__DEV__
+        ? 'Backend belum dijalankan. Buka terminal baru: cd backend && npm run dev'
+        : 'Server sedang tidak dapat dihubungi (502). Coba lagi beberapa saat.');
+      e502.status = 502;
+      throw e502;
     }
     if (err.message?.includes('Network') || err.message?.includes('Failed') || err.message?.includes('TypeError')) {
-      throw new Error('Gagal konek ke server. Restart Expo: npx expo start -c');
+      throw new Error(__DEV__
+        ? 'Gagal konek ke server. Restart Expo: npx expo start -c'
+        : 'Gagal terhubung ke server (Network). Periksa koneksi internet Anda.');
     }
     throw err;
   }
@@ -397,6 +408,9 @@ export const authApi = {
     return data;
   },
   me: () => api('/api/auth/me'),
+  // [Misi V3 / D2] klien memperbarui kontak sendiri (kontak_person, nomor_telepon, email).
+  updateMe: (data: { kontak_person?: string | null; nomor_telepon?: string | null; email?: string | null }) =>
+    api('/api/auth/me', { method: 'PUT', body: data }),
   changePin: (old_pin: string, new_pin: string) => api('/api/auth/change-pin', { method: 'PUT', body: { old_pin, new_pin } }),
   register: (data: any) => api('/api/auth/register', { method: 'POST', body: data }),
   logout: async () => {

@@ -25,7 +25,7 @@ import NetInfo, { NetInfoState } from '@react-native-community/netinfo';
 import { absensiApi, patroliApi, laporanApi, dataApi, usersApi } from '../lib/apiClient';
 import {
   addToOfflineQueue, getOfflineQueue, removeFromOfflineQueue,
-  updateQueueItemRetry, removeExpiredQueueItems, getOfflineQueueCount,
+  updateQueueItemError, updateQueueItemRetry, removeExpiredQueueItems, getOfflineQueueCount,
   clearOfflineQueue, cacheAllData, getDbStats,
 } from './offlineDatabase';
 
@@ -297,6 +297,15 @@ export async function processQueue(): Promise<{
             const result = { synced, failed, remaining, deadLettered };
             await notifyListeners(result);
             return result;
+          }
+
+          // [Misi V3 / M13] 409 "Patroli belum tersinkron" = scan/end menunggu
+          // patrol_start yang belum berhasil dikirim. Bukan kegagalan item ini →
+          // jangan dihitung retry (maks 7) agar tidak masuk dead-letter, cukup catat.
+          if (Number(err?.status) === 409 && /belum tersinkron/i.test(String(err?.message || ''))) {
+            await updateQueueItemError(action.id, `MENUNGGU: ${err.message}`);
+            console.log(`[Sync] ⏳ ${action.type} menunggu patroli induk tersinkron`);
+            continue;
           }
 
           _consecutiveFailures++;

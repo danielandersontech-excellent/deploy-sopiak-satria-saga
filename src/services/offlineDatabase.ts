@@ -236,6 +236,12 @@ export async function removeFromOfflineQueue(id: string): Promise<void> {
   await serialExec(async () => { const db = await getDb(); await db.runAsync("DELETE FROM offline_queue WHERE id = ?", [id]); });
 }
 
+// [Misi V3 / M13] catat error TANPA menambah hitungan retry (mis. 409 "patroli belum
+// tersinkron": scan menunggu patrol_start, bukan kegagalan item itu sendiri).
+export async function updateQueueItemError(id: string, error: string): Promise<void> {
+  await serialExec(async () => { const db = await getDb(); await db.runAsync("UPDATE offline_queue SET last_error = ? WHERE id = ?", [error, id]); });
+}
+
 export async function updateQueueItemRetry(id: string, error: string): Promise<void> {
   await serialExec(async () => { const db = await getDb(); await db.runAsync("UPDATE offline_queue SET retries = retries + 1, last_error = ? WHERE id = ?", [error, id]); });
 }

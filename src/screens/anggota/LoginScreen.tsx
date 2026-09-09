@@ -117,7 +117,11 @@ export default function LoginScreen({ navigation }: any) {
     try {
       const ok = await login(nrp.trim(), pin);
       if (ok) {
-        try { await loadAllData(); } catch (dataErr) { console.log('[Login] loadAllData warning:', dataErr); }
+        // [Misi V3 / B1] loadAllData = 13 request paralel (±0,3–0,5 dtk per request lewat
+        // Cloudflare) — sebelumnya DITUNGGU di sini sehingga layar login "menggantung"
+        // beberapa detik setelah PIN benar. Kini berjalan di latar; layar-layar membaca
+        // store secara reaktif dan terisi begitu data tiba.
+        loadAllData().catch((dataErr) => console.log('[Login] loadAllData warning:', dataErr));
         setLoading(false);
         // [Audit 2D] Backend mengirim must_change_pin=true (PIN awal acak / reset
         // oleh admin) untuk user maupun klien. Sebelumnya diabaikan → pengguna
@@ -197,8 +201,9 @@ export default function LoginScreen({ navigation }: any) {
             ]}>
               <Ionicons name="warning" size={18} color={C.warning} />
               <Text style={[styles.warningText, { color: C.warningText }]}>
-                Backend belum berjalan. Buka terminal baru:{'\n'}
-                cd backend && npm run dev
+                {__DEV__
+                  ? 'Backend belum berjalan. Buka terminal baru:\ncd backend && npm run dev'
+                  : 'Tidak dapat terhubung ke server. Periksa koneksi internet Anda, lalu coba lagi.'}
               </Text>
             </View>
           )}

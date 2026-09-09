@@ -27,7 +27,7 @@ import { Colors, Typography, Spacing, Radius } from '../../constants';
 import { Badge, Button, CameraModal } from '../../components';
 import { useAuthStore } from '../../stores/authStore';
 import { useDataStore } from '../../stores/dataStore';
-import { usersApi } from '../../lib/apiClient';
+import { usersApi, authApi } from '../../lib/apiClient';
 import { uploadProfilePhoto } from '../../services/photoUpload';
 import { useI18n } from '../../lib/i18n';
 import { useTheme } from '../../lib/theme';
@@ -41,12 +41,20 @@ export default function EditProfilScreen({ navigation }: any) {
   const updateUser = useAuthStore((s) => s.updateUser);
   const updateTeamMember = useDataStore((s) => s.updateTeamMember);
 
-  const initialNama = user?.nama || '';
-  const initialNoHp = user?.no_hp || (user as any)?.noHp || '';
+  // [Misi V3 / D2] Akun klien: yang diedit adalah data KONTAK (nama kontak, telepon,
+  // email) lewat PUT /api/auth/me — nama perusahaan & kode klien wewenang admin.
+  // Sebelumnya layar ini memanggil PUT /users/client-<uuid> → 404 (Edit Profil klien mati).
+  const isKlien = user?.role === 'klien';
+  const initialNama = isKlien ? ((user as any)?.kontak_person || '') : (user?.nama || '');
+  const initialNoHp = isKlien
+    ? ((user as any)?.nomor_telepon || user?.no_hp || '')
+    : (user?.no_hp || (user as any)?.noHp || '');
+  const initialEmail = isKlien ? ((user as any)?.email || '') : '';
   const initialFoto = user?.foto_url || (user as any)?.foto || null;
 
   const [nama, setNama] = useState(initialNama);
   const [noHp, setNoHp] = useState(initialNoHp);
+  const [email, setEmail] = useState(initialEmail);
   const [saving, setSaving] = useState(false);
   const [showCamera, setShowCamera] = useState(false);
   const [fotoUri, setFotoUri] = useState<string | null>(initialFoto);
@@ -58,8 +66,8 @@ export default function EditProfilScreen({ navigation }: any) {
 
   // Detect unsaved changes
   const hasChanges = useMemo(
-    () => nama.trim() !== initialNama.trim() || noHp.trim() !== initialNoHp.trim() || fotoChanged,
-    [nama, noHp, initialNama, initialNoHp, fotoChanged]
+    () => nama.trim() !== initialNama.trim() || noHp.trim() !== initialNoHp.trim() || email.trim() !== initialEmail.trim() || fotoChanged,
+    [nama, noHp, email, initialNama, initialNoHp, initialEmail, fotoChanged]
   );
 
   // Warn about unsaved changes when leaving
@@ -174,6 +182,47 @@ export default function EditProfilScreen({ navigation }: any) {
       );
     }
 
+    // [Misi V3 / D2] Jalur klien: PUT /api/auth/me (tanpa unggah foto — foto klien diatur admin).
+    if (isKlien) {
+      const trimEmail = email.trim();
+      if (trimEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimEmail)) {
+        return Alert.alert('Error', lang === 'en' ? 'Invalid email format' : 'Format email tidak valid');
+      }
+      setSaving(true);
+      setUploadProgress(lang === 'en' ? 'Saving to server...' : 'Menyimpan ke server...');
+      try {
+        const fresh: any = await authApi.updateMe({
+          kontak_person: trimNama,
+          nomor_telepon: trimNoHp,
+          email: trimEmail || null,
+        });
+        updateUser({
+          ...(fresh && typeof fresh === 'object' ? fresh : {}),
+          no_hp: fresh?.nomor_telepon ?? trimNoHp,
+          noHp: fresh?.nomor_telepon ?? trimNoHp,
+        } as any);
+        setSaving(false);
+        setUploadProgress(null);
+        setFotoChanged(false);
+        Alert.alert(
+          '✅ ' + (lang === 'en' ? 'Success' : 'Berhasil'),
+          t('profile.saved'),
+          [{ text: 'OK', onPress: () => navigation.goBack() }]
+        );
+      } catch (err: any) {
+        setSaving(false);
+        setUploadProgress(null);
+        const raw = String(err?.message || '');
+        const details = Array.isArray(err?.details) ? ` (${err.details.join(', ')})` : '';
+        setErrorMsg(
+          (/network|fetch|timeout|terhubung|koneksi/i.test(raw)
+            ? (lang === 'en' ? 'Network error. Check your connection.' : 'Gagal konek server. Cek koneksi.')
+            : raw || (lang === 'en' ? 'Failed to save profile' : 'Gagal menyimpan profil')) + details
+        );
+      }
+      return;
+    }
+
     setSaving(true);
     setUploadProgress(null);
 
@@ -265,22 +314,26 @@ export default function EditProfilScreen({ navigation }: any) {
       </View>
 
       <ScrollView contentContainerStyle={s.content} keyboardShouldPersistTaps="handled">
-        {/* Avatar with photo change */}
+        {/* Avatar with photo change (klien: foto diatur admin, tidak bisa diganti dari HP) */}
         <View style={s.avatarSection}>
-          <TouchableOpacity onPress={handleChangePhoto} activeOpacity={0.7}>
+          <TouchableOpacity onPress={isKlien ? undefined : handleChangePhoto} activeOpacity={isKlien ? 1 : 0.7} disabled={isKlien}>
             <Image
               source={{ uri: fotoUri || defaultAvatar }}
               style={[s.avatar, { borderColor: isDark ? theme.border : Colors.primary }]}
             />
-            <View style={s.camBadge}>
-              <Ionicons name="camera" size={16} color="#fff" />
-            </View>
+            {!isKlien && (
+              <View style={s.camBadge}>
+                <Ionicons name="camera" size={16} color="#fff" />
+              </View>
+            )}
           </TouchableOpacity>
-          <TouchableOpacity onPress={handleChangePhoto}>
-            <Text style={[s.changePhotoText, { color: theme.primary }]}>
-              {lang === 'en' ? 'Change Photo' : 'Ganti Foto'}
-            </Text>
-          </TouchableOpacity>
+          {!isKlien && (
+            <TouchableOpacity onPress={handleChangePhoto}>
+              <Text style={[s.changePhotoText, { color: theme.primary }]}>
+                {lang === 'en' ? 'Change Photo' : 'Ganti Foto'}
+              </Text>
+            </TouchableOpacity>
+          )}
           {fotoChanged && (
             <View style={s.changedBadge}>
               <Ionicons name="checkmark-circle" size={14} color={Colors.success} />
@@ -291,20 +344,30 @@ export default function EditProfilScreen({ navigation }: any) {
           )}
         </View>
 
+        {isKlien && (
+          <>
+            <Text style={[s.label, { color: theme.textSecondary }]}>{lang === 'en' ? 'Company' : 'Nama Perusahaan'}</Text>
+            <View style={[s.readOnly, { backgroundColor: isDark ? theme.bgInput : '#f8fafc', borderColor: theme.border }]}>
+              <Text style={[s.roText, { color: theme.textMuted }]}>{user?.nama || '-'}</Text>
+              <Badge text="Read-only" variant="default" />
+            </View>
+          </>
+        )}
+
         <Text style={[s.label, { color: theme.textSecondary }]}>
-          {t('profile.name')} *
+          {isKlien ? (lang === 'en' ? 'Contact Name' : 'Nama Kontak') : t('profile.name')} *
         </Text>
         <TextInput
           style={[s.input, { backgroundColor: theme.bgInput, color: theme.text, borderColor: theme.border }]}
           value={nama}
           onChangeText={(txt) => { if (errorMsg) setErrorMsg(''); setNama(txt); }}
-          placeholder={t('profile.name')}
+          placeholder={isKlien ? (lang === 'en' ? 'Contact person name' : 'Nama penanggung jawab') : t('profile.name')}
           placeholderTextColor={theme.textMuted}
           editable={!saving}
-          maxLength={64}
+          maxLength={isKlien ? 100 : 64}
         />
 
-        <Text style={[s.label, { color: theme.textSecondary }]}>{t('profile.nrp')}</Text>
+        <Text style={[s.label, { color: theme.textSecondary }]}>{isKlien ? (lang === 'en' ? 'Client Code' : 'Kode Klien') : t('profile.nrp')}</Text>
         <View style={[s.readOnly, { backgroundColor: isDark ? theme.bgInput : '#f8fafc', borderColor: theme.border }]}>
           <Text style={[s.roText, { color: theme.textMuted }]}>{user?.nrp || '-'}</Text>
           <Badge text="Read-only" variant="default" />
@@ -318,9 +381,27 @@ export default function EditProfilScreen({ navigation }: any) {
           placeholder="08xxxxxxxxxx"
           placeholderTextColor={theme.textMuted}
           keyboardType="phone-pad"
-          maxLength={15}
+          maxLength={isKlien ? 20 : 15}
           editable={!saving}
         />
+
+        {isKlien && (
+          <>
+            <Text style={[s.label, { color: theme.textSecondary }]}>Email</Text>
+            <TextInput
+              style={[s.input, { backgroundColor: theme.bgInput, color: theme.text, borderColor: theme.border }]}
+              value={email}
+              onChangeText={(txt) => { if (errorMsg) setErrorMsg(''); setEmail(txt); }}
+              placeholder="nama@perusahaan.co.id"
+              placeholderTextColor={theme.textMuted}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+              maxLength={100}
+              editable={!saving}
+            />
+          </>
+        )}
 
         <Text style={[s.label, { color: theme.textSecondary }]}>{t('profile.role')}</Text>
         <View style={[s.readOnly, { backgroundColor: isDark ? theme.bgInput : '#f8fafc', borderColor: theme.border }]}>
