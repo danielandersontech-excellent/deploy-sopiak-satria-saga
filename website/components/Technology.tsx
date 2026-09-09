@@ -22,7 +22,7 @@ export default function Technology() {
             <div key={i} className={`tech-card reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .07}s` }}>
               <div className="tech-card-top">
                 <div className="tech-icon">
-                  <t.Icon size={22} color="#00B4D8" strokeWidth={1.8} />
+                  <t.Icon size={22} color="var(--cyan)" strokeWidth={1.8} />
                 </div>
                 <span className="tech-tag">{t.tag}</span>
               </div>

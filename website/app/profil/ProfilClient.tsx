@@ -33,7 +33,7 @@ function SectionAbout() {
             <p className="pf-paragraph">{PROFILE.about2}</p>
           </div>
           <blockquote className={`pf-quote-card reveal ${inView ? 'visible' : ''} d3`}>
-            <Quote size={28} color="#D4A853" strokeWidth={1.6} />
+            <Quote size={28} color="var(--gold)" strokeWidth={1.6} />
             <p>&ldquo;{PROFILE.aboutQuote}&rdquo;</p>
             <cite>PT Sopiak Satria Saga</cite>
           </blockquote>
@@ -49,7 +49,7 @@ function SectionVisiMisi() {
     <section ref={ref} className="pf-section pf-alt">
       <div className="container">
         <div className={`reveal ${inView ? 'visible' : ''}`}>
-          <div className="section-label" style={{ color: '#D4A853' }}>VISI &amp; MISI</div>
+          <div className="section-label gold">VISI &amp; MISI</div>
         </div>
         <h2 className={`section-title reveal ${inView ? 'visible' : ''} d1`}>
           Arah &amp; Komitmen{' '}
@@ -57,11 +57,11 @@ function SectionVisiMisi() {
         </h2>
         <div className="pf-vm-grid">
           <div className={`pf-visi-card reveal ${inView ? 'visible' : ''} d2`}>
-            <div className="pf-vm-badge"><Eye size={18} color="#D4A853" strokeWidth={2} /> VISI</div>
+            <div className="pf-vm-badge"><Eye size={18} color="var(--gold)" strokeWidth={2} /> VISI</div>
             <p>&ldquo;{PROFILE.visi}&rdquo;</p>
           </div>
           <div className={`pf-misi-card reveal ${inView ? 'visible' : ''} d3`}>
-            <div className="pf-vm-badge"><Rocket size={18} color="#00B4D8" strokeWidth={2} /> MISI</div>
+            <div className="pf-vm-badge"><Rocket size={18} color="var(--cyan)" strokeWidth={2} /> MISI</div>
             <ol className="pf-misi-list">
               {PROFILE.misi.map((m, i) => (
                 <li key={i}>
@@ -93,7 +93,7 @@ function SectionValues() {
           {COMPANY_VALUES.map((v, i) => (
             <div key={v.title} className={`pf-value-card reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .08}s` }}>
               <div className="pf-value-icon">
-                <v.Icon size={22} color="#D4A853" strokeWidth={1.8} />
+                <v.Icon size={22} color="var(--gold)" strokeWidth={1.8} />
               </div>
               <h3>{v.title}</h3>
               <p>{v.desc}</p>
@@ -123,7 +123,7 @@ function SectionScope() {
         <div className="pf-scope-grid">
           {SERVICE_SCOPE.map((s, i) => (
             <div key={s.title} className={`pf-scope-chip reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .06}s` }}>
-              <s.Icon size={20} color="#00B4D8" strokeWidth={1.8} />
+              <s.Icon size={20} color="var(--cyan)" strokeWidth={1.8} />
               <span>{s.title}</span>
             </div>
           ))}
@@ -154,7 +154,7 @@ function SectionMonitoring() {
           {MONITORING_PILLARS.map((p, i) => (
             <div key={p.title} className={`pf-pillar-card reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .1}s` }}>
               <div className="pf-pillar-icon">
-                <p.Icon size={24} color="#00D4FF" strokeWidth={1.8} />
+                <p.Icon size={24} color="var(--cyan-bright)" strokeWidth={1.8} />
               </div>
               <h3>{p.title}</h3>
               <p>{p.desc}</p>
@@ -177,7 +177,7 @@ function SectionLegal() {
     <section ref={ref} className="pf-section pf-alt">
       <div className="container">
         <div className={`reveal ${inView ? 'visible' : ''}`}>
-          <div className="section-label" style={{ color: '#D4A853' }}>LISENSI &amp; LEGALITAS</div>
+          <div className="section-label gold">LISENSI &amp; LEGALITAS</div>
         </div>
         <h2 className={`section-title reveal ${inView ? 'visible' : ''} d1`}>
           Beroperasi{' '}
@@ -190,11 +190,11 @@ function SectionLegal() {
           {LEGALITAS.map((l, i) => (
             <div key={l.title} className={`pf-legal-card reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .07}s` }}>
               <div className="pf-legal-icon">
-                <l.Icon size={20} color="#00C896" strokeWidth={1.9} />
+                <l.Icon size={20} color="var(--green)" strokeWidth={1.9} />
               </div>
               <div>
                 <div className="pf-legal-title">
-                  {l.title} <CheckCircle2 size={14} color="#00C896" strokeWidth={2.2} />
+                  {l.title} <CheckCircle2 size={14} color="var(--green)" strokeWidth={2.2} />
                 </div>
                 <div className="pf-legal-full">{l.full}</div>
                 <p>{l.desc}</p>
@@ -225,14 +225,14 @@ function SectionManajemen() {
           </div>
           <div className={`pf-org-card reveal ${inView ? 'visible' : ''} d3`}>
             <div className="pf-org-head">
-              <Network size={18} color="#00B4D8" strokeWidth={2} />
+              <Network size={18} color="var(--cyan)" strokeWidth={2} />
               <span>Struktur Organisasi</span>
             </div>
             <div className="pf-org-sub">Divisi Operasional &amp; Pendukung</div>
             <div className="pf-div-grid">
               {DIVISIONS.map((d) => (
                 <div key={d.title} className="pf-div-chip">
-                  <d.Icon size={16} color="#7C8DB5" strokeWidth={1.9} />
+                  <d.Icon size={16} color="var(--text-muted)" strokeWidth={1.9} />
                   <span>{d.title}</span>
                 </div>
               ))}
@@ -296,7 +296,7 @@ function SectionSectors() {
         <div className="pf-sector-grid">
           {SECTORS.map((s, i) => (
             <div key={s.title} className={`pf-sector-card reveal ${inView ? 'visible' : ''}`} style={{ transitionDelay: `${.15 + i * .07}s` }}>
-              <s.Icon size={22} color="#00B4D8" strokeWidth={1.8} />
+              <s.Icon size={22} color="var(--cyan)" strokeWidth={1.8} />
               <span>{s.title}</span>
             </div>
           ))}
@@ -311,7 +311,7 @@ function SectionClosing() {
   const wa = `https://wa.me/${COMPANY.whatsapp}?text=${encodeURIComponent('Halo, saya ingin berkonsultasi tentang layanan pengamanan PT Sopiak Satria Saga.')}`
   return (
     <section ref={ref} className="pf-closing">
-      <div className="container" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+      <div className="container pf-hero-inner">
         <h2 className={`pf-closing-title reveal ${inView ? 'visible' : ''}`}>
           &ldquo;<span className="text-gradient-gold">{PROFILE.closingTagline}</span>&rdquo;
         </h2>
@@ -340,7 +340,7 @@ export default function ProfilClient() {
       <section className="pf-hero">
         <div className="pf-hero-orb pf-hero-orb-1" />
         <div className="pf-hero-orb pf-hero-orb-2" />
-        <div className="container" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+        <div className="container pf-hero-inner">
           <div className="pf-hero-label">
             <Building2 size={14} strokeWidth={2} /> COMPANY PROFILE
           </div>
@@ -349,9 +349,9 @@ export default function ProfilClient() {
           </h1>
           <p className="pf-hero-tagline">&ldquo;{PROFILE.heroTagline}&rdquo;</p>
           <div className="pf-hero-chips">
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> Berizin BUJP</span>
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> Anggota ABIJAPI</span>
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> Monitoring Digital 24/7</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> Berizin BUJP</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> Anggota ABIJAPI</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> Monitoring Digital 24/7</span>
           </div>
         </div>
       </section>

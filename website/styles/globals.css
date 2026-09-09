@@ -22,6 +22,8 @@
   --red: #FF4757;
   --amber: #FFAA33;
   --purple: #8B5CF6;
+  --whatsapp: #25D366;
+  --whatsapp-dark: #128C7E;
   --text-white: #F1F5F9;
   --text-muted: #7C8DB5;
   --text-dim: #4A5578;
@@ -138,7 +140,19 @@ button { font-family: var(--font-body); cursor: pointer; }
   content: '';
   width: 32px;
   height: 1.5px;
-  background: linear-gradient(90deg, var(--cyan), transparent);
+  background: linear-gradient(90deg, currentColor, transparent);
+}
+/* Modifier: label berwarna gold (dipakai bersisian dgn label cyan default) */
+.section-label.gold { color: var(--gold); }
+/* Modifier: label terpusat (header section yang center-aligned) — garis aksen
+   kedua otomatis mengikuti warna label (currentColor), dicerminkan via scaleX. */
+.section-label.centered { justify-content: center; }
+.section-label.centered::after {
+  content: '';
+  width: 32px;
+  height: 1.5px;
+  background: linear-gradient(90deg, currentColor, transparent);
+  transform: scaleX(-1);
 }
 .section-title {
   font-family: var(--font-head);
@@ -213,7 +227,7 @@ button { font-family: var(--font-body); cursor: pointer; }
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  background: #25D366;
+  background: var(--whatsapp);
   color: #fff;
   padding: 15px 32px;
   border-radius: 12px;
@@ -246,6 +260,14 @@ button { font-family: var(--font-body); cursor: pointer; }
 .btn-outline-light:hover {
   border-color: rgba(255,255,255,.3);
   background: rgba(255,255,255,.04);
+}
+
+/* .btn-sm — modifier ukuran kecil, dipakai bersama salah satu .btn-* di atas
+   (mis. className="btn-primary btn-sm"). */
+.btn-sm {
+  padding: 10px 18px !important;
+  font-size: 13px !important;
+  gap: 7px !important;
 }
 
 /* ─── GLASS CARD BASE ─── */
@@ -302,7 +324,9 @@ button { font-family: var(--font-body); cursor: pointer; }
   display: flex;
   flex-direction: column;
 }
-.nav-logo-name {
+/* .brand-name/.brand-tagline — alias generik dari lockup logo navbar, dipakai
+   ulang di Footer supaya "nama + tagline" perusahaan konsisten di kedua tempat. */
+.nav-logo-name, .brand-name {
   font-family: var(--font-head);
   font-weight: 800;
   font-size: 14.5px;
@@ -310,7 +334,7 @@ button { font-family: var(--font-body); cursor: pointer; }
   letter-spacing: .3px;
   line-height: 1.15;
 }
-.nav-logo-sub {
+.nav-logo-sub, .brand-tagline {
   font-size: 9.5px;
   color: var(--text-dim);
   font-weight: 600;
@@ -632,6 +656,25 @@ button { font-family: var(--font-body); cursor: pointer; }
   border-radius: 50%;
   border: 1.5px solid rgba(0,200,150,.4);
   animation: pulse-ring 2s ease-out infinite;
+}
+.ps-gps-card {
+  background: rgba(0,180,216,.06);
+  border: 1px solid rgba(0,180,216,.1);
+  border-radius: 12px;
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.ps-gps-badge {
+  margin-left: auto;
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--cyan);
+  background: rgba(0,180,216,.1);
+  padding: 3px 8px;
+  border-radius: 6px;
 }
 .ps-grid-2 {
   display: grid;
@@ -1115,12 +1158,26 @@ button { font-family: var(--font-body); cursor: pointer; }
   left: 50%;
   filter: blur(4px);
 }
+.cta-inner {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: 620px;
+  margin: 0 auto;
+  padding: 0 24px;
+}
 
 /* ─── CONTACT ─── */
 .contact-section {
   padding: 120px 0;
   position: relative;
   background: var(--navy);
+}
+.contact-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 48px;
 }
 .contact-grid {
   display: grid;
@@ -1212,6 +1269,16 @@ button { font-family: var(--font-body); cursor: pointer; }
   gap: 48px;
   margin-bottom: 48px;
 }
+.footer-brand-head { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.footer-brand-icon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--cyan), var(--teal));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
 .footer-brand p {
   font-size: 13.5px;
   color: var(--text-muted);
@@ -1271,6 +1338,18 @@ button { font-family: var(--font-body); cursor: pointer; }
   background-size: 60px 60px;
   mask-image: radial-gradient(ellipse 80% 80% at 50% 50%, black 30%, transparent 70%);
 }
+/* Bola cahaya dekoratif — warnanya dinamis per layanan (svc.color), jadi
+   hanya `background` yang tetap inline; posisi/ukuran dipindah ke sini. */
+.svc-detail-orb {
+  position: absolute;
+  width: 600px;
+  height: 600px;
+  border-radius: 50%;
+  filter: blur(150px);
+  top: -30%;
+  right: -10%;
+}
+.svc-detail-content { padding: 80px 0; background: var(--navy); }
 .svc-detail-back {
   display: inline-flex;
   align-items: center;
@@ -1506,14 +1585,10 @@ button { font-family: var(--font-body); cursor: pointer; }
 
 /* Contact cards responsive */
 @media (max-width: 1024px) {
-  .contact-section .container > div:nth-child(2) {
-    grid-template-columns: 1fr 1fr !important;
-  }
+  .contact-cards-grid { grid-template-columns: 1fr 1fr; }
 }
 @media (max-width: 640px) {
-  .contact-section .container > div:nth-child(2) {
-    grid-template-columns: 1fr !important;
-  }
+  .contact-cards-grid { grid-template-columns: 1fr; }
 }
 
 /* Footer link hover */
@@ -1545,6 +1620,9 @@ button { font-family: var(--font-body); cursor: pointer; }
 .pf-hero-title {
   font-family: var(--font-head); font-weight: 800;
   font-size: clamp(34px, 5vw, 56px); line-height: 1.12;
+  /* [Konsistensi H1] Disamakan dgn .svc-detail-title (warna + letter-spacing)
+     agar hero halaman /profil, /karir, dan /layanan/[slug] senada. */
+  color: #fff; letter-spacing: -1.5px;
   margin-bottom: 20px;
 }
 .pf-hero-tagline {
@@ -1552,6 +1630,8 @@ button { font-family: var(--font-body); cursor: pointer; }
   font-style: italic; max-width: 640px; margin: 0 auto 30px; line-height: 1.7;
 }
 .pf-hero-chips { display: flex; flex-wrap: wrap; gap: 12px; justify-content: center; }
+/* Wrapper .container di dalam hero terpusat (.pf-hero / .pf-closing) */
+.pf-hero-inner { position: relative; z-index: 2; text-align: center; }
 .pf-hero-chip {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 9px 16px; border-radius: 100px; font-size: 12.5px; font-weight: 600;
@@ -1564,13 +1644,17 @@ button { font-family: var(--font-body); cursor: pointer; }
 .pf-section.pf-alt { background: var(--navy-mid); }
 .pf-paragraph { color: var(--text-muted); font-size: 15.5px; line-height: 1.85; margin-bottom: 18px; }
 .pf-center { text-align: center; margin-top: 44px; }
-.pf-link-btn {
+/* .btn-outline adalah nama generik utk gaya yang sama dgn .pf-link-btn —
+   dipertahankan sebagai alias satu selector agar tidak perlu migrasi semua
+   pemakaian .pf-link-btn yang sudah ada. */
+.pf-link-btn, .btn-outline {
   display: inline-flex; align-items: center; gap: 9px;
   padding: 13px 26px; border-radius: 12px; font-size: 14px; font-weight: 600;
   color: var(--cyan-bright); border: 1px solid rgba(0,180,216,.35);
   background: rgba(0,180,216,.06); transition: all .25s ease;
+  font-family: var(--font-body); cursor: pointer;
 }
-.pf-link-btn:hover { background: rgba(0,180,216,.14); border-color: rgba(0,212,255,.6); transform: translateY(-2px); }
+.pf-link-btn:hover, .btn-outline:hover { background: rgba(0,180,216,.14); border-color: rgba(0,212,255,.6); transform: translateY(-2px); }
 
 /* ─── Tentang Kami ─── */
 .pf-about-grid { display: grid; grid-template-columns: 1.15fr .85fr; gap: 48px; align-items: center; margin-top: 12px; }
@@ -1758,6 +1842,20 @@ button { font-family: var(--font-body); cursor: pointer; }
 }
 .pf-closing-actions { display: flex; gap: 16px; justify-content: center; flex-wrap: wrap; }
 
+/* ─── Halaman 404 (app/not-found.tsx) ─── */
+.notfound-section { padding: 160px 0 120px; min-height: 60vh; display: flex; align-items: center; }
+.notfound-code {
+  font-family: var(--font-head);
+  font-weight: 800;
+  font-size: clamp(72px, 14vw, 150px);
+  line-height: 1;
+  letter-spacing: -3px;
+  margin-bottom: 8px;
+}
+@media (max-width: 640px) {
+  .notfound-section { padding: 130px 0 80px; }
+}
+
 /* ─── Strip legalitas di beranda (section Komitmen) ─── */
 .pf-trust-strip {
   display: flex; flex-wrap: wrap; gap: 10px; justify-content: center;
@@ -1783,7 +1881,6 @@ button { font-family: var(--font-body); cursor: pointer; }
 @media (max-width: 640px) {
   .pf-hero { padding: 130px 0 70px; }
   .pf-section { padding: 76px 0; }
-  .pf-values-grid { grid-template-columns: 1fr 1fr; }
   .pf-scope-grid, .pf-legal-grid, .pf-sector-grid, .pf-div-grid { grid-template-columns: 1fr; }
   .pf-values-grid { grid-template-columns: 1fr; }
   .pf-flow-item { gap: 16px; }
@@ -1850,14 +1947,21 @@ button { font-family: var(--font-body); cursor: pointer; }
 .kr-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; }
 .kr-span-2 { grid-column: span 2; }
 .kr-span-3 { grid-column: span 3; }
-.kr-field { display: flex; flex-direction: column; min-width: 0; }
-.kr-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); letter-spacing: .3px; margin-bottom: 7px; }
-.kr-field .form-input { margin-bottom: 0; }
+/* .form-field/.form-label adalah nama generik dgn gaya identik ke .kr-field —
+   dipakai di form lain (mis. Contact di beranda) agar label/field selaras
+   dengan formulir /karir tanpa migrasi total penamaan yang sudah ada. */
+.kr-field, .form-field { display: flex; flex-direction: column; min-width: 0; }
+/* .form-field dipakai di luar grid ber-gap (mis. Contact di beranda), jadi
+   ia butuh margin-bottom sendiri utk menjaga jarak antar field — beda dari
+   .kr-field yang jaraknya sudah diatur oleh gap grid induknya (.kr-grid-2/3). */
+.form-field { margin-bottom: 12px; }
+.kr-field > label, .form-label { font-size: 12px; font-weight: 700; color: var(--text-muted); letter-spacing: .3px; margin-bottom: 7px; display: block; }
+.kr-field .form-input, .form-field .form-input { margin-bottom: 0; }
 .kr-field select.form-input { appearance: auto; }
 .kr-field input[type="date"].form-input { color-scheme: dark; }
 .kr-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
 .kr-field .kr-hint { margin-top: 5px; text-align: right; }
-.kr-err { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--red); }
+.kr-err, .form-error { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--red); }
 .kr-input-wrap { position: relative; }
 .kr-input-wrap .form-input { padding-right: 56px; }
 .kr-live {
@@ -1914,7 +2018,7 @@ button { font-family: var(--font-body); cursor: pointer; }
 .kr-alert-warn { background: rgba(255,170,51,.08); border: 1px solid rgba(255,170,51,.28); color: #ffd28a; }
 .kr-alert-ok { background: rgba(0,200,150,.08); border: 1px solid rgba(0,200,150,.3); color: #c6f5e6; }
 @keyframes kr-spin { to { transform: rotate(360deg); } }
-.kr-spin { animation: kr-spin 1s linear infinite; }
+.kr-spin, .spin { animation: kr-spin 1s linear infinite; }
 
 /* ─── Sukses ─── */
 .kr-success {
@@ -1966,4 +2070,19 @@ button { font-family: var(--font-body); cursor: pointer; }
   .kr-cek-card { padding: 24px 18px; }
   .kr-success { padding: 30px 18px; }
   .kr-syarat-card { padding: 22px 18px; }
+}
+
+/* ══════════════════════════════════════════════════════════════
+   RESPONSIVE ≤380px — layar sangat sempit (mis. 320–375px).
+   Addition-only: menyempitkan padding & menurunkan skala heading
+   supaya tidak ada elemen yang mepet/terpotong pada perangkat kecil.
+   ══════════════════════════════════════════════════════════════ */
+@media (max-width: 380px) {
+  .container, .nav-inner { padding-left: 16px; padding-right: 16px; }
+  .hero-title { font-size: 32px; letter-spacing: -1px; }
+  .section-title { font-size: 26px; letter-spacing: -.5px; }
+  .pf-hero-title, .svc-detail-title { font-size: 26px; letter-spacing: -1px; }
+  .hero-stat { min-width: 100%; }
+  .kr-ref code { font-size: 17px; padding: 10px 14px; letter-spacing: 1px; overflow-wrap: anywhere; }
+  .pf-quote-card, .kr-success, .kr-cek-card, .sdc-sidebar-card, .sdc-cta-card { padding: 20px 16px; }
 }

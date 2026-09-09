@@ -80,39 +80,39 @@ export default function Hero() {
                     <span>PT Sopiak Satria Saga</span>
                   </div>
                   <div className="ps-alert-btn">
-                    <Siren size={14} color="#00B4D8" />
+                    <Siren size={14} color="var(--cyan)" />
                   </div>
                 </div>
 
                 {/* Status Bar */}
                 <div className="ps-status-bar">
-                  <ShieldCheck size={16} color="#00C896" />
+                  <ShieldCheck size={16} color="var(--green)" />
                   <div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: '#00C896' }}>Semua Area Aman</div>
-                    <div style={{ fontSize: 8.5, color: '#4A5578' }}>Terakhir update: 12:45 WIB</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--green)' }}>Semua Area Aman</div>
+                    <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>Terakhir update: 12:45 WIB</div>
                   </div>
                   <div className="ps-live-dot" style={{ marginLeft: 'auto' }} />
                 </div>
 
                 {/* GPS Tracking Card */}
-                <div style={{ background: 'rgba(0,180,216,.06)', border: '1px solid rgba(0,180,216,.1)', borderRadius: 12, padding: '10px 14px', display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
-                  <MapPin size={16} color="#00B4D8" />
+                <div className="ps-gps-card">
+                  <MapPin size={16} color="var(--cyan)" />
                   <div>
                     <div style={{ fontSize: 12, fontWeight: 800, color: '#fff' }}>GPS Active</div>
-                    <div style={{ fontSize: 8.5, color: '#4A5578' }}>Real-time Tracking</div>
+                    <div style={{ fontSize: 8.5, color: 'var(--text-dim)' }}>Real-time Tracking</div>
                   </div>
-                  <div style={{ marginLeft: 'auto', fontSize: 10, fontWeight: 700, color: '#00B4D8', background: 'rgba(0,180,216,.1)', padding: '3px 8px', borderRadius: 6 }}>LIVE</div>
+                  <div className="ps-gps-badge">LIVE</div>
                 </div>
 
                 {/* Metrics Grid */}
                 <div className="ps-grid-2">
                   <div className="ps-metric">
-                    <CheckCircle2 size={16} color="#00C896" style={{ margin: '0 auto' }} />
+                    <CheckCircle2 size={16} color="var(--green)" style={{ margin: '0 auto' }} />
                     <div className="ps-metric-num">24</div>
                     <div className="ps-metric-label">On Duty</div>
                   </div>
                   <div className="ps-metric">
-                    <FileText size={16} color="#FFAA33" style={{ margin: '0 auto' }} />
+                    <FileText size={16} color="var(--amber)" style={{ margin: '0 auto' }} />
                     <div className="ps-metric-num">8</div>
                     <div className="ps-metric-label">Laporan</div>
                   </div>
@@ -121,10 +121,10 @@ export default function Hero() {
                 {/* Quick Actions */}
                 <div className="ps-quick-grid">
                   {[
-                    { Icon: Fingerprint, label: 'Absensi', color: '#00B4D8' },
-                    { Icon: MapPinned, label: 'Patroli', color: '#00C896' },
-                    { Icon: FileText, label: 'Laporan', color: '#FFAA33' },
-                    { Icon: Siren, label: 'SOS', color: '#FF4757' },
+                    { Icon: Fingerprint, label: 'Absensi', color: 'var(--cyan)' },
+                    { Icon: MapPinned, label: 'Patroli', color: 'var(--green)' },
+                    { Icon: FileText, label: 'Laporan', color: 'var(--amber)' },
+                    { Icon: Siren, label: 'SOS', color: 'var(--red)' },
                   ].map((item, i) => (
                     <div key={i} className="ps-quick-btn">
                       <item.Icon size={15} color={item.color} />

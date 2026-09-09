@@ -123,7 +123,7 @@ function SectionInfo() {
             <div className="kr-posisi-list">
               {KARIR_POSISI.map((p) => (
                 <div key={p.kode} className="kr-posisi-card">
-                  <div className="kr-posisi-icon"><p.Icon size={22} color="#00B4D8" strokeWidth={1.8} /></div>
+                  <div className="kr-posisi-icon"><p.Icon size={22} color="var(--cyan)" strokeWidth={1.8} /></div>
                   <div>
                     <h3>{p.title}</h3>
                     <p>{p.desc}</p>
@@ -133,16 +133,16 @@ function SectionInfo() {
             </div>
           </div>
           <div className={`kr-syarat-card reveal ${inView ? 'visible' : ''} d2`}>
-            <div className="pf-org-head"><ShieldCheck size={18} color="#00C896" strokeWidth={2} /><span>Persyaratan Umum</span></div>
+            <div className="pf-org-head"><ShieldCheck size={18} color="var(--green)" strokeWidth={2} /><span>Persyaratan Umum</span></div>
             <ul className="kr-syarat-list">
               {KARIR_SYARAT.map((s) => (
-                <li key={s}><CheckCircle2 size={15} color="#00C896" strokeWidth={2.2} /><span>{s}</span></li>
+                <li key={s}><CheckCircle2 size={15} color="var(--green)" strokeWidth={2.2} /><span>{s}</span></li>
               ))}
             </ul>
             <div className="pf-org-sub" style={{ marginTop: 20, marginBottom: 12 }}>Yang Anda Dapatkan</div>
             <div className="kr-benefit-grid">
               {KARIR_BENEFIT.map((b) => (
-                <div key={b.title} className="pf-div-chip"><b.Icon size={15} color="#D4A853" strokeWidth={1.9} /><span>{b.title}</span></div>
+                <div key={b.title} className="pf-div-chip"><b.Icon size={15} color="var(--gold)" strokeWidth={1.9} /><span>{b.title}</span></div>
               ))}
             </div>
           </div>
@@ -312,7 +312,7 @@ export default function KarirClient() {
       <section className="pf-hero">
         <div className="pf-hero-orb pf-hero-orb-1" />
         <div className="pf-hero-orb pf-hero-orb-2" />
-        <div className="container" style={{ position: 'relative', zIndex: 2, textAlign: 'center' }}>
+        <div className="container pf-hero-inner">
           <div className="pf-hero-label"><Briefcase size={14} strokeWidth={2} /> KARIR &amp; REKRUTMEN</div>
           <h1 className="pf-hero-title">
             Wujudkan Karir Anda di <span className="text-gradient-gold">Bidang Keamanan</span>
@@ -321,9 +321,9 @@ export default function KarirClient() {
             Pendaftaran online, proses seleksi transparan, tanpa pungutan biaya. Isi formulir di bawah dan simpan nomor referensi Anda.
           </p>
           <div className="pf-hero-chips">
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> Tanpa Biaya Pendaftaran</span>
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> Pelatihan &amp; Sertifikasi</span>
-            <span className="pf-hero-chip"><CheckCircle2 size={14} color="#00C896" /> BPJS Ketenagakerjaan</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> Tanpa Biaya Pendaftaran</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> Pelatihan &amp; Sertifikasi</span>
+            <span className="pf-hero-chip"><CheckCircle2 size={14} color="var(--green)" /> BPJS Ketenagakerjaan</span>
           </div>
           <div style={{ marginTop: 28, display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
             <a href="#formulir" className="btn-primary">Isi Formulir Lamaran <ArrowRight size={16} /></a>
@@ -336,7 +336,7 @@ export default function KarirClient() {
         <section className="pf-section" id="formulir">
           <div className="container">
             <div className="kr-success">
-              <div className="kr-success-icon"><CheckCircle2 size={40} color="#00C896" strokeWidth={2} /></div>
+              <div className="kr-success-icon"><CheckCircle2 size={40} color="var(--green)" strokeWidth={2} /></div>
               <h2>Lamaran Berhasil Dikirim</h2>
               <p>Terima kasih{sukses.nama ? `, ${sukses.nama}` : ''}. Simpan nomor referensi berikut untuk memantau status lamaran Anda.</p>
               <div className="kr-ref">
@@ -346,7 +346,7 @@ export default function KarirClient() {
                 </button>
               </div>
               <div className="kr-success-note">
-                <ShieldCheck size={16} color="#D4A853" />
+                <ShieldCheck size={16} color="var(--gold)" />
                 <span>Tim HR kami akan meninjau berkas Anda. Kandidat yang lolos seleksi administrasi akan dihubungi melalui WhatsApp/telepon ke nomor yang Anda daftarkan. Kami tidak pernah meminta biaya dalam bentuk apa pun.</span>
               </div>
               <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap', marginTop: 26 }}>
@@ -502,7 +502,7 @@ export default function KarirClient() {
                           </div>
                           {f ? (
                             <div className="kr-file-picked">
-                              <FileText size={16} color="#00C896" />
+                              <FileText size={16} color="var(--green)" />
                               <span className="kr-file-name" title={f.name}>{f.name}</span>
                               <span className="kr-hint">{fmtSize(f.size)}</span>
                               <button type="button" className="kr-file-remove" onClick={() => pilihFile(s.key, null)} aria-label={`Hapus ${s.label}`}><Trash2 size={14} /></button>

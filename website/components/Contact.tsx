@@ -1,12 +1,12 @@
 'use client'
-import { MapPin, Phone, Mail, Clock, Send, ExternalLink, MessageCircle } from 'lucide-react'
+import { MapPin, Phone, Mail, Clock, Send, ExternalLink, MessageCircle, Loader2 } from 'lucide-react'
 import { useInView } from '@/hooks/useInView'
 import { COMPANY, SERVICES } from '@/lib/data'
 import { useState } from 'react'
 
 export default function Contact() {
   const { ref, inView } = useInView()
-  
+
   // State untuk form konsultasi
   const [formData, setFormData] = useState({
     name: '',
@@ -16,6 +16,10 @@ export default function Contact() {
     service: '',
     message: ''
   })
+  // Anti dobel-klik/dobel-submit (Enter ganda dsb) — form ini tidak memanggil
+  // API backend (langsung membuka WhatsApp), tapi tetap dikunci sesaat agar
+  // tombol tidak membuka beberapa tab WhatsApp saat diklik berkali-kali.
+  const [sending, setSending] = useState(false)
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
     const { name, value } = e.target
@@ -25,7 +29,9 @@ export default function Contact() {
   // Fungsi untuk form konsultasi (data lengkap)
   const handleConsultationSubmit = (e: React.FormEvent) => {
     e.preventDefault()
-    
+    if (sending) return
+    setSending(true)
+
     const message = `
 *Konsultasi Keamanan - PT Sopiak Satria Saga*
 
@@ -41,9 +47,10 @@ ${formData.message || 'Tidak ada pesan tambahan'}
 ---
 Pesan ini dikirim melalui form konsultasi website.
     `.trim()
-    
+
     const encodedMsg = encodeURIComponent(message)
     window.open(`https://wa.me/${COMPANY.whatsapp}?text=${encodedMsg}`, '_blank')
+    setTimeout(() => setSending(false), 1200)
   }
 
   // Fungsi untuk WhatsApp card (langsung chat dengan pesan singkat)
@@ -59,12 +66,7 @@ Pesan ini dikirim melalui form konsultasi website.
         {/* Header */}
         <div style={{ textAlign: 'center', maxWidth: 640, margin: '0 auto 56px' }}>
           <div className={`reveal ${inView ? 'visible' : ''}`}>
-            <div className="section-label" style={{ justifyContent: 'center' }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ width: 32, height: 1.5, background: 'linear-gradient(90deg, transparent, var(--cyan))' }} />
-                HUBUNGI KAMI
-              </span>
-            </div>
+            <div className="section-label centered">HUBUNGI KAMI</div>
           </div>
           <h2 className={`section-title reveal ${inView ? 'visible' : ''} d1`} style={{ textAlign: 'center' }}>
             Mari Diskusikan Kebutuhan{' '}
@@ -76,24 +78,19 @@ Pesan ini dikirim melalui form konsultasi website.
         </div>
 
         {/* 4 Contact Cards */}
-        <div className={`reveal ${inView ? 'visible' : ''} d2`} style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: 16,
-          marginBottom: 48,
-        }}>
+        <div className={`contact-cards-grid reveal ${inView ? 'visible' : ''} d2`}>
           {/* Address Card */}
           <a href={COMPANY.mapsUrl} target="_blank" rel="noopener noreferrer" className="glass-card" style={{
             padding: '24px 20px', textDecoration: 'none', color: 'inherit', display: 'block',
           }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(239,68,68,.08)', border: '1px solid rgba(239,68,68,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-              <MapPin size={20} color="#FF4757" strokeWidth={1.8} />
+              <MapPin size={20} color="var(--red)" strokeWidth={1.8} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Kantor Pusat</div>
             <div style={{ fontSize: 12.5, color: 'var(--text-muted)', lineHeight: 1.6, marginBottom: 12 }}>
               {COMPANY.address}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#FF4757' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--red)' }}>
               Buka di Google Maps <ExternalLink size={11} />
             </div>
           </a>
@@ -103,36 +100,36 @@ Pesan ini dikirim melalui form konsultasi website.
             padding: '24px 20px', textDecoration: 'none', color: 'inherit', display: 'block',
           }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(0,180,216,.08)', border: '1px solid rgba(0,180,216,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-              <Phone size={20} color="#00B4D8" strokeWidth={1.8} />
+              <Phone size={20} color="var(--cyan)" strokeWidth={1.8} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Telepon</div>
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.7 }}>{COMPANY.phones[0]}</div>
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 12 }}>{COMPANY.phones[1]}</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#00B4D8' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--cyan)' }}>
               Telepon Sekarang <ExternalLink size={11} />
             </div>
           </a>
 
           {/* WhatsApp Card */}
-          <div 
+          <div
             onClick={handleWhatsAppCard}
-            className="glass-card" 
+            className="glass-card"
             style={{
-              padding: '24px 20px', 
-              textDecoration: 'none', 
-              color: 'inherit', 
+              padding: '24px 20px',
+              textDecoration: 'none',
+              color: 'inherit',
               display: 'block',
               cursor: 'pointer'
             }}
           >
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(37,211,102,.08)', border: '1px solid rgba(37,211,102,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-              <MessageCircle size={20} color="#25D366" strokeWidth={1.8} />
+              <MessageCircle size={20} color="var(--whatsapp)" strokeWidth={1.8} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 6 }}>WhatsApp</div>
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 12 }}>
               Chat langsung dengan tim kami. Respon cepat!
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#25D366' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--whatsapp)' }}>
               Chat via WhatsApp <ExternalLink size={11} />
             </div>
           </div>
@@ -142,13 +139,13 @@ Pesan ini dikirim melalui form konsultasi website.
             padding: '24px 20px', textDecoration: 'none', color: 'inherit', display: 'block',
           }}>
             <div style={{ width: 44, height: 44, borderRadius: 12, background: 'rgba(139,92,246,.08)', border: '1px solid rgba(139,92,246,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 14 }}>
-              <Mail size={20} color="#8B5CF6" strokeWidth={1.8} />
+              <Mail size={20} color="var(--purple)" strokeWidth={1.8} />
             </div>
             <div style={{ fontSize: 13, fontWeight: 700, color: '#fff', marginBottom: 6 }}>Email</div>
             <div style={{ fontSize: 13.5, color: 'var(--text-muted)', lineHeight: 1.7, marginBottom: 12, wordBreak: 'break-all' }}>
               {COMPANY.email}
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: '#8B5CF6' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 700, color: 'var(--purple)' }}>
               Kirim Email <ExternalLink size={11} />
             </div>
           </a>
@@ -176,7 +173,7 @@ Pesan ini dikirim melalui form konsultasi website.
                 justifyContent: 'space-between',
               }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <MapPin size={15} color="#00B4D8" />
+                  <MapPin size={15} color="var(--cyan)" />
                   <span style={{ fontSize: 13, fontWeight: 700, color: '#fff' }}>Lokasi Kantor</span>
                 </div>
                 <a
@@ -231,7 +228,7 @@ Pesan ini dikirim melalui form konsultasi website.
                     background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.15)',
                     display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                   }}>
-                    <MapPin size={15} color="#FF4757" />
+                    <MapPin size={15} color="var(--red)" />
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 12, fontWeight: 700, color: '#fff', marginBottom: 1 }}>PT Sopiak Satria Saga</div>
@@ -256,64 +253,86 @@ Pesan ini dikirim melalui form konsultasi website.
               </p>
             </div>
             <div className="form-row-2">
-              <input 
-                name="name"
-                value={formData.name}
-                onChange={handleChange}
-                placeholder="Nama Lengkap *" 
-                required 
-                className="form-input" 
-              />
-              <input 
-                name="company"
-                value={formData.company}
-                onChange={handleChange}
-                placeholder="Perusahaan" 
-                className="form-input" 
-              />
+              <div className="form-field">
+                <label className="form-label" htmlFor="contact-name">Nama Lengkap *</label>
+                <input
+                  id="contact-name"
+                  name="name"
+                  value={formData.name}
+                  onChange={handleChange}
+                  required
+                  className="form-input"
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label" htmlFor="contact-company">Perusahaan (opsional)</label>
+                <input
+                  id="contact-company"
+                  name="company"
+                  value={formData.company}
+                  onChange={handleChange}
+                  className="form-input"
+                />
+              </div>
             </div>
             <div className="form-row-2">
-              <input 
-                type="email" 
-                name="email"
-                value={formData.email}
-                onChange={handleChange}
-                placeholder="Email *" 
-                required 
-                className="form-input" 
-              />
-              <input 
-                type="tel" 
-                name="phone"
-                value={formData.phone}
-                onChange={handleChange}
-                placeholder="No. Telepon *" 
-                required 
-                className="form-input" 
-              />
+              <div className="form-field">
+                <label className="form-label" htmlFor="contact-email">Email *</label>
+                <input
+                  id="contact-email"
+                  type="email"
+                  name="email"
+                  value={formData.email}
+                  onChange={handleChange}
+                  required
+                  className="form-input"
+                />
+              </div>
+              <div className="form-field">
+                <label className="form-label" htmlFor="contact-phone">No. Telepon *</label>
+                <input
+                  id="contact-phone"
+                  type="tel"
+                  name="phone"
+                  value={formData.phone}
+                  onChange={handleChange}
+                  placeholder="0812xxxxxxxx"
+                  required
+                  className="form-input"
+                />
+              </div>
             </div>
             {/* INI YANG DIPERBAIKI - TIDAK ADA defaultValue */}
-            <select 
-              name="service"
-              value={formData.service}
-              onChange={handleChange}
-              className="form-input"
-            >
-              <option value="" disabled>Pilih Layanan yang Diminati</option>
-              {SERVICES.map(s => <option key={s.slug} value={s.title}>{s.title}</option>)}
-              <option value="Lainnya">Lainnya</option>
-            </select>
-            <textarea 
-              name="message"
-              value={formData.message}
-              onChange={handleChange}
-              placeholder="Ceritakan kebutuhan keamanan Anda..." 
-              rows={4} 
-              className="form-input" 
-              style={{ resize: 'vertical' }} 
-            />
-            <button type="submit" className="form-submit">
-              <Send size={16} /><span>Kirim Pesan</span>
+            <div className="form-field">
+              <label className="form-label" htmlFor="contact-service">Layanan yang Diminati</label>
+              <select
+                id="contact-service"
+                name="service"
+                value={formData.service}
+                onChange={handleChange}
+                className="form-input"
+              >
+                <option value="" disabled>Pilih Layanan yang Diminati</option>
+                {SERVICES.map(s => <option key={s.slug} value={s.title}>{s.title}</option>)}
+                <option value="Lainnya">Lainnya</option>
+              </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label" htmlFor="contact-message">Pesan (opsional)</label>
+              <textarea
+                id="contact-message"
+                name="message"
+                value={formData.message}
+                onChange={handleChange}
+                placeholder="Ceritakan kebutuhan keamanan Anda..."
+                rows={4}
+                className="form-input"
+                style={{ resize: 'vertical' }}
+              />
+            </div>
+            <button type="submit" className="form-submit" disabled={sending}>
+              {sending ? <Loader2 size={16} className="spin" /> : <Send size={16} />}
+              <span>{sending ? 'Mengirim...' : 'Kirim Pesan'}</span>
             </button>
             <div style={{ textAlign: 'center', marginTop: 14, fontSize: 11.5, color: 'var(--text-dim)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <Clock size={11} /> {COMPANY.operationalHours}

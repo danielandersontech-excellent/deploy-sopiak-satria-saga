@@ -17,16 +17,7 @@ export default function ServiceDetailClient({ slug }: { slug: string }) {
 
       {/* Hero */}
       <section className="svc-detail-hero">
-        <div style={{
-          position: 'absolute',
-          width: 600,
-          height: 600,
-          borderRadius: '50%',
-          filter: 'blur(150px)',
-          background: `${svc.color}08`,
-          top: '-30%',
-          right: '-10%',
-        }} />
+        <div className="svc-detail-orb" style={{ background: `${svc.color}08` }} />
         <div className="container" style={{ position: 'relative', zIndex: 2 }}>
           <Link href="/#layanan" className="svc-detail-back">
             <ArrowLeft size={16} /> Kembali ke Semua Layanan
@@ -43,7 +34,7 @@ export default function ServiceDetailClient({ slug }: { slug: string }) {
       </section>
 
       {/* Content */}
-      <section style={{ padding: '80px 0', background: 'var(--navy)' }}>
+      <section className="svc-detail-content">
         <div className="container">
           <div className="svc-detail-grid">
             <div>
@@ -85,7 +76,7 @@ export default function ServiceDetailClient({ slug }: { slug: string }) {
                 <h3>Yang Termasuk dalam Layanan</h3>
                 {svc.includes.map((item, i) => (
                   <div key={i} className="sdc-include-item">
-                    <CheckCircle2 size={16} color="#00C896" style={{ flexShrink: 0, marginTop: 2 }} />
+                    <CheckCircle2 size={16} color="var(--green)" style={{ flexShrink: 0, marginTop: 2 }} />
                     <span>{item}</span>
                   </div>
                 ))}

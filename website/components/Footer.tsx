@@ -9,19 +9,13 @@ export default function Footer() {
         <div className="footer-grid">
           {/* Brand */}
           <div className="footer-brand">
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
-              <div style={{
-                width: 38, height: 38, borderRadius: 10,
-                background: 'linear-gradient(135deg, #00B4D8, #0096C7)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-              }}>
+            <div className="footer-brand-head">
+              <div className="footer-brand-icon">
                 <Shield size={18} color="#fff" strokeWidth={2.5} />
               </div>
               <div>
-                <strong style={{ color: '#fff', fontSize: 14, fontFamily: 'var(--font-head)' }}>{COMPANY.name}</strong>
-                <div style={{ fontSize: 9, color: 'var(--text-dim)', letterSpacing: 1.5, textTransform: 'uppercase', fontWeight: 600 }}>
-                  Security Management
-                </div>
+                <strong className="brand-name">{COMPANY.name}</strong>
+                <div className="brand-tagline">Security Management</div>
               </div>
             </div>
             <p>

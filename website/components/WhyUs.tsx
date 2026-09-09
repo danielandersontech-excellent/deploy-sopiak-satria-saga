@@ -23,7 +23,7 @@ export default function WhyUs() {
               <div className="why-card-top">
                 <div className="why-num">{r.num}</div>
                 <div className="why-icon">
-                  <r.Icon size={20} color="#00B4D8" strokeWidth={1.8} />
+                  <r.Icon size={20} color="var(--cyan)" strokeWidth={1.8} />
                 </div>
               </div>
               <h3>{r.title}</h3>
