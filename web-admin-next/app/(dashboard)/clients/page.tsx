@@ -310,10 +310,17 @@ export default function ClientsPage() {
                     <td>{r.nomor_telepon || "-"}</td>
                     <td className="cell-ellipsis" title={r.email || "-"}>{r.email || "-"}</td>
                     <td className="cell-ellipsis-sm" title={r.jenis_jasa || "-"}>{r.jenis_jasa || "-"}</td>
-                    <td>
+                    <td style={{ whiteSpace: "nowrap" }}>
                       {r.tgl_mulai_kontrak
                         ? `${fmtDate(r.tgl_mulai_kontrak)} - ${fmtDate(r.tgl_habis_kontrak)}`
                         : "-"}
+                      {/* [Audit 2B-r2] Penanda kontrak habis / hampir habis (≤30 hari) untuk klien Aktif. */}
+                      {r.status_klien === "Aktif" && r.tgl_habis_kontrak && (() => {
+                        const sisa = Math.ceil((new Date(r.tgl_habis_kontrak).getTime() - Date.now()) / 86400000);
+                        if (sisa < 0) return <span className="badge badge-danger" style={{ marginLeft: 6 }} title={`Kontrak habis ${Math.abs(sisa)} hari lalu`}>Habis</span>;
+                        if (sisa <= 30) return <span className="badge badge-warning" style={{ marginLeft: 6 }} title={`Sisa ${sisa} hari`}>{sisa} hr</span>;
+                        return null;
+                      })()}
                     </td>
                     <td>
                       <div
