@@ -8,9 +8,12 @@ import { NAV_LINKS } from '@/lib/data'
 function LogoImage({ size = 42 }: { size?: number }) {
   return (
     <div style={{ width: size, height: size, position: 'relative' }}>
+      {/* [Audit 2C] Logo navbar dirender 42px; pakai aset kecil (160px, ±11 KB)
+          alih-alih ptsss-logo.png asli (619x717, 317 KB) yang dimuat setiap
+          kunjungan. Aset asli tetap ada untuk keperluan lain. */}
       <Image
-        src="/image/ptsss-logo.png"
-        alt="PTSSS Logo"
+        src="/image/ptsss-logo-nav.png"
+        alt="Logo PT Sopiak Satria Saga"
         width={size}
         height={size}
         className="object-contain"

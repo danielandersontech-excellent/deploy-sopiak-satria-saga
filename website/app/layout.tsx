@@ -20,8 +20,10 @@ export const metadata: Metadata = {
 
 // [6-9] Viewport + themeColor (navy brand) sesuai konvensi Next 14 (terpisah
 // dari metadata). metadataBase + alternates.canonical kini DIISI (domain
-// produksi sopiaksatriasaga.com terkonfirmasi). Favicon app/icon masih dilewati
-// (aset belum ada) — tambah saat aset siap.
+// produksi sopiaksatriasaga.com terkonfirmasi).
+// [Audit 2C] Favicon kini tersedia: app/icon.png (128px, transparan) dan
+// app/apple-icon.png (180px, latar navy) — Next 14 menyisipkan <link rel=icon>
+// otomatis dari file tersebut (sebelumnya tab browser tanpa ikon / 404 favicon.ico).
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
