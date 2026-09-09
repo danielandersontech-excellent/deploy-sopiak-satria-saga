@@ -22,6 +22,13 @@ export const fmtTime = (d: string) =>
 export const fmtDateTime = (d: string) =>
   d ? `${fmtDate(d)} ${fmtTime(d)}` : "-";
 
+/** Tanggal panjang Indonesia: "Rabu, 9 September 2026" (judul dashboard, cetak). */
+export const fmtDateLong = (d: string | Date | null | undefined) => {
+  if (!d) return "-";
+  const dt = typeof d === "string" ? new Date(d) : d;
+  return isNaN(dt.getTime()) ? "-" : dt.toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+};
+
 export const statusColor = (s: string) =>
   ({
     hadir: "success",
@@ -59,7 +66,52 @@ export const statusColor = (s: string) =>
     belum_ditempatkan: "warning",
     ditempatkan: "success",
     nonaktif: "danger",
+    // [Misi V3 / B2] status rekrutmen ikut satu peta warna (sebelumnya peta lokal di halaman rekrutmen)
+    baru: "warning",
+    diproses: "info",
+    wawancara: "purple",
+    diterima: "success",
+    ditolak: "danger",
+    dibatalkan: "default",
+    // status klien
+    Aktif: "success",
+    "Non-Aktif": "default",
+    Blacklist: "danger",
   })[s] || "default";
+
+/**
+ * [Misi V3 / B2] Warna & label peran — SATU pemetaan untuk tabel, kartu, modal,
+ * TopBar (sebelumnya tiga pemetaan berbeda di halaman Personil).
+ */
+export const roleColor = (role: string | null | undefined): string =>
+  ({ admin: "danger", supervisor: "purple", komandan: "info", anggota: "default", klien: "warning" })[role || ""] || "default";
+
+export const roleLabel = (role: string | null | undefined): string =>
+  ({ admin: "Admin", supervisor: "Supervisor", komandan: "Komandan", anggota: "Anggota", klien: "Klien" })[role || ""] || (role ? String(role) : "-");
+
+/** Sisa hari sampai tanggal (negatif = sudah lewat); null bila tanggal kosong/invalid. */
+export const daysUntil = (d: string | null | undefined): number | null => {
+  if (!d) return null;
+  const dt = new Date(typeof d === "string" && /^\d{4}-\d{2}-\d{2}$/.test(d) ? `${d}T00:00:00` : d);
+  if (isNaN(dt.getTime())) return null;
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  return Math.round((dt.getTime() - today.getTime()) / 86400000);
+};
+
+/** Umur data dalam hari sejak tanggal pembuatan (0 = hari ini). */
+export const ageDays = (d: string | null | undefined): number | null => {
+  if (!d) return null;
+  const dt = new Date(d);
+  if (isNaN(dt.getTime())) return null;
+  return Math.max(0, Math.floor((Date.now() - dt.getTime()) / 86400000));
+};
+
+/** Format Rupiah konsisten: Rp 1.250.000 */
+export const fmtRupiah = (n: number | string | null | undefined): string => {
+  const v = Number(n);
+  if (n === null || n === undefined || n === "" || isNaN(v)) return "-";
+  return "Rp " + Math.round(v).toLocaleString("id-ID");
+};
 
 export const avatarUrl = (url: string | null) =>
   url && url.startsWith("http")
@@ -103,4 +155,6 @@ export const statusLabel = (s: string | null | undefined): string =>
     normal: "Normal", urgent: "Mendesak",
     belum_ditempatkan: "Belum Ditempatkan", ditempatkan: "Ditempatkan", nonaktif: "Nonaktif",
     expired: "Kedaluwarsa", returned: "Kembali",
+    baru: "Baru", diproses: "Diproses", wawancara: "Wawancara", diterima: "Diterima", ditolak: "Ditolak", dibatalkan: "Dibatalkan",
+    masuk: "Masuk", keluar: "Keluar",
   })[s || ""] || (s ? String(s).replace(/_/g, " ") : "-");

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { absensiApi, dashboardApi, getUser } from "@/lib/api";
 import { onRealtimeEvent } from "@/lib/socketClient";
-import { fmtTime, fmtDateTime, statusColor, statusLabel, avatarUrl } from "@/lib/formatters";
+import { fmtTime, fmtDateTime, fmtDateLong, statusColor, statusLabel, avatarUrl } from "@/lib/formatters";
 import { useSettings } from "@/hooks/useSettings";
 
 /**
@@ -85,7 +85,7 @@ export default function DashboardPage() {
         </h1>
         <div className="page-actions">
           <span className="muted">
-            {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+            {fmtDateLong(new Date())}
           </span>
           <button className="btn btn-outline btn-sm" onClick={loadDashboard} disabled={loading} title="Muat ulang">
             <i className={`fas fa-sync-alt ${loading ? "fa-spin" : ""}`} />

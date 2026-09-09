@@ -1468,3 +1468,143 @@ h1, h2, h3, h4, h5, h6 {
 .cell-wrap { max-width: 260px; white-space: normal; word-break: break-word; }
 /* Keterangan kosong yang lebih informatif. */
 .empty-hint { display: block; font-size: 12px; margin-top: 6px; color: var(--text-muted); font-style: normal; }
+
+/* =====================================================================
+   [Misi V3 / B2] KELAS BERSAMA TAMBAHAN — penyeragaman tampilan
+   Semua warna lewat token :root / [data-theme="dark"] di atas.
+   ===================================================================== */
+@keyframes fadeSlideUp { from { opacity: 0; transform: translate(-50%, 12px); } to { opacity: 1; transform: translate(-50%, 0); } }
+
+/* Badge: alias 'primary' (pernah dipakai tanpa definisi) + ukuran besar */
+.badge-primary { background: var(--primary-light); color: var(--primary); }
+[data-theme="dark"] .badge-primary { background: rgba(26, 86, 219, 0.15); color: #60a5fa; }
+.badge-lg { font-size: 12px; padding: 4px 12px; }
+
+/* Tombol */
+.btn-block { width: 100%; justify-content: center; }
+.btn-warning { background: var(--warning); color: #fff; }
+.btn-warning:hover { background: #d97706; }
+.btn-danger-outline { background: transparent; border: 1px solid var(--danger); color: var(--danger); }
+.btn-danger-outline:hover { background: var(--danger-light); }
+
+/* Prompt mengambang (Install PWA, versi baru) — satu gaya untuk keduanya */
+.floating-prompt {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  z-index: 9998; background: var(--card); border: 1px solid var(--border); color: var(--text);
+  padding: 12px 18px; border-radius: var(--radius-lg); box-shadow: var(--shadow-xl);
+  display: flex; align-items: center; gap: 12px; font-size: 13px; font-weight: 500; max-width: 92vw;
+  animation: fadeSlideUp 0.3s ease;
+}
+.floating-prompt img { width: 28px; height: 28px; object-fit: contain; }
+.floating-prompt .floating-prompt-icon { color: var(--primary); font-size: 16px; }
+
+/* Pratinjau gambar layar penuh (foto laporan/patroli/serah terima) */
+.image-preview-overlay { z-index: 200; cursor: zoom-out; }
+.image-preview-overlay img { max-width: 92vw; max-height: 90vh; border-radius: var(--radius); box-shadow: var(--shadow-xl); }
+
+/* Menu tarik-turun TopBar */
+.dropdown-anchor { position: relative; }
+.dropdown-backdrop { position: fixed; inset: 0; z-index: 45; }
+.dropdown-menu {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 46; min-width: 200px;
+  background: var(--card); border: 1px solid var(--border); border-radius: var(--radius);
+  box-shadow: var(--shadow-lg); padding: 6px;
+}
+.dropdown-menu .nav-item { color: var(--text); width: 100%; font-family: inherit; }
+.dropdown-menu .nav-item.danger { color: var(--danger); }
+
+/* Lencana angka pada ikon (bel notifikasi) */
+.icon-badge {
+  position: absolute; top: -4px; right: -4px; background: var(--danger); color: #fff;
+  font-size: 9px; font-weight: 800; min-width: 16px; height: 16px; border-radius: 8px;
+  display: flex; align-items: center; justify-content: center; padding: 0 4px;
+}
+
+/* Panel notifikasi (TopBar) */
+.notif-panel { min-width: 340px; max-width: 92vw; padding: 0; overflow: hidden; }
+.notif-panel-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 14px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 13px; }
+.notif-list { max-height: 380px; overflow-y: auto; }
+.notif-item { display: flex; gap: 10px; padding: 10px 14px; border: 0; border-bottom: 1px solid var(--border-light); border-left: 3px solid transparent; cursor: pointer; text-align: left; width: 100%; background: transparent; font-family: inherit; color: var(--text); }
+.notif-item:hover { background: var(--hover-row); }
+.notif-item.unread { border-left-color: var(--primary); background: var(--primary-light); }
+.notif-item-icon { width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 13px; }
+.notif-item-icon.info { background: var(--primary-light); color: var(--primary); }
+.notif-item-icon.success { background: var(--success-light); color: var(--success); }
+.notif-item-icon.warning { background: var(--warning-light); color: var(--warning); }
+.notif-item-icon.danger { background: var(--danger-light); color: var(--danger); }
+.notif-item-body { flex: 1; min-width: 0; }
+.notif-item-title { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.notif-item-msg { font-size: 12px; color: var(--text-secondary); line-height: 1.35; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.notif-item-time { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.notif-empty { padding: 28px 14px; text-align: center; color: var(--text-muted); font-size: 13px; }
+
+/* Kartu peringatan (dashboard: kontrak habis, laporan pending lama) */
+.alert-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.alert-card { display: flex; align-items: center; gap: 14px; padding: 14px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--card); text-decoration: none; color: inherit; }
+.alert-card:hover { background: var(--card-hover); }
+.alert-card.warning { border-left: 4px solid var(--warning); }
+.alert-card.danger { border-left: 4px solid var(--danger); }
+.alert-card .alert-icon { font-size: 20px; }
+.alert-card.warning .alert-icon { color: var(--warning); }
+.alert-card.danger .alert-icon { color: var(--danger); }
+.alert-card .alert-body { flex: 1; min-width: 0; }
+.alert-card .alert-title { font-weight: 700; font-size: 14px; }
+.alert-card .alert-sub { font-size: 12px; color: var(--text-secondary); }
+
+/* Skeleton baris tabel saat memuat — satu pola untuk semua halaman */
+.skeleton-row { background: var(--hover-row); height: 36px; border-radius: 6px; }
+
+/* Aksi massal (checkbox) */
+tbody tr.row-selected td { background: var(--primary-light); }
+.bulk-bar { display: flex; align-items: center; gap: 10px; padding: 10px 14px; margin-bottom: 12px; border-radius: var(--radius); background: var(--primary-light); border: 1px solid var(--border); font-size: 13px; flex-wrap: wrap; }
+.bulk-bar .bulk-count { font-weight: 700; color: var(--primary); }
+.check-cell { width: 34px; text-align: center; }
+.check-cell input { width: 15px; height: 15px; cursor: pointer; accent-color: var(--primary); }
+
+/* Teks bantu / kesalahan form */
+.form-help { display: block; margin-top: 4px; font-size: 12px; color: var(--text-muted); }
+.form-error { display: block; margin-top: 4px; font-size: 12px; color: var(--danger); }
+.form-input.is-invalid, .form-select.is-invalid, .form-textarea.is-invalid { border-color: var(--danger); }
+
+/* Catatan pada dialog konfirmasi keras */
+.confirm-danger-note { margin-top: 10px; padding: 10px 12px; border-radius: 8px; background: var(--danger-light); color: var(--danger); font-size: 12.5px; text-align: left; }
+.confirm-input { margin-top: 10px; }
+
+/* Halaman error / 404 */
+.error-page { min-height: 100vh; display: flex; align-items: center; justify-content: center; background: var(--bg); padding: 20px; }
+.error-card { text-align: center; padding: 48px 32px; max-width: 480px; width: 100%; }
+.error-card .error-icon { font-size: 52px; margin-bottom: 18px; }
+.error-card h1 { font-size: 26px; font-weight: 800; margin-bottom: 8px; }
+.error-card p { color: var(--text-secondary); margin-bottom: 22px; line-height: 1.6; }
+.error-card .error-actions { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+
+/* Kelas util kecil pengganti inline style yang berulang */
+.text-danger { color: var(--danger) !important; }
+.text-warning { color: var(--warning) !important; }
+.text-success { color: var(--success) !important; }
+.text-primary { color: var(--primary) !important; }
+.nowrap { white-space: nowrap; }
+.mt-8 { margin-top: 8px; } .mt-12 { margin-top: 12px; } .mt-16 { margin-top: 16px; }
+.w-auto { width: auto !important; }
+.flex-center { display: flex; align-items: center; gap: 8px; }
+.pre-wrap { white-space: pre-wrap; }
+.pin-display { font-family: monospace; font-size: 2.25rem; font-weight: 700; letter-spacing: 0.25rem; padding: 16px 24px; margin: 10px auto 16px; background: var(--hover-row); border: 2px dashed var(--primary); border-radius: 12px; display: inline-block; }
+
+/* TopBar: pengganti inline style */
+.topbar-brand { color: var(--text-muted); font-size: 12px; }
+.topbar-sep { font-size: 8px; color: var(--text-muted); margin: 0 8px; }
+.topbar-page { font-weight: 600; font-size: 13px; }
+.topbar-clock > i { font-size: 12px; opacity: 0.5; }
+.topbar-time { font-family: var(--font-sora), monospace; font-weight: 600; }
+.topbar-bell { position: relative; }
+.topbar-user { cursor: pointer; font-family: inherit; }
+.topbar-user-info { text-align: left; }
+.topbar-caret { font-size: 10px; color: var(--text-muted); }
+.capitalize { text-transform: capitalize; }
+.avatar-role-danger { background: var(--danger) !important; }
+.avatar-role-purple { background: var(--purple) !important; }
+.avatar-role-info { background: var(--primary) !important; }
+.avatar-role-default { background: var(--success) !important; }
+.avatar-role-warning { background: var(--warning) !important; }
+.confirm-danger-note.warning { background: var(--warning-light); color: var(--warning); }
+.mb-14 { margin-bottom: 14px; }

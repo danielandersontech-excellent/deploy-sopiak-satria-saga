@@ -159,7 +159,7 @@ export default function BackupPage() {
                 </tr>
               ))}
               {!listLoading && backups.length === 0 && (
-                <tr><td colSpan={5} className="empty-row">Belum ada backup. Klik "{t("buat_backup")}" untuk membuat backup pertama.</td></tr>
+                <tr><td colSpan={5} className="empty-row">Belum ada backup. Klik &quot;{t("buat_backup")}&quot; untuk membuat backup pertama.</td></tr>
               )}
             </tbody>
           </table>

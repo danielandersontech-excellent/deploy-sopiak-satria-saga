@@ -47,7 +47,7 @@ function LoginForm() {
         required
       />
       {error && <div className="login-error">{error}</div>}
-      <button type="submit" disabled={loading}>
+      <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
         {loading ? "Memeriksa..." : "Masuk"}
       </button>
       <p className="muted" style={{ textAlign: "center", marginTop: 10, fontSize: 11 }}>

@@ -206,8 +206,17 @@ export function crud(base: string) {
 export const usersApi = { ...crud('/api/users'), updateBerkas: (id: string, data: any) => apiFetch(`/api/users/${id}`, { method: 'PUT', body: data }) };
 export const absensiApi = { ...crud('/api/absensi'), today: async () => toArray(await apiFetch('/api/absensi/today')), byDate: async (date: string) => toArray(await apiFetch(`/api/absensi?date=${date}`)) };
 export const patroliApi = crud('/api/patroli');
-export const laporanHarianApi = { ...crud('/api/laporan/harian'), validate: (id: string, status: string, userId: string, catatan?: string) => apiFetch(`/api/laporan/harian/${id}/validate`, { method: 'PUT', body: { status, catatan: catatan || null } }) };
-export const laporanKejadianApi = { ...crud('/api/laporan/kejadian'), validate: (id: string, status: string, userId: string, catatan?: string) => apiFetch(`/api/laporan/kejadian/${id}/validate`, { method: 'PUT', body: { status, catatan } }) };
+export const laporanHarianApi = {
+  ...crud('/api/laporan/harian'),
+  validate: (id: string, status: string, userId: string, catatan?: string) => apiFetch(`/api/laporan/harian/${id}/validate`, { method: 'PUT', body: { status, catatan: catatan || null } }),
+  // [Misi V3 / C2] validasi massal — komandan memilih lewat checkbox, server tetap memeriksa scope per laporan.
+  validateBulk: (ids: string[], status: string, catatan?: string) => apiFetch('/api/laporan/harian/validate-bulk', { method: 'PUT', body: { ids, status, catatan: catatan || null } }),
+};
+export const laporanKejadianApi = {
+  ...crud('/api/laporan/kejadian'),
+  validate: (id: string, status: string, userId: string, catatan?: string) => apiFetch(`/api/laporan/kejadian/${id}/validate`, { method: 'PUT', body: { status, catatan } }),
+  validateBulk: (ids: string[], status: string, catatan?: string) => apiFetch('/api/laporan/kejadian/validate-bulk', { method: 'PUT', body: { ids, status, catatan: catatan || null } }),
+};
 export const lokasiApi = crud('/api/data/lokasi');
 export const posJagaApi = crud('/api/data/pos-jaga');
 export const checkpointsApi = crud('/api/data/checkpoints');
@@ -217,7 +226,12 @@ export const shiftAssignApi = crud('/api/data/shift-assignments');
 export const broadcastsApi = crud('/api/data/broadcasts');
 export const serahTerimaApi = crud('/api/data/serah-terima');
 export const panicApi = { ...crud('/api/data/panic'), resolve: (id: string, status: string, userId: string, catatan?: string) => apiFetch(`/api/data/panic/${id}/resolve`, { method: 'PUT', body: { status, catatan_resolver: catatan } }) };
-export const notifApi = crud('/api/data/notifikasi');
+// [Misi V3 / D3] notifikasi in-app: daftar (≤50 terbaru, sudah ter-scope server), tandai dibaca, tandai semua.
+export const notifApi = {
+  ...crud('/api/data/notifikasi'),
+  read: (id: string) => apiFetch(`/api/data/notifikasi/${id}/read`, { method: 'PUT' }),
+  readAll: () => apiFetch('/api/data/notifikasi/read-all', { method: 'PUT' }),
+};
 export const reportExportsApi = crud('/api/data/report-exports');
 export const clientsApi = crud('/api/data/clients');
 export const dashboardApi = {

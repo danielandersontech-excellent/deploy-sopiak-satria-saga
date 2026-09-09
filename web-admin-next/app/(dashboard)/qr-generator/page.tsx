@@ -145,7 +145,7 @@ export default function QRGeneratorPage() {
                 </tr>
               );
             })}
-            {filtered.length === 0 && <tr><td colSpan={7} style={{ textAlign: "center", color: "var(--text-muted)" }}>Tidak ada checkpoint. Buat dulu di menu Checkpoint.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="empty-row">Tidak ada checkpoint. Buat dulu di menu Checkpoint.</td></tr>}
           </tbody>
         </table>
       </div>

@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback } from "react";
 import { dashboardApi, lokasiApi } from "@/lib/api";
 import { avatarUrl } from "@/lib/formatters";
 import { useToast } from "@/hooks/useToast";
+import { useThemeColors } from "@/hooks/useThemeColors";
 import {
   AreaChart, Area, PieChart, Pie, Cell, BarChart, Bar,
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -17,7 +18,6 @@ import {
  * menghitung di server (scope per peran tetap berlaku), dengan filter
  * periode & lokasi. Grid memakai kelas responsif agar tidak pecah di HP.
  */
-const COLORS = ["#10B981", "#F59E0B", "#EF4444", "#1A56DB", "#8B5CF6", "#0EA5E9"];
 const ROLE_LABEL: Record<string, string> = { anggota: "Anggota", komandan: "Komandan", supervisor: "Supervisor", admin: "Admin", klien: "Klien" };
 
 const dayLabel = (ymd: string) => {
@@ -35,6 +35,9 @@ const last7 = () => {
 
 export default function AnalyticsPage() {
   const { toast } = useToast();
+  // [Misi V3 / B2] warna grafik dari token CSS → ikut tema terang/gelap (sebelumnya hex hardcode gelap).
+  const c = useThemeColors();
+  const COLORS = [c.success, c.warning, c.danger, c.primary, c.purple, c.info];
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<any>(null);
   const [days, setDays] = useState(30);
@@ -88,7 +91,7 @@ export default function AnalyticsPage() {
   }, [data]);
   const rolePieData = useMemo(() => (data?.distribusi_role || []).map((r: any) => ({ name: ROLE_LABEL[r.role] || r.role, value: Number(r.jumlah) || 0 })), [data]);
 
-  const tooltipStyle = { contentStyle: { background: "#1E293B", border: "1px solid #334155", borderRadius: 8, color: "#F1F5F9", fontSize: 12 } };
+  const tooltipStyle = { contentStyle: { background: c.card, border: `1px solid ${c.border}`, borderRadius: 8, color: c.text, fontSize: 12 } };
   const kpis = [
     { label: "Personil Aktif", value: totalPersonil, icon: "fa-users", color: "var(--primary)" },
     { label: `Kehadiran (${days} hari)`, value: `${kehadiranPct}%`, icon: "fa-check-circle", color: "var(--success)" },
@@ -131,13 +134,13 @@ export default function AnalyticsPage() {
           <h3 style={{ marginBottom: 16 }}><i className="fas fa-chart-area" /> Absensi 7 Hari Terakhir</h3>
           <ResponsiveContainer width="100%" height={260}>
             <AreaChart data={weeklyData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="day" tick={{ fill: "#94A3B8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94A3B8", fontSize: 11 }} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
+              <XAxis dataKey="day" tick={{ fill: c.textSecondary, fontSize: 11 }} />
+              <YAxis tick={{ fill: c.textSecondary, fontSize: 11 }} allowDecimals={false} />
               <Tooltip {...tooltipStyle} />
               <Legend />
-              <Area type="monotone" dataKey="hadir" stackId="1" stroke="#10B981" fill="#10B981" fillOpacity={0.4} name="Hadir" />
-              <Area type="monotone" dataKey="terlambat" stackId="1" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.4} name="Terlambat" />
+              <Area type="monotone" dataKey="hadir" stackId="1" stroke={c.success} fill={c.success} fillOpacity={0.4} name="Hadir" />
+              <Area type="monotone" dataKey="terlambat" stackId="1" stroke={c.warning} fill={c.warning} fillOpacity={0.4} name="Terlambat" />
             </AreaChart>
           </ResponsiveContainer>
         </div>
@@ -161,14 +164,14 @@ export default function AnalyticsPage() {
           <h3 style={{ marginBottom: 16 }}><i className="fas fa-chart-bar" /> Status Laporan ({days} hari)</h3>
           <ResponsiveContainer width="100%" height={250}>
             <BarChart data={laporanBarData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="name" tick={{ fill: "#94A3B8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94A3B8", fontSize: 11 }} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
+              <XAxis dataKey="name" tick={{ fill: c.textSecondary, fontSize: 11 }} />
+              <YAxis tick={{ fill: c.textSecondary, fontSize: 11 }} allowDecimals={false} />
               <Tooltip {...tooltipStyle} />
               <Legend />
-              <Bar dataKey="approved" fill="#10B981" name="Disetujui" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pending" fill="#F59E0B" name="Menunggu/Terbuka" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="revision" fill="#EF4444" name="Revisi / Kritis" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="approved" fill={c.success} name="Disetujui" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pending" fill={c.warning} name="Menunggu/Terbuka" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="revision" fill={c.danger} name="Revisi / Kritis" radius={[4, 4, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -176,13 +179,13 @@ export default function AnalyticsPage() {
           <h3 style={{ marginBottom: 16 }}><i className="fas fa-chart-line" /> Patroli 7 Hari</h3>
           <ResponsiveContainer width="100%" height={250}>
             <LineChart data={patroliWeekly}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis dataKey="day" tick={{ fill: "#94A3B8", fontSize: 11 }} />
-              <YAxis tick={{ fill: "#94A3B8", fontSize: 11 }} allowDecimals={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={c.border} />
+              <XAxis dataKey="day" tick={{ fill: c.textSecondary, fontSize: 11 }} />
+              <YAxis tick={{ fill: c.textSecondary, fontSize: 11 }} allowDecimals={false} />
               <Tooltip {...tooltipStyle} />
               <Legend />
-              <Line type="monotone" dataKey="selesai" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} name="Selesai" />
-              <Line type="monotone" dataKey="berlangsung" stroke="#F59E0B" strokeWidth={2} dot={{ r: 4 }} name="Belum Selesai" />
+              <Line type="monotone" dataKey="selesai" stroke={c.success} strokeWidth={2} dot={{ r: 4 }} name="Selesai" />
+              <Line type="monotone" dataKey="berlangsung" stroke={c.warning} strokeWidth={2} dot={{ r: 4 }} name="Belum Selesai" />
             </LineChart>
           </ResponsiveContainer>
         </div>

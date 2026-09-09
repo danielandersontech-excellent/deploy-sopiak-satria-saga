@@ -1,6 +1,10 @@
 "use client";
 import { useState, useEffect } from "react";
 
+/**
+ * Prompt pasang PWA. [Misi V3 / B2] Memakai kelas bersama `.floating-prompt`
+ * + `.btn` (sebelumnya seluruh gaya inline dengan token keluarga lama).
+ */
 export default function InstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
   const [show, setShow] = useState(false);
@@ -32,23 +36,11 @@ export default function InstallPrompt() {
   if (!show) return null;
 
   return (
-    <div style={{
-      position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)",
-      zIndex: 9998, background: "var(--bg-secondary)", border: "1px solid var(--border)",
-      color: "var(--text-primary)", padding: "14px 24px", borderRadius: 12,
-      boxShadow: "var(--shadow-xl)", display: "flex", alignItems: "center", gap: 16,
-      fontSize: 14, fontWeight: 500, maxWidth: "90vw",
-    }}>
-      <img src="/logo-ptsss.png" alt="Logo" style={{ width: 32, height: 32, objectFit: "contain" }} />
-      <span>Install PT Sopiak Satria Saga di perangkat ini</span>
-      <button onClick={handleInstall} style={{
-        background: "var(--brand-primary)", color: "#fff", border: "none",
-        padding: "8px 16px", borderRadius: 8, cursor: "pointer", fontWeight: 700, fontSize: 13,
-      }}>Install</button>
-      <button onClick={handleDismiss} style={{
-        background: "transparent", border: "none", color: "var(--text-muted)",
-        cursor: "pointer", fontSize: 13,
-      }}>Nanti</button>
+    <div className="floating-prompt" role="dialog" aria-label="Pasang aplikasi">
+      <img src="/logo-ptsss.png" alt="Logo" />
+      <span>Pasang PT Sopiak Satria Saga di perangkat ini</span>
+      <button className="btn btn-primary btn-sm" onClick={handleInstall}><i className="fas fa-download" /> Pasang</button>
+      <button className="btn btn-outline btn-sm" onClick={handleDismiss}>Nanti</button>
     </div>
   );
 }

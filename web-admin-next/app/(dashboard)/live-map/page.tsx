@@ -251,7 +251,7 @@ export default function LiveMapPage() {
       )}
       <div className="section-card" style={{ padding: 0, overflow: "hidden" }}>
         {loading ? (
-          <div style={{ textAlign: "center", padding: 80 }}>Memuat peta...</div>
+          <div className="animate-pulse skeleton-row" style={{ height: 550, borderRadius: 0 }} aria-label="Memuat peta" />
         ) : (
           <iframe
             srcDoc={mapHtml}

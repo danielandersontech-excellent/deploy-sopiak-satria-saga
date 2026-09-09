@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import { lokasiApi, checkpointsApi, routesApi, jadwalApi } from "@/lib/api";
 import { statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
+import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/hooks/useToast";
 
@@ -18,6 +19,9 @@ export default function RoutesPage() {
   const [del, setDel] = useState<any>(null);
   const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
+  // [Misi V3 / B2] paginasi seperti halaman checkpoint/pos-jaga/jadwal (sebelumnya semua rute dirender).
+  const [currentPage, setCurrentPage] = useState(1);
+  const PAGE_SIZE = 15;
   const emptyForm = {
     nama: "",
     lokasi_id: "",
@@ -131,6 +135,8 @@ export default function RoutesPage() {
   const filtered = data.filter(
     (r) => !search || r.nama?.toLowerCase().includes(search.toLowerCase()),
   );
+  const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  useEffect(() => { setCurrentPage(1); }, [search]);
   return (
     <div>
       <div className="page-header">
@@ -166,7 +172,7 @@ export default function RoutesPage() {
             </tr>
           </thead>
           <tbody>
-            {filtered.map((r) => (
+            {pagedData.map((r) => (
               <tr key={r.id}>
                 <td className="cell-ellipsis" title={r.nama}>
                   <strong>{r.nama}</strong>
@@ -206,6 +212,7 @@ export default function RoutesPage() {
             )}
           </tbody>
         </table>
+        <Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
       </div>
       {modal && (
         <Modal

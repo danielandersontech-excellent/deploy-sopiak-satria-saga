@@ -381,7 +381,7 @@ export default function ClientsPage() {
                           className="btn-icon"
                           title="Reset PIN"
                           onClick={() => setResetPinConfirm(r)}
-                          style={{ color: "var(--warning, #d97706)" }}
+                          style={{ color: "var(--warning)" }}
                         >
                           <i className="fas fa-key" />
                         </button>
@@ -742,31 +742,10 @@ export default function ClientsPage() {
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>
               {resetPinResult.client.nama_klien}
             </div>
-            <div
-              style={{
-                fontFamily: "monospace",
-                fontSize: "2.25rem",
-                fontWeight: 700,
-                letterSpacing: "0.25rem",
-                padding: "16px 24px",
-                margin: "10px auto 16px",
-                background: "var(--hover-row, #f3f4f6)",
-                border: "2px dashed var(--primary, #1a5276)",
-                borderRadius: 12,
-                display: "inline-block",
-              }}
-              aria-label="PIN baru"
-            >
+            <div className="pin-display" aria-label="PIN baru">
               {resetPinResult.pin}
             </div>
-            <div
-              style={{
-                color: "var(--danger, #dc2626)",
-                fontSize: 13,
-                fontWeight: 600,
-                marginBottom: 6,
-              }}
-            >
+            <div className="text-danger" style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
               ⚠️ Catat PIN ini sekarang. Setelah modal ditutup, PIN tidak
               dapat dilihat lagi.
             </div>

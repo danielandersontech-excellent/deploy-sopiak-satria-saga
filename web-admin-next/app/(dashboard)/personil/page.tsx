@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { authApi, apiUploadFile, usersApi, lokasiApi, apiFetch, API_URL } from "@/lib/api";
-import { fmtDate, fmtDateTime, statusColor, statusLabel, avatarUrl } from "@/lib/formatters";
+import { fmtDate, fmtDateTime, statusColor, statusLabel, avatarUrl, roleColor, roleLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -356,7 +356,7 @@ export default function PersonilPage() {
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  <span className={`badge badge-${u.role === 'admin' ? 'danger' : u.role === 'supervisor' ? 'warning' : u.role === 'komandan' ? 'info' : 'primary'}`}>{u.role}</span>
+                  <span className={`badge badge-${roleColor(u.role)}`}>{roleLabel(u.role)}</span>
                   <span className={`badge badge-${statusColor(u.status_penempatan || 'aktif')}`}>{u.status_penempatan || 'aktif'}</span>
                 </div>
                 <div className="muted" style={{ fontSize: 12, marginTop: 8 }}>{u.lokasi_nama || '-'}</div>
@@ -401,11 +401,7 @@ export default function PersonilPage() {
                   <code>{u.nrp}</code>
                 </td>
                 <td>
-                  <span
-                    className={`badge badge-${u.role === "admin" ? "danger" : u.role === "supervisor" ? "purple" : u.role === "komandan" ? "info" : "default"}`}
-                  >
-                    {u.role}
-                  </span>
+                  <span className={`badge badge-${roleColor(u.role)}`}>{roleLabel(u.role)}</span>
                 </td>
                 <td>
                   {u.lokasi?.nama || u.lokasi_nama || (
@@ -489,11 +485,7 @@ export default function PersonilPage() {
               style={{ width: 80, height: 80 }}
              alt="avatar" />
             <h3 style={{ marginTop: 8 }}>{detail.nama}</h3>
-            <span
-              className={`badge badge-${detail.role === "admin" ? "danger" : "info"}`}
-            >
-              {detail.role}
-            </span>{" "}
+            <span className={`badge badge-${roleColor(detail.role)}`}>{roleLabel(detail.role)}</span>{" "}
             <span
               className={`badge badge-${statusColor(detail.status_penempatan || "belum_ditempatkan")}`}
             >
@@ -1153,10 +1145,10 @@ export default function PersonilPage() {
           <div style={{ textAlign: "center" }}>
             <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{pinResult.nama}</div>
             <div style={{ fontSize: 13, marginBottom: 8 }}>Login NRP: <code style={{ fontSize: 14 }}>{pinResult.nrp}</code></div>
-            <div style={{ fontFamily: "monospace", fontSize: "2.25rem", fontWeight: 700, letterSpacing: "0.25rem", padding: "16px 24px", margin: "6px auto 16px", background: "var(--hover-row, #f3f4f6)", border: "2px dashed var(--primary, #1a5276)", borderRadius: 12, display: "inline-block" }} aria-label="PIN awal">
+            <div className="pin-display" aria-label="PIN awal">
               {pinResult.pin}
             </div>
-            <div style={{ color: "var(--danger, #dc2626)", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+            <div className="text-danger" style={{ fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
               ⚠️ PIN awal hanya tampil sekali. Sampaikan ke personil; sistem akan meminta ganti PIN saat login pertama.
             </div>
             <div className="muted" style={{ fontSize: 12 }}>Jendela ini menutup otomatis dalam <strong>{pinResult.secondsLeft}</strong> detik.</div>

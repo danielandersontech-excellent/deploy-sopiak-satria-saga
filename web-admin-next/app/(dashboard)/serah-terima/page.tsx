@@ -3,6 +3,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import { serahTerimaApi } from "@/lib/api";
 import { fmtDateTime, statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
+import { ImagePreview } from "@/components/ui/ImagePreview";
 import { Pagination } from "@/components/ui/Pagination";
 import { useToast } from "@/hooks/useToast";
 
@@ -161,11 +162,7 @@ export default function SerahTerimaPage() {
           )}
         </Modal>
       )}
-      {preview && (
-        <div className="modal-overlay" style={{ zIndex: 200 }} onClick={() => setPreview(null)}>
-          <img src={preview} alt="preview" style={{ maxWidth: "92vw", maxHeight: "90vh", borderRadius: 10 }} />
-        </div>
-      )}
+      <ImagePreview src={preview} onClose={() => setPreview(null)} />
     </div>
   );
 }

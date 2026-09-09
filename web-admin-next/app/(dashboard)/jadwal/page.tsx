@@ -121,7 +121,7 @@ export default function JadwalPage() {
       <div className="section-card">
         <p className="muted" style={{ marginBottom: 12, fontSize: 12 }}>
           <i className="fas fa-info-circle" /> <strong>Jadwal Shift</strong> =
-          Mendefinisikan jam kerja di setiap lokasi klien. Contoh: "Shift Pagi"
+          Mendefinisikan jam kerja di setiap lokasi klien. Contoh: &quot;Shift Pagi&quot;
           jam 06:00-14:00 di PT Chevron.
           <br />
           <br />
@@ -129,7 +129,7 @@ export default function JadwalPage() {
           <br />
           1️⃣ Pilih Lokasi/Klien tempat shift berlaku
           <br />
-          2️⃣ Beri nama shift (mis: "Shift Pagi", "Shift Malam")
+          2️⃣ Beri nama shift (mis: &quot;Shift Pagi&quot;, &quot;Shift Malam&quot;)
           <br />
           3️⃣ Tentukan jam mulai dan selesai
           <br />

@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
 import { rekrutmenApi, lokasiApi, getUser } from "@/lib/api";
-import { fmtDate, fmtDateTime } from "@/lib/formatters";
+import { fmtDate, fmtDateTime, statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -19,16 +19,10 @@ import { onRealtimeEvent } from "@/lib/socketClient";
  * - Hapus lamaran (admin saja) — berkas fisik ikut dihapus di server.
  */
 
-const STATUS: { v: string; l: string; c: string }[] = [
-  { v: "baru", l: "Baru", c: "warning" },
-  { v: "diproses", l: "Diproses", c: "info" },
-  { v: "wawancara", l: "Wawancara", c: "purple" },
-  { v: "diterima", l: "Diterima", c: "success" },
-  { v: "ditolak", l: "Ditolak", c: "danger" },
-  { v: "dibatalkan", l: "Dibatalkan", c: "default" },
-];
-const statusBadge = (s: string) => STATUS.find((x) => x.v === s)?.c || "default";
-const statusLabel = (s: string) => STATUS.find((x) => x.v === s)?.l || s;
+// [Misi V3 / B2] Warna & label status kini dari lib/formatters (satu peta untuk semua halaman).
+const STATUS_VALUES = ["baru", "diproses", "wawancara", "diterima", "ditolak", "dibatalkan"];
+const STATUS: { v: string; l: string }[] = STATUS_VALUES.map((v) => ({ v, l: statusLabel(v) }));
+const statusBadge = (s: string) => statusColor(s);
 
 const BERKAS: { k: string; l: string }[] = [
   { k: "foto", l: "Pas Foto" }, { k: "ktp", l: "KTP" }, { k: "kk", l: "Kartu Keluarga" },
@@ -378,7 +372,7 @@ export default function RekrutmenPage() {
                 <select className="form-select" value={statusForm.status} onChange={(e) => setStatusForm({ ...statusForm, status: e.target.value })}>
                   {STATUS.filter((s) => s.v !== "diterima").map((s) => <option key={s.v} value={s.v}>{s.l}</option>)}
                 </select>
-                <small className="muted">Untuk menerima pelamar, gunakan tombol "Jadikan Anggota".</small>
+                <small className="muted">Untuk menerima pelamar, gunakan tombol &quot;Jadikan Anggota&quot;.</small>
               </div>
               <div className="form-group">
                 <label className="form-label">Catatan Admin</label>
