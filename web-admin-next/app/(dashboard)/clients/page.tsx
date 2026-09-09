@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { apiUploadFile, apiFetch, clientsApi } from "@/lib/api";
-import { fmtDate } from "@/lib/formatters";
+import { fmtDate, daysUntil, statusColor } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -35,6 +35,13 @@ export default function ClientsPage() {
   const [del, setDel] = useState<any>(null);
   const [search, setSearch] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  // [Misi V3 / C1] filter kontrak: '' | 'habis' | 'hampir' (≤30 hari) | 'berjalan'
+  const [filterKontrak, setFilterKontrak] = useState("");
+  // Perpanjang kontrak (per baris) & nonaktifkan/aktifkan (konfirmasi keras).
+  const [extend, setExtend] = useState<any>(null);
+  const [extendDate, setExtendDate] = useState("");
+  const [deact, setDeact] = useState<any>(null);
+  const [react, setReact] = useState<any>(null);
 
   // BUG #8: reset-PIN flow uses two states:
   //   - resetPinConfirm: client awaiting confirmation to reset
@@ -81,10 +88,83 @@ export default function ClientsPage() {
   };
   useEffect(() => {
     load();
+    // [Misi V3 / C1] kartu peringatan dashboard mengarah ke /clients?filter=kontrak-habis
+    try {
+      const f = new URLSearchParams(window.location.search).get("filter");
+      if (f === "kontrak-habis") { setFilterKontrak("habis"); setFilterStatus("Aktif"); }
+      if (f === "kontrak-hampir") { setFilterKontrak("hampir"); setFilterStatus("Aktif"); }
+    } catch { /* abaikan */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   // [Audit 2B] Reset halaman saat filter/pencarian berubah.
-  useEffect(() => { setCurrentPage(1); }, [search, filterStatus]);
+  useEffect(() => { setCurrentPage(1); }, [search, filterStatus, filterKontrak]);
+
+  /** Sisa hari kontrak klien (null bila tidak ada tanggal). */
+  const sisaKontrak = (r: any): number | null => daysUntil(r?.tgl_habis_kontrak);
+  const kontrakKategori = (r: any): "habis" | "hampir" | "berjalan" | "tanpa" => {
+    const sisa = sisaKontrak(r);
+    if (sisa === null) return "tanpa";
+    if (sisa < 0) return "habis";
+    if (sisa <= 30) return "hampir";
+    return "berjalan";
+  };
+
+  // [Misi V3 / C1] Perpanjang kontrak: hanya mengubah tgl_habis_kontrak (aksi eksplisit admin).
+  const openExtend = (r: any) => {
+    const base = r.tgl_habis_kontrak ? new Date(`${String(r.tgl_habis_kontrak).slice(0, 10)}T00:00:00`) : new Date();
+    const start = base.getTime() < Date.now() ? new Date() : base;
+    const next = new Date(start); next.setFullYear(next.getFullYear() + 1);
+    const p = (n: number) => String(n).padStart(2, "0");
+    setExtendDate(`${next.getFullYear()}-${p(next.getMonth() + 1)}-${p(next.getDate())}`);
+    setExtend(r);
+  };
+  const doExtend = async () => {
+    if (!extend || saving) return;
+    if (!extendDate) return toast("Pilih tanggal habis kontrak yang baru", "warning");
+    const todayYMD = new Date().toISOString().slice(0, 10);
+    if (extendDate <= todayYMD) return toast("Tanggal baru harus setelah hari ini", "warning");
+    if (extend.tgl_mulai_kontrak && extendDate < String(extend.tgl_mulai_kontrak).slice(0, 10)) return toast("Tanggal habis tidak boleh sebelum tanggal mulai", "warning");
+    setSaving(true);
+    try {
+      await clientsApi.update(extend.id, { tgl_habis_kontrak: extendDate });
+      toast(`Kontrak ${extend.nama_klien} diperpanjang sampai ${fmtDate(extendDate)}`);
+      setExtend(null);
+      load();
+    } catch (e: any) {
+      toast(e.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  // [Misi V3 / C1] Nonaktifkan klien = klien TIDAK bisa login (web & mobile). Konfirmasi keras.
+  const doDeactivate = async () => {
+    if (!deact || saving) return;
+    setSaving(true);
+    try {
+      await clientsApi.update(deact.id, { status_klien: "Non-Aktif" });
+      toast(`Klien ${deact.nama_klien} dinonaktifkan — akses login diputus`);
+      setDeact(null);
+      load();
+    } catch (e: any) {
+      toast(e.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
+  const doReactivate = async () => {
+    if (!react || saving) return;
+    setSaving(true);
+    try {
+      await clientsApi.update(react.id, { status_klien: "Aktif" });
+      toast(`Klien ${react.nama_klien} diaktifkan kembali`);
+      setReact(null);
+      load();
+    } catch (e: any) {
+      toast(e.message, "error");
+    } finally {
+      setSaving(false);
+    }
+  };
 
   // BUG #8: tick the countdown on the result modal. When it hits 0 we
   // close the modal — the operator's window to read the PIN closes.
@@ -222,14 +302,16 @@ export default function ClientsPage() {
       (!search ||
         r.nama_klien?.toLowerCase().includes(search.toLowerCase()) ||
         r.kode_klien?.toLowerCase().includes(search.toLowerCase())) &&
-      (!filterStatus || r.status_klien === filterStatus),
+      (!filterStatus || r.status_klien === filterStatus) &&
+      (!filterKontrak || kontrakKategori(r) === filterKontrak),
   );
+  const jumlahHabis = data.filter((r) => r.status_klien === "Aktif" && kontrakKategori(r) === "habis").length;
+  const jumlahHampir = data.filter((r) => r.status_klien === "Aktif" && kontrakKategori(r) === "hampir").length;
   const pagedData = filtered.slice(
     (currentPage - 1) * PAGE_SIZE,
     currentPage * PAGE_SIZE,
   );
-  const statusBadge = (s: string) =>
-    s === "Aktif" ? "success" : s === "Non-Aktif" ? "default" : "danger";
+  const statusBadge = (s: string) => statusColor(s);
   return (
     <div>
       <div className="page-header">
@@ -262,7 +344,29 @@ export default function ClientsPage() {
             <option value="Non-Aktif">Non-Aktif</option>
             <option value="Blacklist">Blacklist</option>
           </select>
+          <select
+            className="form-select w-auto"
+            value={filterKontrak}
+            onChange={(e) => setFilterKontrak(e.target.value)}
+            title="Filter kontrak"
+          >
+            <option value="">Semua Kontrak</option>
+            <option value="habis">Kontrak Habis{jumlahHabis ? ` (${jumlahHabis})` : ""}</option>
+            <option value="hampir">Habis ≤30 hari{jumlahHampir ? ` (${jumlahHampir})` : ""}</option>
+            <option value="berjalan">Kontrak Berjalan</option>
+            <option value="tanpa">Tanpa Tanggal Kontrak</option>
+          </select>
           <span className="muted">{filtered.length} klien</span>
+          {(jumlahHabis > 0 || jumlahHampir > 0) && !filterKontrak && (
+            <button className="btn btn-sm btn-outline text-warning" onClick={() => { setFilterKontrak("habis"); setFilterStatus("Aktif"); }} title="Tampilkan klien aktif yang kontraknya sudah habis">
+              <i className="fas fa-exclamation-triangle" /> {jumlahHabis} habis · {jumlahHampir} hampir habis
+            </button>
+          )}
+          {(search || filterStatus || filterKontrak) && (
+            <button className="btn btn-sm btn-outline" onClick={() => { setSearch(""); setFilterStatus(""); setFilterKontrak(""); }}>
+              <i className="fas fa-times" /> Reset
+            </button>
+          )}
         </div>
         <table>
           <thead>
@@ -314,11 +418,12 @@ export default function ClientsPage() {
                       {r.tgl_mulai_kontrak
                         ? `${fmtDate(r.tgl_mulai_kontrak)} - ${fmtDate(r.tgl_habis_kontrak)}`
                         : "-"}
-                      {/* [Audit 2B-r2] Penanda kontrak habis / hampir habis (≤30 hari) untuk klien Aktif. */}
+                      {/* [Audit 2B-r2 / Misi V3 C1] Penanda kontrak habis / hampir habis (≤30 hari) untuk klien Aktif. */}
                       {r.status_klien === "Aktif" && r.tgl_habis_kontrak && (() => {
-                        const sisa = Math.ceil((new Date(r.tgl_habis_kontrak).getTime() - Date.now()) / 86400000);
-                        if (sisa < 0) return <span className="badge badge-danger" style={{ marginLeft: 6 }} title={`Kontrak habis ${Math.abs(sisa)} hari lalu`}>Habis</span>;
-                        if (sisa <= 30) return <span className="badge badge-warning" style={{ marginLeft: 6 }} title={`Sisa ${sisa} hari`}>{sisa} hr</span>;
+                        const sisa = sisaKontrak(r);
+                        if (sisa === null) return null;
+                        if (sisa < 0) return <span className="badge badge-danger" style={{ marginLeft: 6 }} title={`Kontrak habis ${Math.abs(sisa)} hari lalu`}>Habis {Math.abs(sisa)} hr</span>;
+                        if (sisa <= 30) return <span className="badge badge-warning" style={{ marginLeft: 6 }} title={`Sisa ${sisa} hari`}>Sisa {sisa} hr</span>;
                         return null;
                       })()}
                     </td>
@@ -376,12 +481,24 @@ export default function ClientsPage() {
                         >
                           <i className="fas fa-pen" />
                         </button>
+                        {/* [Misi V3 / C1] Perpanjang kontrak & nonaktifkan/aktifkan — aksi eksplisit, data tidak berubah otomatis. */}
+                        <button className="btn-icon text-primary" title="Perpanjang kontrak" onClick={() => openExtend(r)}>
+                          <i className="fas fa-calendar-plus" />
+                        </button>
+                        {r.status_klien === "Aktif" ? (
+                          <button className="btn-icon text-danger" title="Nonaktifkan klien (putus akses login)" onClick={() => setDeact(r)}>
+                            <i className="fas fa-user-slash" />
+                          </button>
+                        ) : (
+                          <button className="btn-icon text-success" title="Aktifkan kembali klien" onClick={() => setReact(r)}>
+                            <i className="fas fa-user-check" />
+                          </button>
+                        )}
                         {/* BUG #8 (P2-7): Reset PIN trigger. */}
                         <button
-                          className="btn-icon"
+                          className="btn-icon text-warning"
                           title="Reset PIN"
                           onClick={() => setResetPinConfirm(r)}
-                          style={{ color: "var(--warning)" }}
                         >
                           <i className="fas fa-key" />
                         </button>
@@ -702,9 +819,71 @@ export default function ClientsPage() {
         <ConfirmDialog
           title="Hapus Klien?"
           msg={`"${del.nama_klien}" akan dihapus permanen.`}
+          note="Lokasi yang terkait akan kehilangan referensi klien. Untuk mengakhiri kerja sama, gunakan Nonaktifkan agar riwayat tetap utuh."
+          requireText={del.kode_klien || "HAPUS"}
+          busy={saving}
           onConfirm={doDelete}
           onCancel={() => setDel(null)}
         />
+      )}
+
+      {/* [Misi V3 / C1] Nonaktifkan — konfirmasi keras dengan penjelasan efek. */}
+      {deact && (
+        <ConfirmDialog
+          title="Nonaktifkan Klien?"
+          msg={`"${deact.nama_klien}" (${deact.kode_klien}) akan berstatus Non-Aktif.`}
+          note="Efek: klien TIDAK bisa login ke web maupun aplikasi mobile; sesi yang masih aktif diputus paling lama 30 menit. Data lokasi, laporan, dan riwayat tetap tersimpan dan bisa diaktifkan kembali kapan saja."
+          requireText={deact.kode_klien || "NONAKTIF"}
+          confirmLabel="Nonaktifkan"
+          busy={saving}
+          onConfirm={doDeactivate}
+          onCancel={() => setDeact(null)}
+        />
+      )}
+      {react && (
+        <ConfirmDialog
+          title="Aktifkan Kembali Klien?"
+          msg={`"${react.nama_klien}" (${react.kode_klien}) akan berstatus Aktif dan bisa login lagi.`}
+          confirmLabel="Aktifkan"
+          confirmClass="btn-success"
+          busy={saving}
+          onConfirm={doReactivate}
+          onCancel={() => setReact(null)}
+        />
+      )}
+
+      {/* [Misi V3 / C1] Perpanjang kontrak. */}
+      {extend && (
+        <Modal
+          title={`Perpanjang Kontrak — ${extend.nama_klien}`}
+          onClose={() => !saving && setExtend(null)}
+          footer={
+            <>
+              <button className="btn btn-outline" onClick={() => setExtend(null)} disabled={saving}>Batal</button>
+              <button className="btn btn-primary" onClick={doExtend} disabled={saving || !extendDate}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-calendar-check"}`} /> {saving ? "Menyimpan..." : "Simpan Tanggal Baru"}
+              </button>
+            </>
+          }
+        >
+          <form onSubmit={(e) => { e.preventDefault(); doExtend(); }}>
+            <div className="form-row">
+              <div className="form-group">
+                <label className="form-label">Kontrak saat ini</label>
+                <div className="form-input" style={{ background: "var(--hover-row)" }}>
+                  {extend.tgl_mulai_kontrak ? fmtDate(extend.tgl_mulai_kontrak) : "-"} — {extend.tgl_habis_kontrak ? fmtDate(extend.tgl_habis_kontrak) : "-"}
+                  {(() => { const s = sisaKontrak(extend); return s === null ? null : s < 0 ? <span className="badge badge-danger" style={{ marginLeft: 8 }}>Habis {Math.abs(s)} hr</span> : <span className="badge badge-success" style={{ marginLeft: 8 }}>Sisa {s} hr</span>; })()}
+                </div>
+              </div>
+              <div className="form-group">
+                <label className="form-label">Tanggal habis kontrak baru *</label>
+                <input className="form-input" type="date" value={extendDate} onChange={(e) => setExtendDate(e.target.value)} autoFocus min={new Date().toISOString().slice(0, 10)} />
+                <small className="form-help">Default +1 tahun. Hanya tanggal habis yang berubah; unggah PDF kontrak baru lewat tombol Edit bila ada.</small>
+              </div>
+            </div>
+            <button type="submit" hidden aria-hidden="true" />
+          </form>
+        </Modal>
       )}
 
       {/* BUG #8: Reset PIN confirmation step. */}

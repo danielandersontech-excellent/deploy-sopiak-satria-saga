@@ -99,6 +99,42 @@ export default function DashboardPage() {
         </div>
       )}
 
+      {/* [Misi V3 / C1-C2] Peringatan yang butuh tindakan admin/komandan — data tidak diubah otomatis. */}
+      {((s.kontrak_habis > 0 || s.kontrak_hampir_habis > 0) || s.pending_lama > 0) && (
+        <div className="alert-grid">
+          {s.kontrak_habis > 0 && (
+            <Link href="/clients?filter=kontrak-habis" className="alert-card danger">
+              <i className="fas fa-file-contract alert-icon" />
+              <div className="alert-body">
+                <div className="alert-title">{s.kontrak_habis} kontrak klien sudah habis</div>
+                <div className="alert-sub">Klien masih berstatus Aktif. Tinjau: perpanjang kontrak atau nonaktifkan.</div>
+              </div>
+              <i className="fas fa-chevron-right text-danger" />
+            </Link>
+          )}
+          {s.kontrak_hampir_habis > 0 && (
+            <Link href="/clients?filter=kontrak-hampir" className="alert-card warning">
+              <i className="fas fa-hourglass-half alert-icon" />
+              <div className="alert-body">
+                <div className="alert-title">{s.kontrak_hampir_habis} kontrak habis dalam 30 hari</div>
+                <div className="alert-sub">Hubungi klien untuk perpanjangan sebelum jatuh tempo.</div>
+              </div>
+              <i className="fas fa-chevron-right text-warning" />
+            </Link>
+          )}
+          {s.pending_lama > 0 && (
+            <Link href="/laporan-harian?status=pending&min_age_days=30" className="alert-card warning">
+              <i className="fas fa-file-signature alert-icon" />
+              <div className="alert-body">
+                <div className="alert-title">{s.pending_lama} laporan menunggu validasi &gt; 30 hari</div>
+                <div className="alert-sub">Komandan dapat memvalidasi massal lewat checkbox di halaman Laporan.</div>
+              </div>
+              <i className="fas fa-chevron-right text-warning" />
+            </Link>
+          )}
+        </div>
+      )}
+
       <div className="kpi-grid">
         {kpis.map((k, i) => (
           <Link key={i} href={k.href} className={`kpi-card ${k.color}`} style={{ textDecoration: "none", color: "inherit" }}>
