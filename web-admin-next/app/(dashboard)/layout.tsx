@@ -11,6 +11,7 @@ import { isMenuAllowed } from "@/lib/api";
 import PWAUpdatePrompt from "@/components/PWAUpdatePrompt";
 import InstallPrompt from "@/components/InstallPrompt";
 import PanicAlertBanner from "@/components/PanicAlertBanner";
+import { documentTitle } from "@/lib/pageTitles";
 
 function RoleGate({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -41,8 +42,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [user, loading, router]);
 
   // Mobile drawer: auto-close after navigating to a new page.
+  // [Misi V3 / E] judul tab browser mengikuti halaman aktif.
   useEffect(() => {
     setSidebarOpen(false);
+    document.title = documentTitle(pathname);
   }, [pathname]);
 
   if (loading) {

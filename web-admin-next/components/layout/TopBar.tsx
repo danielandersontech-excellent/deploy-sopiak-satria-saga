@@ -7,32 +7,7 @@ import { useSettings } from "@/hooks/useSettings";
 import { useToast } from "@/hooks/useToast";
 import { Modal } from "@/components/ui/Modal";
 import { roleColor } from "@/lib/formatters";
-
-const BREADCRUMB_MAP: Record<string, string> = {
-  "/": "Dashboard",
-  "/lokasi": "Lokasi",
-  "/personil": "Personil",
-  "/rekrutmen": "Rekrutmen",
-  "/absensi": "Absensi",
-  "/patroli": "Patroli",
-  "/laporan-harian": "Laporan Harian",
-  "/laporan-kejadian": "Laporan Kejadian",
-  "/serah-terima": "Serah Terima",
-  "/checkpoint": "Checkpoint",
-  "/routes": "Rute Patroli",
-  "/pos-jaga": "Pos Jaga",
-  "/jadwal": "Jadwal Shift",
-  "/shift-assignment": "Penugasan Shift",
-  "/broadcast": "Broadcast",
-  "/panic": "Panic Alert",
-  "/clients": "Klien",
-  "/export": "Export",
-  "/live-map": "Live Map",
-  "/geofence": "Geofence",
-  "/backup": "Backup",
-  "/analytics": "Analytics",
-  "/qr-generator": "QR Generator",
-};
+import { pageTitle } from "@/lib/pageTitles";
 
 /**
  * [Audit 2B/2G] Modal Ganti PIN. Dipicu dari menu akun atau otomatis (mode wajib)
@@ -206,7 +181,7 @@ export function TopBar({ onMenuClick }: { onMenuClick?: () => void }) {
 
   if (!user) return null;
 
-  const breadcrumb = BREADCRUMB_MAP[pathname] || "Dashboard";
+  const breadcrumb = pageTitle(pathname);
 
   return (
     <div className="topbar">
