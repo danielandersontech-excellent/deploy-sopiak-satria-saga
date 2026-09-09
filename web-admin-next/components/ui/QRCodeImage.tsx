@@ -86,7 +86,7 @@ export function QRCodeImage({
         style={{
           width: size,
           height: size,
-          background: "var(--hover-row, #e5e7eb)",
+          background: "var(--hover-row)",
           borderRadius: 4,
           ...style,
         }}

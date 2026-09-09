@@ -156,7 +156,7 @@ export default function AbsensiPage() {
         {loading && data.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: 12 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 44, borderRadius: 6 }} />
+              <div key={i} className="animate-pulse" style={{ background: "var(--hover-row)", height: 44, borderRadius: 6 }} />
             ))}
           </div>
         ) : (

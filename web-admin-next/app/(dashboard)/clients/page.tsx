@@ -389,14 +389,7 @@ export default function ClientsPage() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={`skel-${i}`}>
                   <td colSpan={10}>
-                    <div
-                      className="animate-pulse"
-                      style={{
-                        background: "var(--hover-row, #e5e7eb)",
-                        height: 48,
-                        borderRadius: 6,
-                      }}
-                    />
+                    <div className="animate-pulse skeleton-row" style={{ height: 48 }} />
                   </td>
                 </tr>
               ))

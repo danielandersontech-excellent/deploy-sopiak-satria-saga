@@ -337,7 +337,7 @@ export default function PersonilPage() {
                 key={i}
                 className="animate-pulse"
                 style={{
-                  background: "var(--hover-row, #e5e7eb)",
+                  background: "var(--hover-row)",
                   height: 56,
                   borderRadius: 8,
                 }}

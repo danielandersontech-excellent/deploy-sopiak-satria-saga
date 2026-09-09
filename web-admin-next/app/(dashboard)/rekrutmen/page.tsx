@@ -238,7 +238,7 @@ export default function RekrutmenPage() {
         {loading && data.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <div key={i} className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 48, borderRadius: 8 }} />
+              <div key={i} className="animate-pulse" style={{ background: "var(--hover-row)", height: 48, borderRadius: 8 }} />
             ))}
           </div>
         ) : (

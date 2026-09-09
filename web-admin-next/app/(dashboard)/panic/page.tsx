@@ -140,7 +140,7 @@ export default function PanicPage() {
         </div>
         {loading && data.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {Array.from({ length: 4 }).map((_, i) => <div key={i} className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 40, borderRadius: 6 }} />)}
+            {Array.from({ length: 4 }).map((_, i) => <div key={i} className="animate-pulse" style={{ background: "var(--hover-row)", height: 40, borderRadius: 6 }} />)}
           </div>
         ) : (
           <table>

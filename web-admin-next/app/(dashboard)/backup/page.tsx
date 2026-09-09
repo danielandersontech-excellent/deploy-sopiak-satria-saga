@@ -133,7 +133,7 @@ export default function BackupPage() {
             </thead>
             <tbody>
               {listLoading && backups.length === 0 ? (
-                <tr><td colSpan={5}><div className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 40, borderRadius: 6 }} /></td></tr>
+                <tr><td colSpan={5}><div className="animate-pulse skeleton-row" style={{ height: 40 }} /></td></tr>
               ) : backups.map((b: any) => (
                 <tr key={b.filename}>
                   <td className="cell-ellipsis" title={b.filename}><code style={{ fontSize: 11 }}>{b.filename}</code></td>

@@ -76,7 +76,7 @@ export default function SerahTerimaPage() {
         </div>
         {loading && data.length === 0 ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 40, borderRadius: 6 }} />)}
+            {Array.from({ length: 5 }).map((_, i) => <div key={i} className="animate-pulse" style={{ background: "var(--hover-row)", height: 40, borderRadius: 6 }} />)}
           </div>
         ) : (
           <table>
@@ -157,7 +157,7 @@ export default function SerahTerimaPage() {
           {detail.tanda_tangan && (
             <div style={{ marginTop: 12 }}>
               <div className="detail-label">Tanda Tangan</div>
-              <img src={detail.tanda_tangan} style={{ marginTop: 8, maxWidth: 260, width: "100%", height: "auto", background: "#fff", border: "1px solid var(--border, #e5e7eb)", borderRadius: 8 }} alt="Tanda tangan serah terima" />
+              <img src={detail.tanda_tangan} style={{ marginTop: 8, maxWidth: 260, width: "100%", height: "auto", background: "#fff", border: "1px solid var(--border)", borderRadius: 8 }} alt="Tanda tangan serah terima" />
             </div>
           )}
         </Modal>

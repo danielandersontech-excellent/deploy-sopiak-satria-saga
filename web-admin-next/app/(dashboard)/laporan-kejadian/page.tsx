@@ -145,7 +145,7 @@ export default function LaporanKejadianPage() {
           <tbody>
             {loading && data.length === 0 ? (
               Array.from({ length: 5 }).map((_, i) => (
-                <tr key={`skel-${i}`}><td colSpan={9}><div className="animate-pulse" style={{ background: "var(--hover-row, #e5e7eb)", height: 36, borderRadius: 6 }} /></td></tr>
+                <tr key={`skel-${i}`}><td colSpan={9}><div className="animate-pulse skeleton-row" /></td></tr>
               ))
             ) : (
               <>

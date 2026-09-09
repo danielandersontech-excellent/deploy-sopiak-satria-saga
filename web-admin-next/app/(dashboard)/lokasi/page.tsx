@@ -198,14 +198,7 @@ export default function LokasiPage() {
               Array.from({ length: 5 }).map((_, i) => (
                 <tr key={`skel-${i}`}>
                   <td colSpan={8}>
-                    <div
-                      className="animate-pulse"
-                      style={{
-                        background: "var(--hover-row, #e5e7eb)",
-                        height: 40,
-                        borderRadius: 6,
-                      }}
-                    />
+                    <div className="animate-pulse skeleton-row" style={{ height: 40 }} />
                   </td>
                 </tr>
               ))
