@@ -74,6 +74,16 @@ exports.me = async (req, res) => {
   catch (e) { res.status(e.status || 500).json({ error: e.message || 'Server error' }); }
 };
 
+// [Misi V3 / D2] PUT /api/auth/me — hanya role klien (staf memakai PUT /api/users/:id).
+exports.updateMe = async (req, res) => {
+  try { res.json(await authService.updateOwnProfile(req.user, req.body || {})); }
+  catch (e) {
+    const body = { error: e.message || 'Server error' };
+    if (e.details) body.details = e.details;
+    res.status(e.status || 500).json(body);
+  }
+};
+
 exports.changePin = async (req, res) => {
   try { res.json(await authService.changePin(req.user.id, req.body.old_pin, req.body.new_pin)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message || 'Server error' }); }
