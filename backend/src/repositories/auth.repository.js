@@ -49,7 +49,10 @@ class AuthRepository extends BaseRepository {
   }
 
   async updatePassword(userId, hash) {
-    return query('UPDATE users SET pin_hash = $1, updated_at = NOW() WHERE id = $2', [hash, userId]);
+    // [Audit putaran 2] Setelah user mengganti PIN sendiri, flag must_change_pin
+    // (PIN awal acak / reset admin) harus padam — sebelumnya tetap TRUE sehingga
+    // web-admin & mobile terus memaksa "Ganti PIN" di setiap login.
+    return query('UPDATE users SET pin_hash = $1, must_change_pin = FALSE, updated_at = NOW() WHERE id = $2', [hash, userId]);
   }
 
   async updateLastSeen(userId) {

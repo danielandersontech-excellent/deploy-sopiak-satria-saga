@@ -140,7 +140,8 @@ class AuthService {
       const valid = await bcrypt.compare(oldPin, client.pin_hash);
       if (!valid) throw { status: 401, message: 'PIN lama salah' };
       const newHash = await bcrypt.hash(newPin, parseInt(process.env.BCRYPT_ROUNDS || '12'));
-      await queryOne('UPDATE clients SET pin_hash = $1 WHERE id = $2', [newHash, clientId]);
+      // [Audit putaran 2] must_change_pin klien juga dipadamkan (lihat auth.repository.updatePassword).
+      await queryOne('UPDATE clients SET pin_hash = $1, must_change_pin = FALSE, updated_at = NOW() WHERE id = $2', [newHash, clientId]);
       return { message: 'PIN berhasil diubah' };
     }
 
