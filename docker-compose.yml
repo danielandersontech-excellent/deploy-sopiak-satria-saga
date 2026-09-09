@@ -2,6 +2,10 @@
 # PT Sopiak Satria Saga — Docker Compose (Coolify edition)
 # ============================================
 # Tahap 5+ hotfix: routing via Traefik Docker labels.
+# [Misi V3 / D5] Batas memori per service (deploy.resources.limits.memory — dihormati
+# docker compose v2 non-swarm). Pemakaian terukur 9 Sep 2026: backend 55 MiB,
+# web-admin 38 MiB, website 34 MiB, postgres 44 MiB, pgadmin 248 MiB → batas 768M/512M/
+# 512M/1G/512M memberi ruang >2x sekaligus mencegah satu service memakan RAM server bersama.
 # Replace dependency to /data/coolify/proxy/dynamic/sopiak.yml which
 # breaks every deploy because it hardcodes container names. With labels,
 # Traefik auto-discovers each service on (re)deploy.
@@ -11,6 +15,10 @@ services:
   postgres:
     image: postgres:16-alpine
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 1G
     environment:
       POSTGRES_DB: ${DB_NAME:-ptsss_db}
       POSTGRES_USER: ${DB_USER:-ptsss_user}
@@ -33,6 +41,10 @@ services:
       context: .
       dockerfile: backend/Dockerfile
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 768M
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +113,10 @@ services:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
         NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL}
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SERVICE_FQDN_WEBADMIN_3001: https://hq.sopiaksatriasaga.com
       TZ: Asia/Jakarta
@@ -138,6 +154,10 @@ services:
       context: ./website
       dockerfile: Dockerfile
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     environment:
       SERVICE_FQDN_WEBSITE_3002: https://sopiaksatriasaga.com
       TZ: Asia/Jakarta
@@ -167,6 +187,10 @@ services:
   pgadmin:
     image: dpage/pgadmin4:latest
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     depends_on:
       postgres:
         condition: service_healthy
