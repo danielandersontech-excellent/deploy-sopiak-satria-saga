@@ -6,9 +6,10 @@
 const bcrypt = require('bcryptjs');
 const crypto = require('crypto');
 const authRepo = require('../repositories/auth.repository');
-const { generateToken, generateRefreshToken, revokeRefreshToken } = require('../middleware/auth');
+const { generateToken, generateRefreshToken, generateRefreshTokenForClient, revokeRefreshToken } = require('../middleware/auth');
 const { logEvent } = require('../middleware/auditlog');
 const { queryOne } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 class AuthService {
   async login(nrp, pin) {
@@ -16,10 +17,18 @@ class AuthService {
 
     // Try user login first
     let user = await authRepo.findByNrp(nrp);
-    
+
     if (user) {
       const valid = await bcrypt.compare(pin, user.pin_hash);
       if (!valid) throw { status: 401, message: 'PIN salah' };
+
+      // [Audit 2A] Akun dinonaktifkan: tolak di login dengan pesan jelas.
+      // Sebelumnya login mengembalikan token, lalu SETIAP request ditolak 401
+      // "Akun dinonaktifkan" oleh middleware — membingungkan pengguna.
+      if (user.status_penempatan === 'nonaktif') {
+        throw { status: 401, message: 'Akun Anda dinonaktifkan. Hubungi admin.', code: 'ACCOUNT_DEACTIVATED' };
+      }
+      delete user.status_penempatan;
 
       await authRepo.updateLastSeen(user.id);
       const token = generateToken(user);
@@ -44,6 +53,13 @@ class AuthService {
     if (client && client.pin_hash) {
       const valid = await bcrypt.compare(pin, client.pin_hash);
       if (!valid) throw { status: 401, message: 'PIN salah' };
+
+      // [Audit 2A] Klien Non-Aktif/Blacklist tidak boleh login. Komentar P1-4 di
+      // middleware/auth.js mengasumsikan pengecekan ini ada di sini, padahal
+      // belum — login sukses lalu semua request ditolak 401.
+      if (client.status_klien !== 'Aktif') {
+        throw { status: 401, message: 'Akun klien tidak aktif. Hubungi PT Sopiak Satria Saga.', code: 'ACCOUNT_DEACTIVATED' };
+      }
 
       try { await queryOne('UPDATE clients SET last_seen = NOW() WHERE id = $1 RETURNING *', [client.id]); } catch(e) {}
 
@@ -71,8 +87,17 @@ class AuthService {
         { expiresIn: process.env.JWT_EXPIRES_IN || '30m' }
       );
 
+      // [Audit 2A] Klien kini mendapat refresh token (P1-2 menyiapkan
+      // generateRefreshTokenForClient + jalur refresh di auth.controller, tetapi
+      // login klien masih mengembalikan refresh_token: null → sesi klien di
+      // web-admin/mobile putus setiap 30 menit).
+      let refresh_token = null;
+      try { refresh_token = await generateRefreshTokenForClient(client.id); }
+      catch (e) { logger.warn(`[Auth] Gagal membuat refresh token klien ${client.id}: ${e.message}`); }
+
+      clientUser.must_change_pin = !!client.must_change_pin;
       logEvent(null, client.nama_klien, 'LOGIN', 'auth', null, { nrp: clientUser.nrp, role: 'klien' });
-      return { token, refresh_token: null, user: clientUser };
+      return { token, refresh_token, user: clientUser };
     }
 
     throw { status: 401, message: 'NRP/ID tidak ditemukan' };

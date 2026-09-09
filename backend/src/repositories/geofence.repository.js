@@ -234,6 +234,12 @@ class GeofenceRepository {
     return queryAll(sql, params);
   }
 
+  /** [Audit 2A] lokasi_id sebuah izin/pelanggaran untuk pemeriksaan scope. */
+  async findLokasiOf(table, id) {
+    if (!['geofence_izin', 'geofence_violations'].includes(table)) return null;
+    return queryOne(`SELECT id, lokasi_id FROM ${table} WHERE id = $1`, [id]);
+  }
+
   // ===== STATUS =====
   async getUserGeofenceStatus(userId) {
     return queryOne(

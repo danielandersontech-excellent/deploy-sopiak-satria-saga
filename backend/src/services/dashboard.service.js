@@ -26,6 +26,18 @@ function emptyStats() {
 }
 
 class DashboardService {
+  /** [Audit 2A/2B] Agregat halaman Analytics (lihat dashboard.repository). */
+  async getAnalytics(lokasiIds = null, days = 30) {
+    if (Array.isArray(lokasiIds) && lokasiIds.length === 0) {
+      return {
+        periode_hari: days, absensi: { masuk: 0, hadir: 0, terlambat: 0, tidak_hadir: 0, luar_radius: 0 },
+        absensi_mingguan: [], laporan_harian: { total: 0 }, laporan_kejadian: { total: 0, kritis: 0 },
+        patroli: { total: 0 }, patroli_mingguan: [], distribusi_role: [], top_performers: [],
+      };
+    }
+    return dashRepo.getAnalytics(lokasiIds, days);
+  }
+
   async getStats(lokasiIds = null) {
     // Deny-all shortcut.
     if (Array.isArray(lokasiIds) && lokasiIds.length === 0) {

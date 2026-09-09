@@ -9,6 +9,9 @@
 
 const DEFAULT_PAGE_SIZE = parseInt(process.env.DEFAULT_PAGE_SIZE || '20');
 const MAX_PAGE_SIZE = parseInt(process.env.MAX_PAGE_SIZE || '100');
+// [Audit 2A] Batas untuk permintaan `all=true` (export PDF sisi klien, rekap).
+// Tetap dibatasi agar satu request tidak menarik seluruh tabel tanpa batas.
+const EXPORT_PAGE_SIZE = parseInt(process.env.EXPORT_PAGE_SIZE || '5000');
 
 /**
  * Parse pagination params from request query
@@ -19,9 +22,10 @@ function parsePagination(query = {}) {
   let page = parseInt(query.page) || 1;
   if (page < 1) page = 1;
 
-  let limit = parseInt(query.limit) || DEFAULT_PAGE_SIZE;
+  const wantAll = query.all === true || query.all === 'true' || query.all === '1';
+  let limit = parseInt(query.limit) || (wantAll ? EXPORT_PAGE_SIZE : DEFAULT_PAGE_SIZE);
   if (limit < 1) limit = 1;
-  if (limit > MAX_PAGE_SIZE) limit = MAX_PAGE_SIZE;
+  if (limit > (wantAll ? EXPORT_PAGE_SIZE : MAX_PAGE_SIZE)) limit = wantAll ? EXPORT_PAGE_SIZE : MAX_PAGE_SIZE;
 
   const offset = (page - 1) * limit;
 

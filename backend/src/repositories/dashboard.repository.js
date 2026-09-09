@@ -107,6 +107,68 @@ class DashboardRepository {
     );
   }
 
+  /**
+   * [Audit 2A/2B] Agregat untuk halaman Analytics web-admin. Sebelumnya
+   * halaman menghitung dari 20 baris pertama /api/absensi & /api/laporan
+   * (pagination default) → persentase kehadiran, status laporan, dan grafik
+   * mingguan salah. Semua dihitung di DB dengan scope lokasi yang sama.
+   * Tanggal dikelompokkan dalam zona waktu server (TZ=Asia/Jakarta).
+   */
+  async getAnalytics(lokasiArg = null, days = 30) {
+    const bUser = buildLokasiBits(lokasiArg, 'u.lokasi_id');
+    const d = Math.max(7, Math.min(365, parseInt(days, 10) || 30));
+    const p = (bits, extra) => [...bits.params, ...extra];
+    const n = (bits) => bits.params.length; // jumlah param scope (0/1) → offset placeholder
+
+    const [absStatus, absWeekly, lapH, lapK, patStatus, patWeekly, roles, top] = await Promise.all([
+      queryOne(`SELECT COUNT(*) FILTER (WHERE a.tipe='masuk')::int AS masuk,
+                       COUNT(*) FILTER (WHERE a.tipe='masuk' AND a.status='hadir')::int AS hadir,
+                       COUNT(*) FILTER (WHERE a.tipe='masuk' AND a.status='terlambat')::int AS terlambat,
+                       COUNT(*) FILTER (WHERE a.tipe='masuk' AND a.status='tidak_hadir')::int AS tidak_hadir,
+                       COUNT(*) FILTER (WHERE a.dalam_radius = FALSE)::int AS luar_radius
+                  FROM absensi a LEFT JOIN users u ON u.id = a.user_id
+                 WHERE a.created_at >= CURRENT_DATE - ($${n(bUser) + 1} || ' days')::interval${bUser.clause}`, p(bUser, [String(d)])),
+      queryAll(`SELECT to_char(DATE(a.created_at), 'YYYY-MM-DD') AS tanggal,
+                       COUNT(*) FILTER (WHERE a.status='hadir')::int AS hadir,
+                       COUNT(*) FILTER (WHERE a.status='terlambat')::int AS terlambat,
+                       COUNT(*) FILTER (WHERE a.status='tidak_hadir')::int AS tidak_hadir
+                  FROM absensi a LEFT JOIN users u ON u.id = a.user_id
+                 WHERE a.tipe = 'masuk' AND a.created_at >= CURRENT_DATE - INTERVAL '6 days'${bUser.clause}
+                 GROUP BY DATE(a.created_at) ORDER BY DATE(a.created_at)`, bUser.params),
+      queryAll(`SELECT lh.status, COUNT(*)::int AS jumlah FROM laporan_harian lh LEFT JOIN users u ON u.id = lh.user_id
+                 WHERE lh.created_at >= CURRENT_DATE - ($${n(bUser) + 1} || ' days')::interval${bUser.clause} GROUP BY lh.status`, p(bUser, [String(d)])),
+      queryAll(`SELECT lk.status, lk.prioritas, COUNT(*)::int AS jumlah FROM laporan_kejadian lk LEFT JOIN users u ON u.id = lk.user_id
+                 WHERE lk.created_at >= CURRENT_DATE - ($${n(bUser) + 1} || ' days')::interval${bUser.clause} GROUP BY lk.status, lk.prioritas`, p(bUser, [String(d)])),
+      queryAll(`SELECT pt.status, COUNT(*)::int AS jumlah FROM patroli pt LEFT JOIN users u ON u.id = pt.user_id
+                 WHERE pt.created_at >= CURRENT_DATE - ($${n(bUser) + 1} || ' days')::interval${bUser.clause} GROUP BY pt.status`, p(bUser, [String(d)])),
+      queryAll(`SELECT to_char(DATE(pt.created_at), 'YYYY-MM-DD') AS tanggal,
+                       COUNT(*) FILTER (WHERE pt.status='completed')::int AS selesai,
+                       COUNT(*) FILTER (WHERE pt.status<>'completed')::int AS berlangsung
+                  FROM patroli pt LEFT JOIN users u ON u.id = pt.user_id
+                 WHERE pt.created_at >= CURRENT_DATE - INTERVAL '6 days'${bUser.clause}
+                 GROUP BY DATE(pt.created_at) ORDER BY DATE(pt.created_at)`, bUser.params),
+      queryAll(`SELECT u.role, COUNT(*)::int AS jumlah FROM users u WHERE u.status_penempatan <> 'nonaktif'${bUser.clause} GROUP BY u.role`, bUser.params),
+      queryAll(`SELECT u.id, u.nama, u.nrp, u.role, u.shift, u.skor, u.foto_url FROM users u
+                 WHERE u.role IN ('anggota','komandan') AND u.status_penempatan <> 'nonaktif'${bUser.clause}
+                 ORDER BY u.skor DESC NULLS LAST, u.nama LIMIT 10`, bUser.params),
+    ]);
+
+    const lapHarian = { total: 0 }; for (const r of lapH) { lapHarian[r.status] = r.jumlah; lapHarian.total += r.jumlah; }
+    const lapKejadian = { total: 0, kritis: 0 }; for (const r of lapK) { lapKejadian[r.status] = (lapKejadian[r.status] || 0) + r.jumlah; lapKejadian.total += r.jumlah; if (r.prioritas === 'kritis') lapKejadian.kritis += r.jumlah; }
+    const patrol = { total: 0 }; for (const r of patStatus) { patrol[r.status] = r.jumlah; patrol.total += r.jumlah; }
+    return {
+      periode_hari: d,
+      absensi: absStatus || { masuk: 0, hadir: 0, terlambat: 0, tidak_hadir: 0, luar_radius: 0 },
+      absensi_mingguan: absWeekly,
+      laporan_harian: lapHarian,
+      laporan_kejadian: lapKejadian,
+      patroli: patrol,
+      patroli_mingguan: patWeekly,
+      distribusi_role: roles,
+      top_performers: top,
+    };
+  }
+
   async getRecentIncidents(lokasiArg = null) {
     const b = buildLokasiBits(lokasiArg, 'lk.lokasi_id');
     return queryAll(

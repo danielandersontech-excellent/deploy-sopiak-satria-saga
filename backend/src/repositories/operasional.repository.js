@@ -125,7 +125,7 @@ class OperasionalRepository {
   async findPanicById(id) {
     return queryOne(`SELECT pa.*,
       u.nama as nama_pelapor, u.nrp as nrp_pelapor, u.no_hp, u.foto_url as foto_pelapor,
-      u.role as role_pelapor, l.nama as lokasi_nama, r.nama as resolver_nama
+      u.role as role_pelapor, u.lokasi_id as pelapor_lokasi_id, l.nama as lokasi_nama, r.nama as resolver_nama
       FROM panic_alerts pa
       LEFT JOIN users u ON pa.user_id = u.id
       LEFT JOIN lokasi l ON u.lokasi_id = l.id
@@ -150,6 +150,19 @@ class OperasionalRepository {
       [data.tipe || 'info', data.judul, data.pesan, data.target_user_id || null, roleArr, data.data ? JSON.stringify(data.data) : null]);
   }
   async markRead(id) { return query('UPDATE notifikasi SET dibaca=true WHERE id=$1', [id]); }
+  /**
+   * [Audit 2A] Tandai dibaca HANYA bila notifikasi memang ditujukan ke user
+   * (target_user_id = user, atau role-nya ada di target_role, atau global).
+   * Mengembalikan true bila ada baris yang diperbarui.
+   */
+  async markReadFor(id, userId, role) {
+    const r = await query(
+      `UPDATE notifikasi SET dibaca = true
+        WHERE id = $1 AND (target_user_id = $2 OR $3 = ANY(target_role) OR target_user_id IS NULL)`,
+      [id, userId, role]
+    );
+    return r.rowCount > 0;
+  }
   async markAllRead(userId, role) {
     return query(`UPDATE notifikasi SET dibaca=true WHERE target_user_id=$1 OR $2=ANY(target_role) OR target_user_id IS NULL`, [userId, role]);
   }

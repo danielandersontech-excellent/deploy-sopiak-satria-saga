@@ -43,7 +43,12 @@ const CLEANUP_MS = CLEANUP_DAYS * 24 * 60 * 60 * 1000;
 // storage column, manual NULL, ...). 'profile', 'personil' hold user
 // avatars and personil docs; 'exports' holds operator-generated reports;
 // 'backup' holds pg_dump output. None of those should ever be auto-pruned.
-const SKIP_FOLDERS = ['exports', 'backup', 'profile', 'personil'];
+// [Audit 2A] 'kontrak' ditambahkan: folder ini menampung PDF kontrak klien
+// (clients.path_kontrak_pdf) yang TIDAK ikut dipindai getReferencedFilenames()
+// sehingga ikut terhapus setelah 90 hari (log 26 Jul 2026: "deleted: 3",
+// folder kontrak kini kosong). 'rekrutmen' dijaga untuk berjaga-jaga bila
+// suatu saat folder privat diarahkan ke bawah UPLOAD_DIR.
+const SKIP_FOLDERS = ['exports', 'backup', 'profile', 'personil', 'kontrak', 'rekrutmen'];
 
 /**
  * Pull every filename currently referenced from the database.
@@ -78,6 +83,19 @@ async function getReferencedFilenames() {
     { sql: 'SELECT foto_url FROM absensi       WHERE foto_url IS NOT NULL', label: 'absensi.foto_url' },
     { sql: 'SELECT foto_url FROM patrol_scans  WHERE foto_url IS NOT NULL', label: 'patrol_scans.foto_url' },
     { sql: 'SELECT foto_url FROM panic_alerts  WHERE foto_url IS NOT NULL', label: 'panic_alerts.foto_url' },
+    // [Audit 2A] Referensi yang sebelumnya TIDAK dipindai → file bisa terhapus
+    // walau masih dipakai: kontrak klien dan berkas personil (users.berkas_*).
+    { sql: 'SELECT path_kontrak_pdf AS foto_url FROM clients WHERE path_kontrak_pdf IS NOT NULL', label: 'clients.path_kontrak_pdf' },
+    { sql: 'SELECT foto_url AS foto_url FROM clients WHERE foto_url IS NOT NULL', label: 'clients.foto_url' },
+    { sql: 'SELECT berkas_ktp AS foto_url FROM users WHERE berkas_ktp IS NOT NULL', label: 'users.berkas_ktp' },
+    { sql: 'SELECT berkas_ijazah AS foto_url FROM users WHERE berkas_ijazah IS NOT NULL', label: 'users.berkas_ijazah' },
+    { sql: 'SELECT berkas_skck AS foto_url FROM users WHERE berkas_skck IS NOT NULL', label: 'users.berkas_skck' },
+    { sql: 'SELECT berkas_sertifikat AS foto_url FROM users WHERE berkas_sertifikat IS NOT NULL', label: 'users.berkas_sertifikat' },
+    { sql: 'SELECT berkas_cv AS foto_url FROM users WHERE berkas_cv IS NOT NULL', label: 'users.berkas_cv' },
+    { sql: 'SELECT berkas_foto_formal AS foto_url FROM users WHERE berkas_foto_formal IS NOT NULL', label: 'users.berkas_foto_formal' },
+    { sql: 'SELECT berkas_kontrak AS foto_url FROM users WHERE berkas_kontrak IS NOT NULL', label: 'users.berkas_kontrak' },
+    { sql: 'SELECT berkas_foto AS foto_url FROM users WHERE berkas_foto IS NOT NULL', label: 'users.berkas_foto' },
+    { sql: 'SELECT file_url AS foto_url FROM berkas_personil WHERE file_url IS NOT NULL', label: 'berkas_personil.file_url' },
   ];
 
   for (const q of scalarQueries) {
@@ -97,6 +115,9 @@ async function getReferencedFilenames() {
     { sql: 'SELECT UNNEST(fotos)            AS f FROM laporan_harian',   label: 'laporan_harian.fotos' },
     { sql: 'SELECT UNNEST(foto_dokumentasi) AS f FROM laporan_harian',   label: 'laporan_harian.foto_dokumentasi' },
     { sql: 'SELECT UNNEST(bukti_media)      AS f FROM laporan_kejadian', label: 'laporan_kejadian.bukti_media' },
+    // [Audit 2A] foto serah terima & berkas_lainnya personil juga referensi.
+    { sql: 'SELECT UNNEST(fotos)            AS f FROM serah_terima',     label: 'serah_terima.fotos' },
+    { sql: 'SELECT UNNEST(berkas_lainnya)   AS f FROM users',            label: 'users.berkas_lainnya' },
   ];
 
   for (const q of arrayQueries) {

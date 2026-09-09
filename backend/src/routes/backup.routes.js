@@ -85,11 +85,19 @@ router.post('/restore', ...adminGuard, async (req, res) => {
   }
 });
 
+// [Audit 2A] Validasi leaf-name yang sama untuk semua endpoint yang menerima
+// nama file (DELETE, upload-drive) — sebelumnya hanya /restore yang ketat.
+function isSafeBackupName(filename) {
+  return typeof filename === 'string' && !filename.includes('..') && !filename.includes('/') &&
+    !filename.includes('\\') && SAFE_BACKUP_FILENAME.test(filename);
+}
+
 // Upload backup to Google Drive
 router.post('/upload-drive', ...guard, async (req, res) => {
   try {
     const { filename } = req.body;
     if (!filename) return res.status(400).json({ error: 'filename is required' });
+    if (!isSafeBackupName(filename)) return res.status(400).json({ error: 'Invalid filename' });
     const result = await backupService.uploadToDrive(filename);
     res.json({ success: true, ...result });
   } catch (err) {
@@ -101,7 +109,11 @@ router.post('/upload-drive', ...guard, async (req, res) => {
 // Delete backup
 router.delete('/:filename', ...guard, async (req, res) => {
   try {
+    if (!isSafeBackupName(req.params.filename)) return res.status(400).json({ error: 'Invalid filename' });
     const deleted = backupService.deleteBackup(req.params.filename);
+    if (deleted) {
+      logEvent(req.user.id, req.user.nama || '', 'BACKUP_DELETE', 'backup', null, { filename: req.params.filename }).catch(() => {});
+    }
     if (deleted) res.json({ success: true });
     else res.status(404).json({ error: 'File not found' });
   } catch (err) {

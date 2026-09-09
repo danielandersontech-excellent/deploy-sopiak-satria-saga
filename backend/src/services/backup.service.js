@@ -24,9 +24,26 @@ if (!fs.existsSync(BACKUP_DIR)) {
   fs.mkdirSync(BACKUP_DIR, { recursive: true });
 }
 
-// Schedule state (in-memory, reset on restart)
+// [Audit 2A] Jadwal backup otomatis DIPERSISTENKAN ke backups/schedule.json.
+// Sebelumnya hanya di memori → setiap redeploy Coolify diam-diam mematikan
+// backup otomatis tanpa ada yang tahu.
+const SCHEDULE_FILE = path.join(BACKUP_DIR, 'schedule.json');
 let scheduleTimer = null;
 let scheduleConfig = { enabled: false, time: '02:00' };
+
+// [Audit 2A] Nama file backup yang sah: hanya leaf-name berpola aman.
+// Dipakai deleteBackup/uploadToDrive (sebelumnya path.join(BACKUP_DIR, filename)
+// mentah → nama ber-'../' bisa menghapus file di luar folder backups).
+const SAFE_BACKUP_FILENAME = /^[\w.\-]+\.(sql|dump|backup|gz)$/;
+function safeBackupPath(filename) {
+  if (typeof filename !== 'string' || !filename) return null;
+  const leaf = path.basename(filename);
+  if (leaf !== filename || leaf.includes('\0') || !SAFE_BACKUP_FILENAME.test(leaf)) return null;
+  const root = path.resolve(BACKUP_DIR);
+  const abs = path.resolve(root, leaf);
+  if (!abs.startsWith(root + path.sep)) return null;
+  return abs;
+}
 
 /**
  * Create database backup using pg_dump
@@ -47,7 +64,11 @@ async function createBackup() {
   const env = { ...process.env };
   if (dbPass) env.PGPASSWORD = dbPass;
 
-  const cmd = `pg_dump -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -F p -f "${filepath}"`;
+  // [Audit 2A] --clean --if-exists: tanpa ini file hasil pg_dump hanya berisi
+  // CREATE TABLE/COPY sehingga restoreBackup() ke DB yang sudah terisi gagal
+  // (tabel sudah ada, PK duplikat) padahal psql tetap exit 0 → "Restore
+  // berhasil" palsu. Dengan --clean, restore menjatuhkan & membuat ulang objek.
+  const cmd = `pg_dump -h ${dbHost} -p ${dbPort} -U ${dbUser} -d ${dbName} -F p --clean --if-exists --no-owner --no-privileges -f "${filepath}"`;
 
   try {
     await execAsync(cmd, { env, timeout: 120000 });
@@ -289,8 +310,9 @@ function listBackups() {
  * @param {string} filename - Name of backup file
  */
 async function uploadToDrive(filename) {
-  const filepath = path.join(BACKUP_DIR, filename);
-  
+  const filepath = safeBackupPath(filename);
+  if (!filepath) throw new Error('Invalid filename');
+
   if (!fs.existsSync(filepath)) {
     throw new Error(`Backup file not found: ${filename}`);
   }
@@ -328,7 +350,8 @@ async function uploadToDrive(filename) {
  * @param {string} filename
  */
 function deleteBackup(filename) {
-  const filepath = path.join(BACKUP_DIR, filename);
+  const filepath = safeBackupPath(filename);
+  if (!filepath) throw new Error('Invalid filename');
   if (fs.existsSync(filepath)) {
     fs.unlinkSync(filepath);
     // Also delete metadata
@@ -347,8 +370,30 @@ function getSchedule() {
   return scheduleConfig;
 }
 
-function setSchedule(enabled, time) {
-  scheduleConfig = { enabled: !!enabled, time: time || '02:00' };
+function persistSchedule() {
+  try { fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(scheduleConfig), 'utf8'); }
+  catch (e) { logger.warn(`[Backup] Gagal menyimpan schedule.json: ${e.message}`); }
+}
+
+/** Muat jadwal tersimpan saat boot dan aktifkan timer bila enabled. */
+function loadSchedule() {
+  try {
+    if (!fs.existsSync(SCHEDULE_FILE)) return scheduleConfig;
+    const saved = JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf8'));
+    if (saved && typeof saved === 'object') {
+      const time = /^\d{2}:\d{2}$/.test(String(saved.time || '')) ? saved.time : '02:00';
+      setSchedule(!!saved.enabled, time, { persist: false });
+    }
+  } catch (e) {
+    logger.warn(`[Backup] schedule.json tidak dapat dibaca: ${e.message}`);
+  }
+  return scheduleConfig;
+}
+
+function setSchedule(enabled, time, opts = {}) {
+  const t = /^\d{2}:\d{2}$/.test(String(time || '')) ? time : '02:00';
+  scheduleConfig = { enabled: !!enabled, time: t };
+  if (opts.persist !== false) persistSchedule();
 
   // Clear existing timer
   if (scheduleTimer) {
@@ -386,6 +431,9 @@ function setSchedule(enabled, time) {
   return scheduleConfig;
 }
 
+// Pulihkan jadwal yang tersimpan saat modul dimuat (setelah redeploy).
+loadSchedule();
+
 module.exports = {
   createBackup,
   restoreBackup,
@@ -394,5 +442,6 @@ module.exports = {
   deleteBackup,
   getSchedule,
   setSchedule,
+  loadSchedule,
   BACKUP_DIR,
 };

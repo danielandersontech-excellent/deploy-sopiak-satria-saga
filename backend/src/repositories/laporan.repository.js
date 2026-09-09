@@ -5,6 +5,17 @@
  * to filters.lokasi_id (single uuid). An empty array is the deny-all
  * sentinel and is rendered as `AND FALSE`. See utils/scope.js for
  * how the service layer populates these.
+ *
+ * [Audit 2A]
+ *   - Filter baru: search (nama/NRP pelapor), tanggal (harian), start_date /
+ *     end_date (rentang created_at, inklusif), prioritas (kejadian), all=true
+ *     (untuk export). Sebelumnya web-admin hanya menerima 20 baris pertama
+ *     lalu memfilter di klien → chip status/hitungan salah.
+ *   - Hasil menyertakan `summary` (jumlah per status untuk filter yang sama
+ *     tanpa status) agar chip di web-admin akurat.
+ *   - u.foto_url dialiaskan `user_foto_url` (avatar pelapor) tanpa menimpa
+ *     kolom laporan.
+ *   - findLokasiOf(): lokasi pelapor untuk pemeriksaan scope saat validasi.
  */
 const { queryOne, queryAll } = require('../config/database');
 const { parsePagination, paginatedResponse } = require('../utils/pagination');
@@ -29,23 +40,49 @@ function buildLokasiClause(filters, colRef, params) {
   return '';
 }
 
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Predikat bersama (tanpa status) — dipakai untuk data & summary.
+function buildCommon(filters, alias, params) {
+  let where = 'WHERE 1=1';
+  if (filters.user_id) { params.push(filters.user_id); where += ` AND ${alias}.user_id = $${params.length}`; }
+  if (filters.search != null && String(filters.search).trim() !== '') {
+    params.push(`%${String(filters.search).trim()}%`);
+    where += ` AND (u.nama ILIKE $${params.length} OR u.nrp ILIKE $${params.length})`;
+  }
+  if (filters.start_date && DATE_RE.test(filters.start_date)) { params.push(filters.start_date); where += ` AND ${alias}.created_at >= $${params.length}::date`; }
+  if (filters.end_date && DATE_RE.test(filters.end_date)) { params.push(filters.end_date); where += ` AND ${alias}.created_at < ($${params.length}::date + INTERVAL '1 day')`; }
+  where += buildLokasiClause(filters, 'u.lokasi_id', params);
+  return where;
+}
+
 class LaporanRepository {
   // ====== HARIAN ======
   async findHarian(filters = {}) {
     const { page, limit, offset } = parsePagination(filters);
-    let where = 'WHERE 1=1';
     const params = [];
-    if (filters.user_id) { params.push(filters.user_id); where += ` AND lh.user_id = $${params.length}`; }
-    if (filters.status) { params.push(filters.status); where += ` AND lh.status = $${params.length}`; }
-    where += buildLokasiClause(filters, 'u.lokasi_id', params);
+    let where = buildCommon(filters, 'lh', params);
+    if (filters.tanggal && DATE_RE.test(filters.tanggal)) { params.push(filters.tanggal); where += ` AND lh.tanggal = $${params.length}::date`; }
+    if (filters.kondisi) { params.push(filters.kondisi); where += ` AND lh.kondisi = $${params.length}`; }
+    const baseFrom = 'FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id';
 
-    const countResult = await queryOne(`SELECT COUNT(*)::int as total FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id ${where}`, params);
+    // Summary per status (filter yang sama, tanpa status).
+    const sumRows = await queryAll(`SELECT lh.status, COUNT(*)::int AS jumlah ${baseFrom} ${where} GROUP BY lh.status`, params);
+    const summary = { total: 0 };
+    for (const r of sumRows) { summary[r.status] = r.jumlah; summary.total += r.jumlah; }
+
+    if (filters.status) { params.push(filters.status); where += ` AND lh.status = $${params.length}`; }
+    const countResult = await queryOne(`SELECT COUNT(*)::int as total ${baseFrom} ${where}`, params);
     const dataParams = [...params, limit, offset];
     const rows = await queryAll(
-      `SELECT lh.*, u.nama, u.nrp, u.lokasi_id FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id ${where} ORDER BY lh.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      `SELECT lh.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama
+       ${baseFrom} LEFT JOIN lokasi l ON l.id = COALESCE(lh.lokasi_id, u.lokasi_id) LEFT JOIN users v ON v.id = lh.validated_by
+       ${where} ORDER BY lh.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams
     );
-    return paginatedResponse(rows, countResult?.total || 0, page, limit);
+    const result = paginatedResponse(rows, countResult?.total || 0, page, limit);
+    result.summary = summary;
+    return result;
   }
 
   async createHarian(data) {
@@ -78,20 +115,27 @@ class LaporanRepository {
   // ====== KEJADIAN ======
   async findKejadian(filters = {}) {
     const { page, limit, offset } = parsePagination(filters);
-    let where = 'WHERE 1=1';
     const params = [];
-    if (filters.user_id) { params.push(filters.user_id); where += ` AND lk.user_id = $${params.length}`; }
-    if (filters.status) { params.push(filters.status); where += ` AND lk.status = $${params.length}`; }
+    let where = buildCommon(filters, 'lk', params);
     if (filters.prioritas) { params.push(filters.prioritas); where += ` AND lk.prioritas = $${params.length}`; }
-    where += buildLokasiClause(filters, 'u.lokasi_id', params);
+    const baseFrom = 'FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id';
 
-    const countResult = await queryOne(`SELECT COUNT(*)::int as total FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id ${where}`, params);
+    const sumRows = await queryAll(`SELECT lk.status, COUNT(*)::int AS jumlah ${baseFrom} ${where} GROUP BY lk.status`, params);
+    const summary = { total: 0 };
+    for (const r of sumRows) { summary[r.status] = r.jumlah; summary.total += r.jumlah; }
+
+    if (filters.status) { params.push(filters.status); where += ` AND lk.status = $${params.length}`; }
+    const countResult = await queryOne(`SELECT COUNT(*)::int as total ${baseFrom} ${where}`, params);
     const dataParams = [...params, limit, offset];
     const rows = await queryAll(
-      `SELECT lk.*, u.nama, u.nrp, u.lokasi_id FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id ${where} ORDER BY lk.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
+      `SELECT lk.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama
+       ${baseFrom} LEFT JOIN lokasi l ON l.id = COALESCE(lk.lokasi_id, u.lokasi_id) LEFT JOIN users v ON v.id = lk.validated_by
+       ${where} ORDER BY lk.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams
     );
-    return paginatedResponse(rows, countResult?.total || 0, page, limit);
+    const result = paginatedResponse(rows, countResult?.total || 0, page, limit);
+    result.summary = summary;
+    return result;
   }
 
   async createKejadian(data) {
@@ -118,6 +162,20 @@ class LaporanRepository {
       `UPDATE laporan_kejadian SET status = $1, catatan_komandan = $2, validated_by = $3, updated_at = NOW()
        WHERE id = $4 RETURNING *`,
       [status, catatan, validatorId, id]
+    );
+  }
+
+  /**
+   * [Audit 2A] Lokasi efektif sebuah laporan (lokasi_id laporan, fallback
+   * lokasi pelapor) + status saat ini — untuk pemeriksaan scope validasi.
+   * `table` hanya boleh 'laporan_harian' | 'laporan_kejadian'.
+   */
+  async findLokasiOf(table, id) {
+    if (!['laporan_harian', 'laporan_kejadian'].includes(table)) return null;
+    return queryOne(
+      `SELECT r.id, r.status, r.user_id, COALESCE(r.lokasi_id, u.lokasi_id) AS lokasi_id
+         FROM ${table} r LEFT JOIN users u ON u.id = r.user_id WHERE r.id = $1`,
+      [id]
     );
   }
 }

@@ -18,6 +18,7 @@ const { initSocketIO } = require('./realtime/socketio');
 const { sanitizeMiddleware } = require('./middleware/validation');
 const { logger, morganStream } = require('./utils/logger');
 const { scheduleCleanup } = require('./utils/fileCleanup');
+const { scheduleMaintenance } = require('./utils/maintenance');
 const { bootstrap } = require('./utils/bootstrap');
 
 const app = express();
@@ -173,9 +174,14 @@ app.use('/api/', rateLimit({
     // dengan user lain — tidak ada akses yang granted.
     try {
       const authHeader = req.headers.authorization;
-      if (authHeader && authHeader.startsWith('Bearer ')) {
+      // [Audit 2A] Web-admin memakai cookie httpOnly (bukan Bearer) — dulu
+      // seluruh admin di balik satu NAT berbagi bucket IP 200/menit.
+      const raw = (authHeader && authHeader.startsWith('Bearer '))
+        ? authHeader.split(' ')[1]
+        : (req.cookies && req.cookies.ptsss_token) || null;
+      if (raw) {
         const jwt = require('jsonwebtoken');
-        const decoded = jwt.decode(authHeader.split(' ')[1]);
+        const decoded = jwt.decode(raw);
         if (decoded && decoded.id) {
           return `user:${decoded.id}`;
         }
@@ -333,6 +339,9 @@ async function start() {
 
   // Schedule daily file cleanup
   scheduleCleanup();
+  // [Audit 2A] Perawatan data harian (token kedaluwarsa, patroli terbengkalai,
+  // riwayat lokasi lama).
+  scheduleMaintenance();
 
   server.listen(PORT, '0.0.0.0', () => {
     // STARTUP BANNER — intentionally console.log (not logger.info):

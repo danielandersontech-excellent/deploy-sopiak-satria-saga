@@ -78,6 +78,39 @@ class UserService {
     const isSelf = id === requestUser.id;
     if (!isAdmin && !isSelf) throw { status: 403, message: 'Akses ditolak' };
 
+    // [Audit 2A] Validasi enum & aturan bisnis → 400/409 yang jelas (dulu
+    // pelanggaran CHECK/UNIQUE menjadi 500 "Internal server error").
+    if (data.role !== undefined && !['anggota', 'komandan', 'supervisor', 'admin'].includes(data.role)) {
+      throw { status: 400, message: 'Role harus anggota/komandan/supervisor/admin' };
+    }
+    if (data.status_penempatan !== undefined && data.status_penempatan !== null &&
+        !['belum_ditempatkan', 'ditempatkan', 'nonaktif'].includes(data.status_penempatan)) {
+      throw { status: 400, message: 'status_penempatan tidak valid' };
+    }
+    if (data.status !== undefined && data.status !== null && !['on_duty', 'patroli', 'break', 'off_duty'].includes(data.status)) {
+      throw { status: 400, message: 'status harus on_duty/patroli/break/off_duty' };
+    }
+    if (data.jenis_kelamin !== undefined && data.jenis_kelamin !== null && !['L', 'P'].includes(data.jenis_kelamin)) {
+      throw { status: 400, message: 'jenis_kelamin harus L/P' };
+    }
+    if (data.skor !== undefined && data.skor !== null && (isNaN(Number(data.skor)) || Number(data.skor) < 0 || Number(data.skor) > 100)) {
+      throw { status: 400, message: 'Skor harus 0–100' };
+    }
+    if (isSelf && isAdmin && (data.status_penempatan === 'nonaktif' || (data.role !== undefined && data.role !== requestUser.role))) {
+      throw { status: 400, message: 'Tidak dapat menonaktifkan / mengubah role akun sendiri' };
+    }
+    if (isAdmin && data.nrp !== undefined) {
+      const nrp = String(data.nrp || '').trim().toUpperCase();
+      if (!/^[A-Z0-9_-]{3,20}$/.test(nrp)) throw { status: 400, message: 'NRP harus 3–20 karakter huruf/angka' };
+      const dup = await userRepo.rawOne('SELECT id FROM users WHERE UPPER(nrp) = $1 AND id <> $2', [nrp, id]);
+      if (dup) throw { status: 409, message: 'NRP sudah dipakai personil lain' };
+      data.nrp = nrp;
+    }
+    // '' pada kolom uuid/date → null (select kosong dari web-admin).
+    for (const k of ['lokasi_id', 'pos_jaga_id', 'tanggal_lahir', 'tanggal_bergabung']) {
+      if (data[k] === '') data[k] = null;
+    }
+
     const fields = {};
     const allowedFields = [
       'nama', 'no_hp', 'shift', 'status', 'lokasi_id', 'pos_jaga_id', 'foto_url',
@@ -127,6 +160,15 @@ class UserService {
   }
 
   async delete(id, actor) {
+    // [Audit 2A] Admin tidak boleh menghapus akunnya sendiri; akun admin
+    // terakhir tidak boleh dihapus (sistem terkunci tanpa admin).
+    if (actor && String(actor.id) === String(id)) throw { status: 400, message: 'Tidak dapat menghapus akun sendiri' };
+    const target = await userRepo.findById(id);
+    if (!target) throw { status: 404, message: 'User tidak ditemukan' };
+    if (target.role === 'admin') {
+      const admins = await userRepo.rawOne(`SELECT COUNT(*)::int AS c FROM users WHERE role = 'admin' AND status_penempatan <> 'nonaktif'`);
+      if (admins && admins.c <= 1) throw { status: 409, message: 'Admin terakhir tidak dapat dihapus' };
+    }
     const result = await userRepo.delete(id);
     // [1-10] Audit user deletion (no PII/secrets in the detail).
     if (actor) {

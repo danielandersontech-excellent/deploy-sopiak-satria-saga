@@ -54,12 +54,35 @@ class DataService {
     return map[table];
   }
 
-  async getAll(table, filters) {
+  async getAll(table, filters, user) {
     const repo = this.getRepo(table);
     if (!repo) throw { status: 400, message: `Unknown table: ${table}` };
     const orderMap = { lokasi: 'nama', 'pos-jaga': 'nama', checkpoints: 'nama', routes: 'nama',
       'jadwal-shift': 'waktu_mulai', 'shift-assignments': 'tanggal DESC', 'report-exports': 'created_at DESC',
       clients: 'nama_klien' };
+    filters = { ...(filters || {}) };
+
+    // [Audit 2A] Scope lokasi (fail-closed) untuk data master ber-lokasi.
+    // Sebelumnya GET /api/data/lokasi|pos-jaga|checkpoints|routes|jadwal-shift
+    // mengembalikan SEMUA tenant ke anggota/komandan/klien mana pun. Invarian
+    // utils/scope: admin/supervisor bebas; komandan/anggota lokasi sendiri;
+    // klien seluruh lokasi client_id-nya; selain itu deny. Kunci filter:
+    // tabel lokasi memakai kolom `id`, lainnya `lokasi_id`. Permintaan
+    // ?lokasi_id=X di luar scope → hasil kosong (tidak melebar).
+    const LOKASI_SCOPED = { lokasi: 'id', 'pos-jaga': 'lokasi_id', checkpoints: 'lokasi_id', routes: 'lokasi_id', 'jadwal-shift': 'lokasi_id' };
+    const scopeKey = LOKASI_SCOPED[table];
+    if (scopeKey && user) {
+      const scope = await getScopeFilter(user);
+      if (!scope.unrestricted) {
+        const requested = filters[scopeKey];
+        if (requested) {
+          if (!scope.lokasiIds.includes(requested)) filters[scopeKey] = [];
+        } else {
+          filters[scopeKey] = scope.lokasiIds.slice(); // [] = deny-all
+        }
+      }
+    }
+
     let results = await repo.findAll({ where: filters, orderBy: orderMap[table] || 'created_at DESC', limit: filters.limit });
     results = await this.enrichResults(table, results, filters);
     // SECURITY (Fase 0 / 2F-1): never return pin_hash / must_change_pin for clients.
@@ -146,8 +169,86 @@ class DataService {
     return row;
   }
 
+  // [Audit 2A] Normalisasi & validasi input tulis untuk data master.
+  //  - '' → null: klien web mengirim "" untuk select kosong (pos_jaga_id,
+  //    lokasi_id, client_id) → Postgres menolak '' pada kolom uuid/date → 500.
+  //  - kolom turunan hasil enrich (lokasi_nama, klien_nama, …) dibuang agar
+  //    tidak dianggap kolom (sebelumnya hanya di update()).
+  //  - field wajib per tabel diperiksa di sini → 400 yang jelas, bukan 500.
+  _normalize(table, data) {
+    const computed = ['lokasi_nama', 'klien_nama', 'klien_kode', 'pos_nama', 'user_nama', 'user_nrp',
+      'shift_nama', 'waktu_mulai_shift', 'created_at', 'updated_at', 'id', 'total_count', 'temp_pin'];
+    const out = {};
+    for (const [k, v] of Object.entries(data || {})) {
+      if (computed.includes(k)) continue;
+      out[k] = (typeof v === 'string' && v.trim() === '') ? null : v;
+    }
+    return out;
+  }
+
+  _validate(table, data, isUpdate) {
+    const errors = [];
+    const need = (k, label) => { if (!isUpdate || data[k] !== undefined) { if (data[k] === undefined || data[k] === null || data[k] === '') errors.push(`${label || k} wajib diisi`); } };
+    const uuidRe = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidOpt = (k) => { if (data[k] != null && data[k] !== '' && !uuidRe.test(String(data[k]))) errors.push(`${k} harus UUID valid`); };
+    const enumOf = (k, list) => { if (data[k] != null && !list.includes(data[k])) errors.push(`${k} harus salah satu: ${list.join('/')}`); };
+    const numRange = (k, min, max) => { if (data[k] != null && (isNaN(Number(data[k])) || Number(data[k]) < min || Number(data[k]) > max)) errors.push(`${k} harus angka ${min}–${max}`); };
+
+    switch (table) {
+      case 'lokasi':
+        need('nama', 'Nama lokasi'); need('alamat', 'Alamat');
+        numRange('latitude', -90, 90); numRange('longitude', -180, 180); numRange('radius', 10, 50000);
+        enumOf('status', ['active', 'inactive']); uuidOpt('client_id');
+        break;
+      case 'pos-jaga':
+        need('nama', 'Nama pos jaga'); need('lokasi_id', 'Lokasi'); uuidOpt('lokasi_id');
+        numRange('latitude', -90, 90); numRange('longitude', -180, 180); numRange('radius', 5, 50000);
+        enumOf('status', ['active', 'inactive']);
+        break;
+      case 'checkpoints':
+        need('nama', 'Nama checkpoint'); need('lokasi_id', 'Lokasi'); uuidOpt('lokasi_id');
+        if (!isUpdate) { need('latitude', 'Latitude'); need('longitude', 'Longitude'); }
+        numRange('latitude', -90, 90); numRange('longitude', -180, 180); numRange('radius', 1, 5000);
+        enumOf('status', ['active', 'inactive']);
+        break;
+      case 'routes':
+        need('nama', 'Nama rute'); need('lokasi_id', 'Lokasi'); uuidOpt('lokasi_id');
+        if (data.checkpoint_ids != null && !Array.isArray(data.checkpoint_ids)) errors.push('checkpoint_ids harus array');
+        numRange('waktu_estimasi', 1, 1440); enumOf('status', ['active', 'inactive']);
+        break;
+      case 'jadwal-shift':
+        need('nama', 'Nama shift'); need('lokasi_id', 'Lokasi'); uuidOpt('lokasi_id');
+        need('waktu_mulai', 'Waktu mulai'); need('waktu_selesai', 'Waktu selesai');
+        for (const k of ['waktu_mulai', 'waktu_selesai']) {
+          if (data[k] != null && !/^\d{2}:\d{2}(:\d{2})?$/.test(String(data[k]))) errors.push(`${k} harus format HH:MM`);
+        }
+        break;
+      case 'shift-assignments':
+        need('user_id', 'Personil'); need('shift_id', 'Shift'); need('tanggal', 'Tanggal');
+        uuidOpt('user_id'); uuidOpt('shift_id'); uuidOpt('pos_jaga_id');
+        if (data.tanggal != null && !/^\d{4}-\d{2}-\d{2}/.test(String(data.tanggal))) errors.push('tanggal harus YYYY-MM-DD');
+        break;
+      case 'clients':
+        need('nama_klien', 'Nama klien');
+        enumOf('status_klien', ['Aktif', 'Non-Aktif', 'Blacklist']);
+        enumOf('jenis_kelamin', ['Laki-Laki', 'Perempuan', 'Lainnya/Instansi']);
+        if (data.email != null && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(data.email))) errors.push('Format email tidak valid');
+        uuidOpt('lokasi_id');
+        break;
+      case 'report-exports':
+        enumOf('tipe', ['absensi', 'laporan_harian', 'laporan_kejadian', 'patroli', 'all', 'weekly_auto']);
+        uuidOpt('lokasi_id'); uuidOpt('generated_by');
+        break;
+      default:
+        break;
+    }
+    if (errors.length) throw { status: 400, message: 'Validasi gagal', details: errors };
+  }
+
   async create(table, data) {
     const repo = this.getRepo(table);
+    data = this._normalize(table, data);
+    this._validate(table, data, false);
     // [5-3] Pertahanan server: cegah double-booking shift (1 penugasan per
     // user_id + tanggal). Web-admin juga mengecek di klien; ini lapis kedua
     // agar race/akses langsung API tetap aman. Tanpa constraint DB keras
@@ -204,11 +305,10 @@ class DataService {
 
   async update(table, id, data) {
     const repo = this.getRepo(table);
-    // Strip computed fields before update
-    const computed = ['lokasi_nama', 'klien_nama', 'klien_kode', 'pos_nama', 'user_nama', 'user_nrp', 'shift_nama', 'created_at'];
-    computed.forEach(k => delete data[k]);
-    delete data.id;
-    
+    // [Audit 2A] normalisasi ('' → null, buang kolom turunan) + validasi field.
+    data = this._normalize(table, data);
+    this._validate(table, data, true);
+
     if (table === 'clients') {
       // Handle pin update
       if (data.pin && !data.pin_hash) {

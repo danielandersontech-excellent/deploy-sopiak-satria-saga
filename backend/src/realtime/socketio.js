@@ -144,10 +144,30 @@ function initSocketIO(server) {
     socket.join(`user:${user.id}`);
 
     // Join specific location room
-    socket.on('join:lokasi', (lokasiId) => {
-      if (lokasiId) {
+    // [Audit 2A] Kamar lokasi kini diperiksa terhadap scope pengguna
+    // (utils/scope, fail-closed). Sebelumnya siapa pun bisa join kamar lokasi
+    // tenant lain dan menerima broadcast/panic/laporan urgent lokasi itu.
+    socket.on('join:lokasi', async (lokasiId) => {
+      if (!lokasiId || typeof lokasiId !== 'string' || !/^[0-9a-f-]{36}$/i.test(lokasiId)) return;
+      try {
+        const { getScopeFilter } = require('../utils/scope');
+        // JWT tidak memuat lokasi_id → ambil dari DB untuk peran staf agar
+        // getScopeFilter (fail-closed) bisa menghitung scope komandan/anggota.
+        let scopeUser = user;
+        if (user.role !== 'klien') {
+          const { queryOne } = require('../config/database');
+          const row = await queryOne('SELECT lokasi_id FROM users WHERE id = $1', [user.id]);
+          scopeUser = { ...user, lokasi_id: row ? row.lokasi_id : null };
+        }
+        const scope = await getScopeFilter(scopeUser);
+        if (!scope.unrestricted && !scope.lokasiIds.includes(lokasiId)) {
+          logger.warn(`[Socket.io] join:lokasi ditolak — ${user.nama || user.id} (${user.role}) bukan bagian dari lokasi ${lokasiId}`);
+          return;
+        }
         socket.join(`lokasi:${lokasiId}`);
         logger.info(`[Socket.io] ${user.nama || user.id} joined lokasi:${lokasiId}`);
+      } catch (err) {
+        logger.warn(`[Socket.io] join:lokasi gagal diverifikasi: ${err.message}`);
       }
     });
 

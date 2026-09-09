@@ -16,11 +16,17 @@ const crypto = require('crypto');
 // SECURITY (P0-16): Whitelist for upload subfolders.
 // =============================================================================
 const SAFE_FOLDERS = ['general', 'absensi', 'laporan', 'kejadian', 'patroli', 'kontrak', 'personil', 'profile'];
+// [Audit 2A] Halaman Personil web-admin mengunggah ke `personil/<NRP>` (satu
+// sub-folder per personil). Whitelist P0-16 hanya menerima nama folder tunggal
+// sehingga upload foto/berkas personil selalu ditolak 400 di produksi.
+// Sub-folder diizinkan HANYA di bawah `personil/` dengan segmen yang ketat
+// (huruf/angka/_/-, maks 30) — tidak ada '.', '/', atau '\' → tanpa traversal.
+const PERSONIL_SUBFOLDER_RE = /^personil\/[A-Za-z0-9_-]{1,30}$/;
 
 function pickUploadFolder(req, res, next) {
   const requested = typeof req.query.folder === 'string' ? req.query.folder : 'general';
-  if (!SAFE_FOLDERS.includes(requested)) {
-    return res.status(400).json({ error: `Folder upload tidak valid. Pilih salah satu: ${SAFE_FOLDERS.join(', ')}` });
+  if (!SAFE_FOLDERS.includes(requested) && !PERSONIL_SUBFOLDER_RE.test(requested)) {
+    return res.status(400).json({ error: `Folder upload tidak valid. Pilih salah satu: ${SAFE_FOLDERS.join(', ')} (atau personil/<NRP>)` });
   }
   req.uploadFolder = requested;
   next();
@@ -201,6 +207,8 @@ noR.get('/', auth, opCtrl.getNotifikasi); noR.post('/', auth, opCtrl.createNotif
 noR.put('/read-all', auth, opCtrl.markAllRead); noR.put('/:id/read', auth, opCtrl.markRead);
 router.use('/notifikasi', noR);
 router.get('/dashboard/stats', auth, dashCtrl.getStats);
+// [Audit 2A/2B] agregat halaman Analytics (ber-scope).
+router.get('/dashboard/analytics', auth, dashCtrl.getAnalytics);
 
 // File upload with watermark
 //

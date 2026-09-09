@@ -28,6 +28,11 @@ function sanitizeOrderBy(orderBy) {
   return orderBy;
 }
 
+// [Audit 2A] Kunci query-string yang BUKAN nama kolom tetapi lolos isValidColumn
+// (mis. ?page=1 → `AND lokasi.page = $1` → error kolom tidak ada → 500).
+// Dilewati diam-diam, sama seperti kolom tak valid.
+const RESERVED_QUERY_KEYS = new Set(['page', 'limit', 'offset', 'sort', 'order', 'asc', 'search', 'all', 'q', '_']);
+
 class BaseRepository {
   constructor(tableName) {
     this.table = tableName;
@@ -46,11 +51,18 @@ class BaseRepository {
 
     for (const [col, val] of Object.entries(where)) {
       if (val === undefined || val === null || val === '') continue;
-      if (col === 'limit' || col === 'offset') continue;
       if (col === 'order') { customOrder = val; continue; }
       if (col === 'asc') { customAsc = val; continue; }
+      if (RESERVED_QUERY_KEYS.has(col)) continue;
       if (col.endsWith('_gte')) { gteFilters[col.slice(0, -4)] = val; continue; }
       if (col.endsWith('_lte')) { lteFilters[col.slice(0, -4)] = val; continue; }
+      // [Audit 2A] Nilai array (dipakai utils/scope: lokasi_ids) → = ANY($n).
+      // Array KOSONG = sentinel deny-all → AND FALSE (fail-closed).
+      if (Array.isArray(val)) {
+        if (!isValidColumn(col)) continue;
+        if (val.length === 0) { conditions.push('FALSE'); continue; }
+        inFilters[col] = val; continue;
+      }
       if (typeof val === 'string' && val.includes(',') && !val.includes(' ')) { inFilters[col] = val.split(','); continue; }
       regularFilters[col] = val;
     }
@@ -172,7 +184,10 @@ class BaseRepository {
     const conditions = ['1=1'];
     const params = [];
     for (const [col, val] of Object.entries(where)) {
-      if (val === undefined || val === null) continue;
+      // [Audit 2A] '' juga dilewati (konsisten dengan findAll) — '' pada kolom
+      // uuid/date memicu error cast di Postgres.
+      if (val === undefined || val === null || val === '') continue;
+      if (RESERVED_QUERY_KEYS.has(col)) continue;
       // SECURITY: same identifier rule applies to COUNT WHERE filters.
       if (!isValidColumn(col)) continue;
       params.push(val);

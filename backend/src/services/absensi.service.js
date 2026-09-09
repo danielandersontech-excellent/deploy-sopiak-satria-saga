@@ -43,6 +43,16 @@ class AbsensiService {
     if (!data.tipe || data.latitude == null || data.longitude == null) {
       throw { status: 400, message: 'tipe, latitude, longitude wajib' };
     }
+    // [Audit 2A] Validasi enum & rentang koordinat → 400 yang jelas, bukan
+    // pelanggaran CHECK constraint yang menjadi 500.
+    if (!['masuk', 'keluar'].includes(data.tipe)) throw { status: 400, message: 'tipe harus masuk/keluar' };
+    if (data.status && !['hadir', 'terlambat', 'tidak_hadir', 'libur'].includes(data.status)) {
+      throw { status: 400, message: 'status harus hadir/terlambat/tidak_hadir/libur' };
+    }
+    const lat = parseFloat(data.latitude); const lng = parseFloat(data.longitude);
+    if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+      throw { status: 400, message: 'Koordinat tidak valid' };
+    }
     const row = await absensiRepo.create({
       user_id: user.id,
       tipe: data.tipe,

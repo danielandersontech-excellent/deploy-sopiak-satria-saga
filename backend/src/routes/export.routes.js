@@ -7,6 +7,7 @@ const router = require('express').Router();
 const { queryAll, queryOne } = require('../config/database');
 const { auth, requireRole } = require('../middleware/auth');
 const { logEvent } = require('../middleware/auditlog');
+const { getScopeFilter } = require('../utils/scope');
 const ExcelJS = require('exceljs');
 const path = require('path');
 const fs = require('fs');
@@ -16,6 +17,66 @@ const EXPORT_DIR = path.join(__dirname, '..', '..', 'uploads', 'exports');
 if (!fs.existsSync(EXPORT_DIR)) fs.mkdirSync(EXPORT_DIR, { recursive: true });
 
 // ==================== HELPERS ====================
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * [Audit 2A] Middleware bersama untuk semua endpoint export:
+ *   - validasi start_date/end_date (YYYY-MM-DD, rentang ≤ 366 hari) → 400,
+ *     bukan error SQL 500;
+ *   - lokasi_id harus UUID;
+ *   - SCOPE: komandan (dan peran terbatas lain) hanya boleh mengekspor
+ *     lokasinya sendiri. Sebelumnya `?lokasi_id=` dipakai apa adanya dan
+ *     tanpa lokasi_id komandan mendapat data SEMUA klien (bocor lintas tenant).
+ *     Hasil: req.exportScope = { sd, ed, lokasiIds: null|uuid[] } — null =
+ *     tanpa filter (admin/supervisor tanpa lokasi_id), [] = tidak ada akses.
+ */
+async function exportScope(req, res, next) {
+  try {
+    const { start_date, end_date, lokasi_id } = req.query;
+    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
+    const ed = end_date || new Date().toISOString().split('T')[0];
+    if (!DATE_RE.test(sd) || !DATE_RE.test(ed) || isNaN(Date.parse(sd)) || isNaN(Date.parse(ed))) {
+      return res.status(400).json({ error: 'start_date/end_date harus berformat YYYY-MM-DD' });
+    }
+    if (Date.parse(ed) < Date.parse(sd)) return res.status(400).json({ error: 'end_date tidak boleh sebelum start_date' });
+    if ((Date.parse(ed) - Date.parse(sd)) / 86400000 > 366) return res.status(400).json({ error: 'Rentang export maksimal 366 hari' });
+    if (lokasi_id && !UUID_RE.test(String(lokasi_id))) return res.status(400).json({ error: 'lokasi_id tidak valid' });
+
+    const scope = await getScopeFilter(req.user);
+    let lokasiIds = null;
+    if (scope.unrestricted) {
+      lokasiIds = lokasi_id ? [lokasi_id] : null;
+    } else if (lokasi_id) {
+      lokasiIds = scope.lokasiIds.includes(lokasi_id) ? [lokasi_id] : [];
+    } else {
+      lokasiIds = scope.lokasiIds.slice();
+    }
+    req.exportScope = { sd, ed, lokasiIds };
+    next();
+  } catch (err) {
+    res.status(500).json({ error: 'Gagal menentukan scope export' });
+  }
+}
+
+/** Klausa `AND <col> = ANY($n::uuid[])` (atau AND FALSE bila []). */
+function lokasiSql(lokasiIds, col, params) {
+  if (lokasiIds === null) return '';
+  if (lokasiIds.length === 0) return ' AND FALSE';
+  params.push(lokasiIds);
+  return ` AND ${col} = ANY($${params.length}::uuid[])`;
+}
+
+async function lokasiLabel(lokasiIds) {
+  if (lokasiIds === null) return 'Semua Lokasi';
+  if (lokasiIds.length === 0) return 'Tidak ada lokasi';
+  if (lokasiIds.length === 1) {
+    const lok = await queryOne('SELECT nama FROM lokasi WHERE id = $1', [lokasiIds[0]]);
+    return lok ? lok.nama : 'Lokasi';
+  }
+  return `${lokasiIds.length} lokasi`;
+}
 
 function fmtDate(d) {
   if (!d) return '-';
@@ -67,26 +128,20 @@ function addTitleRow(ws, title, colCount) {
 
 // ==================== EXPORT ABSENSI ====================
 
-router.get('/absensi', auth, requireRole('supervisor', 'admin', 'komandan'), async (req, res) => {
+router.get('/absensi', auth, requireRole('supervisor', 'admin', 'komandan'), exportScope, async (req, res) => {
   try {
-    const { start_date, end_date, lokasi_id, format = 'xlsx' } = req.query;
-    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const ed = end_date || new Date().toISOString().split('T')[0];
+    const { sd, ed, lokasiIds } = req.exportScope;
+    const lokasi_id = lokasiIds && lokasiIds.length === 1 ? lokasiIds[0] : null;
 
     let sql = `SELECT a.*, u.nama, u.nrp, u.shift as user_shift, l.nama as lokasi_nama
                FROM absensi a LEFT JOIN users u ON a.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id
                WHERE DATE(a.created_at) BETWEEN $1 AND $2`;
     const params = [sd, ed];
-    if (lokasi_id) { params.push(lokasi_id); sql += ` AND u.lokasi_id = $${params.length}`; }
+    sql += lokasiSql(lokasiIds, 'u.lokasi_id', params);
     sql += ' ORDER BY a.created_at DESC';
     const data = await queryAll(sql, params);
 
-    // Get lokasi name for subtitle
-    let lokasiName = 'Semua Lokasi';
-    if (lokasi_id) {
-      const lok = await queryOne('SELECT nama FROM lokasi WHERE id = $1', [lokasi_id]);
-      if (lok) lokasiName = lok.nama;
-    }
+    const lokasiName = await lokasiLabel(lokasiIds);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PT Sopiak Satria Saga System';
@@ -160,18 +215,17 @@ router.get('/absensi', auth, requireRole('supervisor', 'admin', 'komandan'), asy
 
 // ==================== EXPORT LAPORAN ====================
 
-router.get('/laporan', auth, requireRole('supervisor', 'admin', 'komandan'), async (req, res) => {
+router.get('/laporan', auth, requireRole('supervisor', 'admin', 'komandan'), exportScope, async (req, res) => {
   try {
-    const { start_date, end_date, lokasi_id } = req.query;
-    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const ed = end_date || new Date().toISOString().split('T')[0];
+    const { sd, ed, lokasiIds } = req.exportScope;
+    const lokasi_id = lokasiIds && lokasiIds.length === 1 ? lokasiIds[0] : null;
 
     // Laporan Harian
     let sqlH = `SELECT lh.*, u.nama, u.nrp, l.nama as lokasi_nama
                 FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id
                 WHERE DATE(lh.created_at) BETWEEN $1 AND $2`;
     const paramsH = [sd, ed];
-    if (lokasi_id) { paramsH.push(lokasi_id); sqlH += ` AND u.lokasi_id = $${paramsH.length}`; }
+    sqlH += lokasiSql(lokasiIds, 'u.lokasi_id', paramsH);
     sqlH += ' ORDER BY lh.created_at DESC';
 
     // Laporan Kejadian
@@ -179,13 +233,12 @@ router.get('/laporan', auth, requireRole('supervisor', 'admin', 'komandan'), asy
                 FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id
                 WHERE DATE(lk.created_at) BETWEEN $1 AND $2`;
     const paramsK = [sd, ed];
-    if (lokasi_id) { paramsK.push(lokasi_id); sqlK += ` AND u.lokasi_id = $${paramsK.length}`; }
+    sqlK += lokasiSql(lokasiIds, 'u.lokasi_id', paramsK);
     sqlK += ' ORDER BY lk.created_at DESC';
 
     const [harian, kejadian] = await Promise.all([queryAll(sqlH, paramsH), queryAll(sqlK, paramsK)]);
 
-    let lokasiName = 'Semua Lokasi';
-    if (lokasi_id) { const lok = await queryOne('SELECT nama FROM lokasi WHERE id = $1', [lokasi_id]); if (lok) lokasiName = lok.nama; }
+    const lokasiName = await lokasiLabel(lokasiIds);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PT Sopiak Satria Saga System';
@@ -237,22 +290,19 @@ router.get('/laporan', auth, requireRole('supervisor', 'admin', 'komandan'), asy
 
 // ==================== EXPORT PATROLI ====================
 
-router.get('/patroli', auth, requireRole('supervisor', 'admin', 'komandan'), async (req, res) => {
+router.get('/patroli', auth, requireRole('supervisor', 'admin', 'komandan'), exportScope, async (req, res) => {
   try {
-    const { start_date, end_date, lokasi_id } = req.query;
-    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const ed = end_date || new Date().toISOString().split('T')[0];
+    const { sd, ed, lokasiIds } = req.exportScope;
 
     let sql = `SELECT p.*, u.nama, u.nrp, l.nama as lokasi_nama
                FROM patroli p LEFT JOIN users u ON p.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id
                WHERE DATE(p.created_at) BETWEEN $1 AND $2`;
     const params = [sd, ed];
-    if (lokasi_id) { params.push(lokasi_id); sql += ` AND u.lokasi_id = $${params.length}`; }
+    sql += lokasiSql(lokasiIds, 'u.lokasi_id', params);
     sql += ' ORDER BY p.start_time DESC';
     const data = await queryAll(sql, params);
 
-    let lokasiName = 'Semua Lokasi';
-    if (lokasi_id) { const lok = await queryOne('SELECT nama FROM lokasi WHERE id = $1', [lokasi_id]); if (lok) lokasiName = lok.nama; }
+    const lokasiName = await lokasiLabel(lokasiIds);
 
     const wb = new ExcelJS.Workbook();
     wb.creator = 'PT Sopiak Satria Saga System';
@@ -290,24 +340,22 @@ router.get('/patroli', auth, requireRole('supervisor', 'admin', 'komandan'), asy
 
 // ==================== EXPORT ALL-IN-ONE ====================
 
-router.get('/complete', auth, requireRole('supervisor', 'admin'), async (req, res) => {
+router.get('/complete', auth, requireRole('supervisor', 'admin'), exportScope, async (req, res) => {
   try {
-    const { start_date, end_date, lokasi_id } = req.query;
-    const sd = start_date || new Date(Date.now() - 7 * 86400000).toISOString().split('T')[0];
-    const ed = end_date || new Date().toISOString().split('T')[0];
-    const lokFilter = lokasi_id ? ` AND u.lokasi_id = $3` : '';
-    const baseParams = [sd, ed];
-    const lokParams = lokasi_id ? [...baseParams, lokasi_id] : baseParams;
+    const { sd, ed, lokasiIds } = req.exportScope;
+    const lokParams = [sd, ed];
+    const lokFilter = lokasiSql(lokasiIds, 'u.lokasi_id', lokParams);
+    const persParams = [];
+    const persFilter = lokasiSql(lokasiIds, 'u.lokasi_id', persParams);
 
-    let lokasiName = 'Semua Lokasi';
-    if (lokasi_id) { const lok = await queryOne('SELECT nama FROM lokasi WHERE id = $1', [lokasi_id]); if (lok) lokasiName = lok.nama; }
+    const lokasiName = await lokasiLabel(lokasiIds);
 
     const [absensi, harian, kejadian, patroli, personil] = await Promise.all([
       queryAll(`SELECT a.*, u.nama, u.nrp, l.nama as lokasi_nama FROM absensi a LEFT JOIN users u ON a.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE DATE(a.created_at) BETWEEN $1 AND $2${lokFilter} ORDER BY a.created_at DESC`, lokParams),
       queryAll(`SELECT lh.*, u.nama, u.nrp, l.nama as lokasi_nama FROM laporan_harian lh LEFT JOIN users u ON lh.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE DATE(lh.created_at) BETWEEN $1 AND $2${lokFilter} ORDER BY lh.created_at DESC`, lokParams),
       queryAll(`SELECT lk.*, u.nama, u.nrp, l.nama as lokasi_nama FROM laporan_kejadian lk LEFT JOIN users u ON lk.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE DATE(lk.created_at) BETWEEN $1 AND $2${lokFilter} ORDER BY lk.created_at DESC`, lokParams),
       queryAll(`SELECT p.*, u.nama, u.nrp, l.nama as lokasi_nama FROM patroli p LEFT JOIN users u ON p.user_id = u.id LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE DATE(p.created_at) BETWEEN $1 AND $2${lokFilter} ORDER BY p.start_time DESC`, lokParams),
-      queryAll(`SELECT u.nrp, u.nama, u.role, u.shift, u.status, u.skor, l.nama as lokasi_nama FROM users u LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE u.role IN ('anggota','komandan')${lokasi_id ? ' AND u.lokasi_id = $1' : ''} ORDER BY u.nama`, lokasi_id ? [lokasi_id] : []),
+      queryAll(`SELECT u.nrp, u.nama, u.role, u.shift, u.status, u.skor, l.nama as lokasi_nama FROM users u LEFT JOIN lokasi l ON u.lokasi_id = l.id WHERE u.role IN ('anggota','komandan')${persFilter} ORDER BY u.nama`, persParams),
     ]);
 
     const wb = new ExcelJS.Workbook();
@@ -377,33 +425,42 @@ router.get('/complete', auth, requireRole('supervisor', 'admin'), async (req, re
 
 // ==================== LOKASI STATS (Multi-lokasi dashboard) ====================
 
-router.get('/lokasi-stats', auth, requireRole('supervisor', 'admin'), async (req, res) => {
+// [Audit 2A] Dulu N+1: 5 query × jumlah lokasi (≈ 75–105 query per hit).
+// Kini 4 query agregat GROUP BY lokasi, digabung di memori. Klien (mobile
+// supervisor) juga boleh melihat statistik lokasinya sendiri.
+router.get('/lokasi-stats', auth, requireRole('supervisor', 'admin', 'klien'), async (req, res) => {
   try {
-    const lokasi = await queryAll("SELECT id, nama, alamat, status FROM lokasi WHERE status = 'active' ORDER BY nama");
+    const scope = await getScopeFilter(req.user);
+    const params = [];
+    const lokFilter = scope.unrestricted ? '' : lokasiSql(scope.lokasiIds, 'l.id', params);
+    const lokasi = await queryAll(`SELECT l.id, l.nama, l.alamat, l.status FROM lokasi l WHERE l.status = 'active'${lokFilter} ORDER BY l.nama`, params);
+    if (lokasi.length === 0) return res.json([]);
 
-    const stats = await Promise.all(lokasi.map(async (l) => {
-      const [personil, onDuty, absensiToday, pendingLap, activePatrol] = await Promise.all([
-        queryOne("SELECT COUNT(*)::int as c FROM users WHERE lokasi_id = $1 AND role IN ('anggota','komandan')", [l.id]),
-        queryOne("SELECT COUNT(*)::int as c FROM users WHERE lokasi_id = $1 AND status != 'off_duty' AND role IN ('anggota','komandan')", [l.id]),
-        queryOne("SELECT COUNT(*)::int as c FROM absensi a JOIN users u ON a.user_id = u.id WHERE u.lokasi_id = $1 AND DATE(a.created_at) = CURRENT_DATE", [l.id]),
-        queryOne(`SELECT COUNT(*)::int as c FROM (
-          SELECT id FROM laporan_harian WHERE status = 'pending' AND user_id IN (SELECT id FROM users WHERE lokasi_id = $1)
-          UNION ALL
-          SELECT id FROM laporan_kejadian WHERE status = 'pending' AND user_id IN (SELECT id FROM users WHERE lokasi_id = $1)
-        ) t`, [l.id]),
-        queryOne("SELECT COUNT(*)::int as c FROM patroli WHERE status = 'active' AND user_id IN (SELECT id FROM users WHERE lokasi_id = $1)", [l.id]),
-      ]);
-      return {
-        ...l,
-        total_personil: personil.c,
-        on_duty: onDuty.c,
-        absensi_today: absensiToday.c,
-        pending_laporan: pendingLap.c,
-        active_patrol: activePatrol.c,
-      };
-    }));
+    const ids = lokasi.map((l) => l.id);
+    const [users, absensi, laporan, patroli] = await Promise.all([
+      queryAll(`SELECT lokasi_id, COUNT(*)::int AS total, COUNT(*) FILTER (WHERE status != 'off_duty')::int AS on_duty
+                  FROM users WHERE role IN ('anggota','komandan') AND lokasi_id = ANY($1::uuid[]) GROUP BY lokasi_id`, [ids]),
+      queryAll(`SELECT u.lokasi_id, COUNT(*)::int AS c FROM absensi a JOIN users u ON a.user_id = u.id
+                 WHERE u.lokasi_id = ANY($1::uuid[]) AND DATE(a.created_at) = CURRENT_DATE GROUP BY u.lokasi_id`, [ids]),
+      queryAll(`SELECT u.lokasi_id, COUNT(*)::int AS c FROM (
+                  SELECT user_id FROM laporan_harian WHERE status = 'pending'
+                  UNION ALL SELECT user_id FROM laporan_kejadian WHERE status = 'pending') t
+                 JOIN users u ON u.id = t.user_id WHERE u.lokasi_id = ANY($1::uuid[]) GROUP BY u.lokasi_id`, [ids]),
+      queryAll(`SELECT u.lokasi_id, COUNT(*)::int AS c FROM patroli p JOIN users u ON u.id = p.user_id
+                 WHERE p.status = 'active' AND u.lokasi_id = ANY($1::uuid[]) GROUP BY u.lokasi_id`, [ids]),
+    ]);
+    const byLok = (rows, key) => Object.fromEntries(rows.map((r) => [r.lokasi_id, r[key]]));
+    const uTotal = byLok(users, 'total'); const uDuty = byLok(users, 'on_duty');
+    const aToday = byLok(absensi, 'c'); const lPend = byLok(laporan, 'c'); const pAct = byLok(patroli, 'c');
 
-    res.json(stats);
+    res.json(lokasi.map((l) => ({
+      ...l,
+      total_personil: uTotal[l.id] || 0,
+      on_duty: uDuty[l.id] || 0,
+      absensi_today: aToday[l.id] || 0,
+      pending_laporan: lPend[l.id] || 0,
+      active_patrol: pAct[l.id] || 0,
+    })));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

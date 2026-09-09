@@ -19,6 +19,19 @@ const { getFileUrl } = require('../middleware/upload');
 const fcm = require('../services/fcm.service');
 const { logger } = require('../utils/logger');
 
+// [Audit 2A] foto_urls dari klien (URL hasil /api/data/upload) di-parse aman:
+// JSON rusak dulu melempar SyntaxError → 500 "Internal server error".
+function parseFotoUrls(raw) {
+  if (raw == null || raw === '') return [];
+  if (Array.isArray(raw)) return raw.filter((u) => typeof u === 'string');
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((u) => typeof u === 'string') : [];
+  } catch {
+    throw { status: 400, message: 'foto_urls bukan JSON array yang valid' };
+  }
+}
+
 /**
  * Helper: Apply watermark + upload to Drive for multiple files
  *
@@ -64,7 +77,7 @@ exports.createHarian = async (req, res) => {
     if (req.files && req.files.length > 0) {
       fotos = await processPhotos(req.files, req.user, 'LAPORAN HARIAN');
     } else {
-      fotos = req.body.foto_urls ? JSON.parse(req.body.foto_urls) : [];
+      fotos = parseFotoUrls(req.body.foto_urls);
     }
     const result = await laporanService.createHarian(req.user, req.body, fotos);
     fcm.sendLaporanNotif(req.user.nama, 'Harian', req.body.kondisi || 'aman')
@@ -97,7 +110,7 @@ exports.createKejadian = async (req, res) => {
     if (req.files && req.files.length > 0) {
       bukti = await processPhotos(req.files, req.user, 'LAPORAN KEJADIAN');
     } else {
-      bukti = req.body.foto_urls ? JSON.parse(req.body.foto_urls) : [];
+      bukti = parseFotoUrls(req.body.foto_urls);
     }
     const result = await laporanService.createKejadian(req.user, req.body, bukti);
     fcm.sendLaporanNotif(req.user.nama, req.body.jenis || 'Kejadian', req.body.prioritas || 'sedang')

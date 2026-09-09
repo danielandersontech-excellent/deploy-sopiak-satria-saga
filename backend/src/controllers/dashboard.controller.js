@@ -15,6 +15,27 @@ const dashService = require('../services/dashboard.service');
 const { getScopeFilter } = require('../utils/scope');
 const { logger } = require('../utils/logger');
 
+// Resolusi scope bersama: null = tanpa filter, [] = deny-all, [uuid,...] = filter.
+async function resolveLokasiIds(req) {
+  const scope = await getScopeFilter(req.user);
+  if (scope.unrestricted) return req.query.lokasi_id ? [req.query.lokasi_id] : null;
+  const requested = req.query.lokasi_id;
+  if (requested && scope.lokasiIds.includes(requested)) return [requested];
+  return scope.lokasiIds.slice();
+}
+
+// [Audit 2A/2B] GET /api/data/dashboard/analytics?days=30&lokasi_id=
+exports.getAnalytics = async (req, res) => {
+  try {
+    const lokasiIds = await resolveLokasiIds(req);
+    const days = Math.max(7, Math.min(365, parseInt(req.query.days, 10) || 30));
+    res.json(await dashService.getAnalytics(lokasiIds, days));
+  } catch (e) {
+    logger.error(`[Dashboard] Analytics error: ${e.message}`);
+    res.status(500).json({ error: e.message });
+  }
+};
+
 exports.getStats = async (req, res) => {
   try {
     const scope = await getScopeFilter(req.user);

@@ -41,6 +41,8 @@ exports.getIzinList = async (req, res) => {
   try {
     const scope = await getScopeFilter(req.user);
     const filters = { ...req.query };
+    // [Audit 2A] Anggota hanya melihat izinnya sendiri (bukan seluruh lokasi).
+    if (req.user && req.user.role === 'anggota') filters.user_id = req.user.id;
     if (!scope.unrestricted) {
       const requested = filters.lokasi_id;
       if (requested) {
@@ -85,7 +87,7 @@ exports.getViolations = async (req, res) => {
 };
 
 exports.ackViolation = async (req, res) => {
-  try { res.json(await geoService.ackViolation(req.params.id, req.user.id)); }
+  try { res.json(await geoService.ackViolation(req.params.id, req.user)); }
   catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 

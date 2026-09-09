@@ -6,6 +6,7 @@ const opRepo = require('../repositories/operasional.repository');
 const { haversine } = require('../utils/helpers');
 const { emitToRole, emitToUser } = require('../realtime/socketio');
 const { queryOne } = require('../config/database');
+const { getScopeFilter } = require('../utils/scope');
 
 // Max GPS-uncertainty (meters) added on top of the configured radius. GPS at a
 // guard post legitimately reads tens of meters off, so a guard standing ON the
@@ -121,21 +122,38 @@ class GeofenceService {
     return izin;
   }
 
+  /**
+   * [Audit 2A] Komandan hanya boleh memproses izin/pelanggaran di lokasinya
+   * (admin/supervisor bebas). Out-of-scope → 404 agar tidak membocorkan
+   * keberadaan. `table` = 'geofence_izin' | 'geofence_violations'.
+   */
+  async _assertInScope(table, id, user) {
+    const scope = await getScopeFilter(user);
+    if (scope.unrestricted) return;
+    const row = await geoRepo.findLokasiOf(table, id);
+    if (!row || !row.lokasi_id || !scope.lokasiIds.includes(row.lokasi_id)) {
+      throw { status: 404, message: 'Tidak ditemukan' };
+    }
+  }
+
   async approveIzin(id, approver, data) {
-    if (!data.durasi_menit || data.durasi_menit < 1) throw { status: 400, message: 'durasi_menit wajib (minimal 1)' };
-    const izin = await geoRepo.approveIzin(id, approver.id, data.durasi_menit, data.catatan || null);
+    const durasi = parseInt(data.durasi_menit, 10);
+    if (!durasi || durasi < 1 || durasi > 1440) throw { status: 400, message: 'durasi_menit wajib (1–1440 menit)' };
+    await this._assertInScope('geofence_izin', id, approver);
+    const izin = await geoRepo.approveIzin(id, approver.id, durasi, data.catatan || null);
     if (!izin) throw { status: 404, message: 'Izin tidak ditemukan atau sudah diproses' };
     emitToUser(izin.user_id, 'geofence:izin_approved', {
-      izin_id: izin.id, durasi_menit: data.durasi_menit, batas_waktu: izin.batas_waktu, approved_by_nama: approver.nama });
+      izin_id: izin.id, durasi_menit: durasi, batas_waktu: izin.batas_waktu, approved_by_nama: approver.nama });
     emitToRole(['supervisor', 'admin'], 'geofence:izin_approved', {
-      izin_id: izin.id, user_id: izin.user_id, durasi_menit: data.durasi_menit, approved_by_nama: approver.nama });
+      izin_id: izin.id, user_id: izin.user_id, durasi_menit: durasi, approved_by_nama: approver.nama });
     await opRepo.createNotifikasi({ tipe: 'success', judul: 'Izin Keluar Disetujui',
-      pesan: `Izin keluar Anda disetujui oleh ${approver.nama}. Batas waktu: ${data.durasi_menit} menit.`,
+      pesan: `Izin keluar Anda disetujui oleh ${approver.nama}. Batas waktu: ${durasi} menit.`,
       target_user_id: izin.user_id, data: { izin_id: izin.id, batas_waktu: izin.batas_waktu } });
     return izin;
   }
 
   async rejectIzin(id, rejecter, data) {
+    await this._assertInScope('geofence_izin', id, rejecter);
     const izin = await geoRepo.rejectIzin(id, rejecter.id, data.catatan);
     if (!izin) throw { status: 404, message: 'Izin tidak ditemukan atau sudah diproses' };
     emitToUser(izin.user_id, 'geofence:izin_rejected', { izin_id: izin.id, catatan: data.catatan, rejected_by_nama: rejecter.nama });
@@ -147,8 +165,11 @@ class GeofenceService {
 
   async getIzinList(filters) { return geoRepo.findIzinList(filters); }
   async getViolations(filters) { return geoRepo.findViolations(filters); }
-  async ackViolation(id, userId) {
-    const v = await geoRepo.acknowledgeViolation(id, userId);
+  async ackViolation(id, user) {
+    // Kompatibel dengan pemanggil lama yang mengirim userId (string).
+    const actor = typeof user === 'object' && user ? user : { id: user, role: 'admin' };
+    await this._assertInScope('geofence_violations', id, actor);
+    const v = await geoRepo.acknowledgeViolation(id, actor.id);
     if (!v) throw { status: 404, message: 'Tidak ditemukan' };
     return v;
   }

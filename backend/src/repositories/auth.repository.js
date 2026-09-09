@@ -22,9 +22,12 @@ class AuthRepository extends BaseRepository {
     // P1-6: comparison is `UPPER(nrp) = UPPER($1)` so login is
     // case-insensitive. See nrpExists() below for the matching duplicate
     // check and migration 004 for the database-level unique index.
+    // [Audit 2A] status_penempatan ikut dipilih agar login akun 'nonaktif'
+    // dapat ditolak langsung (sebelumnya login sukses lalu semua request 401).
     return queryOne(
       `SELECT id, nrp, nama, role, no_hp, foto_url, lokasi_id, pos_jaga_id,
-              shift, status, skor, pin_hash, must_change_pin FROM users WHERE UPPER(nrp) = UPPER($1)`,
+              shift, status, skor, pin_hash, must_change_pin, status_penempatan
+         FROM users WHERE UPPER(nrp) = UPPER($1)`,
       [nrp]
     );
   }

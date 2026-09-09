@@ -7,6 +7,16 @@
  * company. The patroli table has no lokasi_id column of its own, so
  * the filter goes through the joined users table — see
  * patroli.repository.js.
+ *
+ * [Audit 2A]
+ *   - start(): bila user masih punya patroli 'active' dan ini BUKAN replay
+ *     offline (tanpa client_patrol_id yang sama), patroli lama ditutup
+ *     sebagai 'incomplete' dulu — mencegah patroli aktif menumpuk selamanya
+ *     (ditemukan 1 patroli 'active' sejak 16 Mei di produksi).
+ *   - scan(): validasi kepemilikan patroli (hanya pemilik / peran otoritas),
+ *     status masih active, dan checkpoint ada → 403/409/404 yang jelas,
+ *     bukan 500 dari pelanggaran FK.
+ *   - anggota hanya melihat patroli miliknya sendiri di getAll.
  */
 const patroliRepo = require('../repositories/patroli.repository');
 const userRepo = require('../repositories/user.repository');
@@ -14,8 +24,12 @@ const { logEvent } = require('../middleware/auditlog');
 const { emitToAll, emitToRole } = require('../realtime/socketio');
 const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
+const AUTHORITY = ['admin', 'supervisor', 'komandan'];
+
 class PatroliService {
   async getAll(filters, user) {
+    filters = filters || {};
+    if (user && user.role === 'anggota') filters.user_id = user.id;
     const scope = await getScopeFilter(user);
     applyLokasiScope(filters, scope);
     return patroliRepo.findAll(filters);
@@ -30,7 +44,6 @@ class PatroliService {
     const patrol = await patroliRepo.findByIdWithScans(id);
     if (!patrol) throw { status: 404, message: 'Patroli tidak ditemukan' };
 
-    const AUTHORITY = ['admin', 'supervisor', 'komandan'];
     if (!user || !AUTHORITY.includes(user.role)) {
       const scope = await getScopeFilter(user);
       if (!scope.unrestricted) {
@@ -48,6 +61,13 @@ class PatroliService {
   }
 
   async start(user, data) {
+    data = data || {};
+    const active = await patroliRepo.findActiveByUser(user.id);
+    if (active && !(data.client_patrol_id && active.client_patrol_id === data.client_patrol_id)) {
+      // Patroli lama belum ditutup (aplikasi crash / lupa selesai) → tutup
+      // sebagai incomplete agar tidak ada dua patroli aktif per user.
+      await patroliRepo.closeActiveByUser(user.id);
+    }
     const patrol = await patroliRepo.start(user.id, data.route_id, data.route_name, data.client_patrol_id);
     await userRepo.updateStatus(user.id, 'patroli');
     logEvent(user.id, user.nama || '', 'CREATE', 'patroli', patrol.id, { route_name: data.route_name || '' });
@@ -59,7 +79,7 @@ class PatroliService {
   // lokal (client_patrol_id) yang diketahui (scan/end di-antri sebelum start
   // tersinkron), tautkan ke patroli yang benar. Sentinel 'offline' = belum ada PK.
   async _resolvePatrolId(patroliId, clientPatrolId) {
-    if (patroliId && patroliId !== 'offline') return patroliId;
+    if (patroliId && patroliId !== 'offline' && /^[0-9a-f-]{36}$/i.test(String(patroliId))) return patroliId;
     if (clientPatrolId) {
       const found = await patroliRepo.findIdByClientPatrolId(clientPatrolId);
       if (found && found.id) return found.id;
@@ -72,12 +92,20 @@ class PatroliService {
     const effId = await this._resolvePatrolId(patroliId, clientPatrolId);
     // Patroli belum tersinkron → 409 retriable (antrian akan mencoba lagi setelah start).
     if (!effId) throw { status: 409, message: 'Patroli belum tersinkron, coba lagi' };
+
+    const { patrol, checkpoint } = await patroliRepo.findScanTargetInfo(effId, checkpointId);
+    if (!patrol) throw { status: 404, message: 'Patroli tidak ditemukan' };
+    if (patrol.user_id !== user.id && !AUTHORITY.includes(user.role)) throw { status: 403, message: 'Patroli ini bukan milik Anda' };
+    if (patrol.status !== 'active' && !idempotencyKey) throw { status: 409, message: `Patroli sudah ${patrol.status}, tidak bisa scan lagi` };
+    if (!checkpoint) throw { status: 404, message: 'Checkpoint tidak ditemukan (QR tidak terdaftar)' };
+
     const scan = await patroliRepo.addScan(effId, checkpointId, fotoUrl, idempotencyKey);
-    emitToRole(['supervisor', 'admin', 'komandan'], 'patroli:update', { action: 'scan', patroli_id: effId, ...scan, nama: user.nama });
+    emitToRole(['supervisor', 'admin', 'komandan'], 'patroli:update', { action: 'scan', patroli_id: effId, checkpoint_nama: checkpoint.nama, ...scan, nama: user.nama });
     return scan;
   }
 
   async end(user, id, data) {
+    data = data || {};
     const effId = await this._resolvePatrolId(id, data.client_patrol_id);
     if (!effId) throw { status: 409, message: 'Patroli belum tersinkron, coba lagi' };
     const patrol = await patroliRepo.end(effId, user.id, data.checkpoint_scanned, data.checkpoint_total);

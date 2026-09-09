@@ -7,8 +7,17 @@
  * In Coolify the host will be the compose service name (e.g. `postgres`),
  * which resolves on the internal compose network.
  */
-const { Pool } = require('pg');
+const { Pool, types } = require('pg');
 const { logger } = require('../utils/logger');
+
+// [Audit 2A] Kolom DATE (OID 1082: tanggal, tanggal_lahir, tgl_mulai_kontrak,
+// periode_*, tanggal_bergabung) dikembalikan sebagai string 'YYYY-MM-DD',
+// BUKAN objek Date. Default node-pg mem-parse DATE sebagai Date lokal
+// (TZ Asia/Jakarta) yang lalu diserialisasi JSON sebagai UTC → klien menerima
+// "2026-06-01" sebagai "2026-05-31T17:00:00.000Z" dan filter/tampilan tanggal
+// bergeser satu hari. Nilai string apa adanya menghilangkan kelas bug ini di
+// web-admin & mobile (keduanya sudah memakai .split('T')[0] / new Date(str)).
+types.setTypeParser(1082, (val) => val);
 
 const useSSL = String(process.env.DB_SSL || '').toLowerCase() === 'true';
 
