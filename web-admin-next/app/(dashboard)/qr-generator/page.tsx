@@ -3,6 +3,7 @@ import React, { useState, useEffect } from "react";
 import QRCode from "qrcode";
 import { lokasiApi, checkpointsApi } from "@/lib/api";
 import { QRCodeImage } from "@/components/ui/QRCodeImage";
+import { escapeHtml } from "@/lib/formatters";
 import { useToast } from "@/hooks/useToast";
 
 /**
@@ -40,8 +41,10 @@ export default function QRGeneratorPage() {
     : checkpoints;
 
   const generateAll = () => {
-    setGenerated(new Set(checkpoints.map((c: any) => c.id)));
-    toast(`${checkpoints.length} QR Code berhasil digenerate`);
+    // [Audit 2B] Hormati filter lokasi (sebelumnya selalu semua checkpoint).
+    const target = filtered.length > 0 ? filtered : checkpoints;
+    setGenerated((prev) => { const n = new Set(prev); target.forEach((c: any) => n.add(c.id)); return n; });
+    toast(`${target.length} QR Code berhasil digenerate`);
   };
 
   // Build a data: URI for a single QR code. Used by the print flows so
@@ -57,7 +60,8 @@ export default function QRGeneratorPage() {
         cps.map(async (cp: any) => {
           const value = String(cp.qr_code || cp.id || "");
           const url = await qrDataUrl(value, 200);
-          return `<div class="qr-card"><img src="${url}" width="180" height="180" alt="QR Code" /><div class="qr-name">${cp.nama || ""}</div><div class="qr-area">${cp.area || ""}</div><div class="qr-code">${value}</div></div>`;
+          // [Audit 2B] nama/area/kode berasal dari DB → wajib escapeHtml (stored XSS di jendela cetak).
+          return `<div class="qr-card"><img src="${url}" width="180" height="180" alt="QR Code" /><div class="qr-name">${escapeHtml(cp.nama)}</div><div class="qr-area">${escapeHtml(cp.area)}</div><div class="qr-code">${escapeHtml(value)}</div></div>`;
         }),
       );
       const html = `<!DOCTYPE html><html><head><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:sans-serif;padding:20px}.header{text-align:center;margin-bottom:20px;border-bottom:2px solid #2980b9;padding-bottom:10px}.header h1{font-size:18px;color:#2980b9}.grid{display:flex;flex-wrap:wrap;gap:16px;justify-content:center}.qr-card{width:220px;border:1px solid #ddd;border-radius:10px;padding:12px;text-align:center;page-break-inside:avoid}.qr-name{font-size:12px;font-weight:700;margin-top:8px}.qr-area{font-size:10px;color:#888}.qr-code{font-size:9px;color:#2980b9;font-weight:600;margin-top:4px;font-family:monospace}</style></head><body><div class="header"><h1>QR Checkpoint - PT Sopiak Satria Saga</h1><p>Dicetak: ${new Date().toLocaleDateString("id-ID")} • Total: ${cps.length}</p></div><div class="grid">${cards.join("")}</div></body></html>`;
@@ -76,7 +80,7 @@ export default function QRGeneratorPage() {
     try {
       const value = String(cp.qr_code || cp.id || "");
       const url = await qrDataUrl(value, 300);
-      const html = `<!DOCTYPE html><html><head><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}.card{text-align:center;border:2px solid #2980b9;border-radius:16px;padding:30px}h2{color:#2980b9;font-size:16px}.area{color:#888;font-size:12px;margin-bottom:16px}code{font-family:monospace;font-size:14px;color:#2980b9;font-weight:700}</style></head><body><div class="card"><h2>${cp.nama || ""}</h2><div class="area">${cp.area || ""}</div><img src="${url}" width="280" alt="QR Code" /><br/><code>${value}</code></div></body></html>`;
+      const html = `<!DOCTYPE html><html><head><style>body{display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif}.card{text-align:center;border:2px solid #2980b9;border-radius:16px;padding:30px}h2{color:#2980b9;font-size:16px}.area{color:#888;font-size:12px;margin-bottom:16px}code{font-family:monospace;font-size:14px;color:#2980b9;font-weight:700}</style></head><body><div class="card"><h2>${escapeHtml(cp.nama)}</h2><div class="area">${escapeHtml(cp.area)}</div><img src="${url}" width="280" alt="QR Code" /><br/><code>${escapeHtml(value)}</code></div></body></html>`;
       const win = window.open("", "_blank");
       if (win) {
         win.document.write(html);

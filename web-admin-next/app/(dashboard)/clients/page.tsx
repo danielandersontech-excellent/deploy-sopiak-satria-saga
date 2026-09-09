@@ -47,6 +47,7 @@ export default function ClientsPage() {
     secondsLeft: number;
   } | null>(null);
   const [resetPinLoading, setResetPinLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const emptyForm = {
     kode_klien: "",
@@ -82,6 +83,8 @@ export default function ClientsPage() {
     load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // [Audit 2B] Reset halaman saat filter/pencarian berubah.
+  useEffect(() => { setCurrentPage(1); }, [search, filterStatus]);
 
   // BUG #8: tick the countdown on the result modal. When it hits 0 we
   // close the modal — the operator's window to read the PIN closes.
@@ -124,10 +127,18 @@ export default function ClientsPage() {
     setModal(true);
   };
   const save = async () => {
-    if (!form.nama_klien) return toast("Nama klien wajib diisi", "warning");
+    if (saving) return;
+    const nama = form.nama_klien.trim();
+    if (nama.length < 3) return toast("Nama klien minimal 3 karakter", "warning");
+    if (form.email && !/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(form.email.trim())) return toast("Format email tidak valid", "warning");
+    if (form.nomor_telepon && !/^[0-9+()\-\s]{6,20}$/.test(form.nomor_telepon.trim())) return toast("Nomor telepon tidak valid", "warning");
+    if (form.tgl_mulai_kontrak && form.tgl_habis_kontrak && form.tgl_habis_kontrak < form.tgl_mulai_kontrak) return toast("Tanggal habis kontrak tidak boleh sebelum tanggal mulai", "warning");
+    setSaving(true);
     try {
       const payload: any = {
         ...form,
+        nama_klien: nama,
+        email: form.email.trim() || null,
         nrp_login: form.kode_klien, // Auto-set login ID = kode_klien
         tgl_mulai_kontrak: form.tgl_mulai_kontrak || null,
         tgl_habis_kontrak: form.tgl_habis_kontrak || null,
@@ -135,17 +146,32 @@ export default function ClientsPage() {
       if (edit) {
         await clientsApi.update(edit.id, payload);
         toast("Data klien berhasil diperbarui");
+        setModal(false);
       } else {
-        await clientsApi.create(payload);
-        toast("Klien baru berhasil ditambahkan");
+        // [Audit 2B] Backend membuat PIN acak dan mengembalikannya SEKALI sebagai
+        // `temp_pin` — sebelumnya diabaikan sehingga klien baru tidak pernah bisa
+        // login tanpa admin menekan Reset PIN lagi.
+        const created: any = await clientsApi.create(payload);
+        const row = created?.data && typeof created.data === "object" ? created.data : created;
+        const tempPin = row?.temp_pin ?? created?.temp_pin ?? null;
+        setModal(false);
+        if (tempPin) {
+          setResetPinResult({ client: { ...row, nama_klien: row?.nama_klien || nama }, pin: String(tempPin), secondsLeft: 120 });
+          toast("Klien baru berhasil ditambahkan — catat PIN awal");
+        } else {
+          toast("Klien baru ditambahkan. PIN awal tidak tercatat di respons — gunakan Reset PIN.", "warning");
+        }
       }
-      setModal(false);
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await clientsApi.del(del.id);
       toast("Klien berhasil dihapus");
@@ -153,6 +179,8 @@ export default function ClientsPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -383,18 +411,19 @@ export default function ClientsPage() {
       {modal && (
         <Modal
           title={edit ? "Edit Klien" : "Tambah Klien Baru"}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           wide
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -470,8 +499,10 @@ export default function ClientsPage() {
               <label className="form-label">Email</label>
               <input
                 className="form-input"
+                type="email"
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
+                placeholder="nama@perusahaan.com"
               />
             </div>
           </div>
@@ -605,9 +636,10 @@ export default function ClientsPage() {
             }}
           >
             <i className="fas fa-info-circle" /> Klien dapat login ke
-            web/mobile untuk monitoring. Setelah klien dibuat, gunakan tombol{" "}
-            <strong>Reset PIN</strong> di tabel untuk menerbitkan PIN
-            sementara — PIN hanya tampil sekali setelah reset.
+            web/mobile untuk monitoring. Saat klien dibuat, sistem menerbitkan{" "}
+            <strong>PIN awal acak</strong> yang tampil SEKALI setelah simpan —
+            catat dan sampaikan ke klien. Bila hilang, gunakan tombol{" "}
+            <strong>Reset PIN</strong> di tabel.
           </div>
           <div className="form-row">
             <div className="form-group">

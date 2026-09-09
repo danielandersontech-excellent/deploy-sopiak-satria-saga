@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { usersApi, posJagaApi, jadwalApi, shiftAssignApi } from "@/lib/api";
-import { fmtDate } from "@/lib/formatters";
+import { fmtDate, toYMD } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -17,9 +17,13 @@ export default function ShiftAssignmentPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [filterDate, setFilterDate] = useState("");
+  const [search, setSearch] = useState("");
+  // [Audit 2B] toISOString() = UTC → setelah pukul 07:00 WIB tanggal default
+  // maju/mundur satu hari. Pakai tanggal lokal.
   const emptyForm = {
-    tanggal: new Date().toISOString().split("T")[0],
+    tanggal: toYMD(new Date()),
     user_id: "",
     shift_id: "",
     pos_jaga_id: "",
@@ -28,24 +32,31 @@ export default function ShiftAssignmentPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
   const load = async () => {
+    setLoading(true);
     try {
-      setData(await shiftAssignApi.list());
-    } catch {}
+      setData(await shiftAssignApi.list("all=true"));
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat penugasan", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
       // BUG #5 (P2-4): the dropdown needs every assignable user; bypass
       // the new default pagination on /api/users.
       setUsers(await usersApi.list("all=true"));
     } catch {}
     try {
-      setShifts(await jadwalApi.list());
+      setShifts(await jadwalApi.list("all=true"));
     } catch {}
     try {
-      setPosJaga(await posJagaApi.list());
+      setPosJaga(await posJagaApi.list("all=true"));
     } catch {}
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { setCurrentPage(1); }, [filterDate, search]);
   const userName = (id: string) => {
     const u = users.find((u: any) => u.id === id);
     return u ? `${u.nama} (${u.nrp})` : "-";
@@ -57,11 +68,15 @@ export default function ShiftAssignmentPage() {
   const posName = (id: string) =>
     posJaga.find((p: any) => p.id === id)?.nama || "-";
   const anggota = users.filter((u: any) =>
-    ["anggota", "komandan"].includes(u.role),
+    ["anggota", "komandan"].includes(u.role) && u.status_penempatan !== "nonaktif",
   );
-  const filtered = filterDate
-    ? data.filter((r) => r.tanggal?.startsWith(filterDate))
-    : data;
+  const selectedShift = shifts.find((s: any) => s.id === form.shift_id);
+  // [Audit 2B] Pos jaga yang ditawarkan mengikuti lokasi shift yang dipilih.
+  const posJagaOptions = selectedShift?.lokasi_id ? posJaga.filter((p: any) => p.lokasi_id === selectedShift.lokasi_id) : posJaga;
+  const filtered = data.filter((r) =>
+    (!filterDate || toYMD(r.tanggal) === filterDate) &&
+    (!search || `${userName(r.user_id)} ${shiftName(r.shift_id)} ${posName(r.pos_jaga_id)}`.toLowerCase().includes(search.toLowerCase())),
+  );
   const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const openNew = () => {
     setEdit(null);
@@ -71,7 +86,7 @@ export default function ShiftAssignmentPage() {
   const openEdit = (r: any) => {
     setEdit(r);
     setForm({
-      tanggal: r.tanggal?.split?.("T")?.[0] || "",
+      tanggal: toYMD(r.tanggal) || "",
       user_id: r.user_id || "",
       shift_id: r.shift_id || "",
       pos_jaga_id: r.pos_jaga_id || "",
@@ -79,33 +94,37 @@ export default function ShiftAssignmentPage() {
     setModal(true);
   };
   const save = async () => {
+    if (saving) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(form.tanggal)) return toast("Tanggal wajib diisi", "warning");
+    if (!form.user_id) return toast("Pilih personil", "warning");
+    if (!form.shift_id) return toast("Pilih shift", "warning");
+    // [5-3] Cegah double-booking sebelum create/update (selaras filter
+    // unassignedToday di mobile). Backend juga menolak sebagai lapis kedua.
+    const clash = data.some(
+      (r: any) => r.user_id === form.user_id && toYMD(r.tanggal) === form.tanggal && r.id !== edit?.id,
+    );
+    if (clash) return toast("Personil ini sudah ditugaskan pada tanggal tersebut.", "error");
+    const payload = { ...form, pos_jaga_id: form.pos_jaga_id || null };
+    setSaving(true);
     try {
       if (edit) {
-        await shiftAssignApi.update(edit.id, form);
+        await shiftAssignApi.update(edit.id, payload);
         toast("Penugasan diperbarui");
       } else {
-        // [5-3] Cegah double-booking sebelum create (selaras filter
-        // unassignedToday di mobile). Backend juga menolak sebagai lapis kedua.
-        const ymd = (form.tanggal || "").split("T")[0];
-        const clash = data.some(
-          (r: any) =>
-            r.user_id === form.user_id &&
-            (r.tanggal || "").split("T")[0] === ymd
-        );
-        if (clash) {
-          toast("Anggota sudah ditugaskan pada tanggal ini.", "error");
-          return;
-        }
-        await shiftAssignApi.create(form);
+        await shiftAssignApi.create(payload);
         toast("Penugasan ditambahkan");
       }
       setModal(false);
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await shiftAssignApi.del(del.id);
       toast("Penugasan dihapus");
@@ -113,6 +132,8 @@ export default function ShiftAssignmentPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -150,6 +171,10 @@ export default function ShiftAssignmentPage() {
           dipilih. Radius geofence mengikuti lokasi tersebut.
         </p>
         <div className="filters-row">
+          <div className="search-box">
+            <i className="fas fa-search" />
+            <input placeholder="Cari personil / shift / pos..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
           <input
             type="date"
             className="form-input"
@@ -157,6 +182,8 @@ export default function ShiftAssignmentPage() {
             value={filterDate}
             onChange={(e) => setFilterDate(e.target.value)}
           />
+          <button className="btn btn-sm btn-outline" onClick={() => setFilterDate(toYMD(new Date()))}>Hari ini</button>
+          {(filterDate || search) && <button className="btn btn-sm btn-outline" onClick={() => { setFilterDate(""); setSearch(""); }}><i className="fas fa-times" /> Reset</button>}
           <span className="muted">{filtered.length} penugasan</span>
         </div>
         <table>
@@ -199,7 +226,7 @@ export default function ShiftAssignmentPage() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} className="empty-row">
-                  Tidak ada data
+                  {loading ? "Memuat..." : "Belum ada penugasan" + (filterDate || search ? " untuk filter ini" : ". Klik Tambah untuk membuat penugasan.")}
                 </td>
               </tr>
             )}
@@ -210,17 +237,18 @@ export default function ShiftAssignmentPage() {
       {modal && (
         <Modal
           title={`${edit ? "Edit" : "Tambah"} Penugasan`}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -254,15 +282,16 @@ export default function ShiftAssignmentPage() {
             <select
               className="form-select"
               value={form.shift_id}
-              onChange={(e) => setForm({ ...form, shift_id: e.target.value })}
+              onChange={(e) => setForm({ ...form, shift_id: e.target.value, pos_jaga_id: "" })}
             >
               <option value="">-- Pilih --</option>
               {shifts.map((s) => (
                 <option key={s.id} value={s.id}>
-                  {s.nama} ({s.waktu_mulai}-{s.waktu_selesai})
+                  {s.nama} ({s.waktu_mulai}-{s.waktu_selesai}){s.lokasi_nama ? ` · ${s.lokasi_nama}` : ""}
                 </option>
               ))}
             </select>
+            {shifts.length === 0 && <small className="muted">Belum ada jadwal shift — buat dulu di menu Jadwal Shift.</small>}
           </div>
           <div className="form-group">
             <label className="form-label">Pos Jaga (opsional)</label>
@@ -274,12 +303,13 @@ export default function ShiftAssignmentPage() {
               }
             >
               <option value="">-- Tidak ada --</option>
-              {posJaga.map((p) => (
+              {posJagaOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nama}
                 </option>
               ))}
             </select>
+            {selectedShift && posJagaOptions.length === 0 && <small className="muted">Tidak ada pos jaga pada lokasi shift ini.</small>}
           </div>
         </Modal>
       )}

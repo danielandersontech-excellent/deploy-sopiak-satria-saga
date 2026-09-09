@@ -101,7 +101,10 @@ export async function apiFetch(endpoint: string, opts: any = {}) {
   // is excluded so a failing refresh doesn't infinite-loop.
   if (res.status === 401 && !endpoint.startsWith('/api/auth/refresh') && !endpoint.startsWith('/api/auth/login')) {
     const errData = await res.clone().json().catch(() => ({}));
-    if (errData.code === 'TOKEN_EXPIRED') {
+    if (errData.code === 'TOKEN_EXPIRED' || errData.error === 'Token tidak ditemukan') {
+      // [Audit 2B] "Token tidak ditemukan" = cookie akses sudah hilang (mis.
+      // browser dibuka ulang setelah 30 menit) — coba refresh juga, jangan
+      // langsung gagal.
       if (!isRefreshing) {
         isRefreshing = true;
         refreshPromise = tryRefresh();
@@ -115,8 +118,16 @@ export async function apiFetch(endpoint: string, opts: any = {}) {
       } else {
         clearAuth();
         if (typeof window !== 'undefined') window.location.href = '/login';
-        throw new Error('Session expired');
+        throw new Error('Sesi berakhir, silakan login kembali');
       }
+    } else if (errData.code === 'ACCOUNT_DEACTIVATED' || /tidak valid|tidak ditemukan|tidak aktif|dinonaktifkan/i.test(String(errData.error || ''))) {
+      // [Audit 2B] 401 yang tidak bisa dipulihkan (akun dinonaktifkan, token
+      // rusak) — sebelumnya halaman hanya menampilkan toast error berulang.
+      clearAuth();
+      if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
+        window.location.href = `/login?reason=${encodeURIComponent(errData.error || 'Sesi tidak valid')}`;
+      }
+      throw new Error(errData.error || 'Sesi tidak valid');
     }
   }
 
@@ -161,6 +172,11 @@ export const authApi = {
     const clean = (payload.nrp || '').replace(/@ptsss\.app$/i, '').toUpperCase();
     return apiFetch('/api/auth/register', { method: 'POST', body: { ...payload, nrp: clean, pin: payload.pin || '123456' } });
   },
+  // [Audit 2B/2G] Web-admin tidak punya jalur ganti PIN padahal akun baru
+  // dibuat dengan must_change_pin = true.
+  changePin: (old_pin: string, new_pin: string) =>
+    apiFetch('/api/auth/change-pin', { method: 'PUT', body: { old_pin, new_pin } }),
+  me: () => apiFetch('/api/auth/me'),
   getUser: () => getUser(),
   getUserId: () => getUser()?.id || null,
   getUserRole: () => getUser()?.role || 'anggota',
@@ -204,7 +220,26 @@ export const panicApi = { ...crud('/api/data/panic'), resolve: (id: string, stat
 export const notifApi = crud('/api/data/notifikasi');
 export const reportExportsApi = crud('/api/data/report-exports');
 export const clientsApi = crud('/api/data/clients');
-export const dashboardApi = { stats: () => apiFetch('/api/data/dashboard/stats') };
+export const dashboardApi = {
+  stats: () => apiFetch('/api/data/dashboard/stats'),
+  // [Audit 2B] agregat Analytics dihitung di server (bukan dari 20 baris pertama).
+  analytics: (params = '') => apiFetch(`/api/data/dashboard/analytics${params ? '?' + params : ''}`),
+};
+
+/**
+ * [Audit 2B] Ambil daftar ber-pagination APA ADANYA ({ data, pagination, summary })
+ * — berbeda dari crud().list yang meratakan ke array dan membuang total.
+ */
+export async function apiFetchPaged(base: string, params: URLSearchParams | string = '') {
+  const qs = typeof params === 'string' ? params : params.toString();
+  const d: any = await apiFetch(`${base}${qs ? '?' + qs : ''}`);
+  if (Array.isArray(d)) return { data: d, pagination: { total: d.length, page: 1, limit: d.length || 1, totalPages: 1 }, summary: undefined as any };
+  return {
+    data: Array.isArray(d?.data) ? d.data : [],
+    pagination: d?.pagination || { total: Number(d?.total) || 0, page: Number(d?.page) || 1, limit: Number(d?.limit) || 20, totalPages: Number(d?.totalPages) || 1 },
+    summary: d?.summary,
+  };
+}
 
 /**
  * Unduh berkas ber-auth (cookie httpOnly) sebagai Blob — untuk berkas privat
@@ -256,6 +291,8 @@ export const backupApi = {
   schedule: (enabled: boolean, time: string) => apiFetch('/api/backup/schedule', { method: 'PUT', body: { enabled, time } }),
   getSchedule: () => apiFetch('/api/backup/schedule'),
   uploadDrive: (filename: string) => apiFetch('/api/backup/upload-drive', { method: 'POST', body: { filename } }),
+  // [Audit 2B] DELETE /api/backup/:filename sudah ada di backend tapi tak pernah dipakai UI.
+  del: (filename: string) => apiFetch(`/api/backup/${encodeURIComponent(filename)}`, { method: 'DELETE' }),
 };
 
 export function getExportUrl(type: string, startDate: string, endDate: string, lokasiId?: string) {

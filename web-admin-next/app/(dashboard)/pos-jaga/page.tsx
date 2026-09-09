@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { lokasiApi, posJagaApi } from "@/lib/api";
-import { statusColor } from "@/lib/formatters";
+import { statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -15,6 +15,9 @@ export default function PosJagaPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [search, setSearch] = useState("");
+  const [filterLok, setFilterLok] = useState("");
   const emptyForm = {
     nama: "",
     lokasi_id: "",
@@ -27,16 +30,23 @@ export default function PosJagaPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
   const load = async () => {
+    setLoading(true);
     try {
-      setData(await posJagaApi.list());
-    } catch {}
+      setData(await posJagaApi.list("all=true"));
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat pos jaga", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
       setLokasi(await lokasiApi.list());
     } catch {}
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { setCurrentPage(1); }, [search, filterLok]);
   useEffect(() => {
     const h = (e: MessageEvent) => {
       if (e.data?.t === "pj-map")
@@ -49,9 +59,14 @@ export default function PosJagaPage() {
     window.addEventListener("message", h);
     return () => window.removeEventListener("message", h);
   }, []);
-  const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const lokasiName = (id: string) =>
     lokasi.find((l: any) => l.id === id)?.nama || "-";
+  const filtered = data.filter(
+    (r) =>
+      (!filterLok || r.lokasi_id === filterLok) &&
+      (!search || `${r.nama || ""} ${lokasiName(r.lokasi_id)}`.toLowerCase().includes(search.toLowerCase())),
+  );
+  const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   const openNew = () => {
     setEdit(null);
     setForm(emptyForm);
@@ -70,13 +85,20 @@ export default function PosJagaPage() {
     setModal(true);
   };
   const save = async () => {
+    if (saving) return;
+    const nama = form.nama.trim();
+    const radius = parseInt(form.radius);
+    const lat = form.latitude === "" ? null : parseFloat(form.latitude);
+    const lng = form.longitude === "" ? null : parseFloat(form.longitude);
+    if (!form.lokasi_id) return toast("Pilih lokasi/klien terlebih dahulu", "warning");
+    if (nama.length < 2) return toast("Nama pos jaga minimal 2 karakter", "warning");
+    if (!Number.isFinite(radius) || radius < 5 || radius > 5000) return toast("Radius harus 5–5000 meter", "warning");
+    if ((lat === null) !== (lng === null)) return toast("Isi latitude DAN longitude, atau kosongkan keduanya", "warning");
+    if (lat !== null && (!Number.isFinite(lat) || lat < -90 || lat > 90)) return toast("Latitude tidak valid", "warning");
+    if (lng !== null && (!Number.isFinite(lng) || lng < -180 || lng > 180)) return toast("Longitude tidak valid", "warning");
+    const payload = { ...form, nama, radius, latitude: lat, longitude: lng };
+    setSaving(true);
     try {
-      const payload = {
-        ...form,
-        radius: parseInt(form.radius) || 100,
-        latitude: parseFloat(form.latitude) || null,
-        longitude: parseFloat(form.longitude) || null,
-      };
       if (edit) {
         await posJagaApi.update(edit.id, payload);
         toast("Pos Jaga diperbarui");
@@ -88,9 +110,13 @@ export default function PosJagaPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await posJagaApi.del(del.id);
       toast("Pos Jaga dihapus");
@@ -98,6 +124,8 @@ export default function PosJagaPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   return (
@@ -128,6 +156,19 @@ export default function PosJagaPage() {
           QR, lalu lanjut ke checkpoint berikutnya sesuai rute. Contoh: Gudang
           A, Area Loading, Server Room
         </p>
+        <div className="filters-row">
+          <div className="search-box">
+            <i className="fas fa-search" />
+            <input placeholder="Cari pos jaga..." value={search} onChange={(e) => setSearch(e.target.value)} />
+          </div>
+          <select className="form-select" style={{ width: "auto" }} value={filterLok} onChange={(e) => setFilterLok(e.target.value)}>
+            <option value="">Semua Lokasi</option>
+            {lokasi.map((l) => (
+              <option key={l.id} value={l.id}>{l.nama}</option>
+            ))}
+          </select>
+          <span className="muted">{filtered.length} pos jaga</span>
+        </div>
         <table>
           <thead>
             <tr>
@@ -148,22 +189,23 @@ export default function PosJagaPage() {
                 <td className="cell-ellipsis" title={lokasiName(r.lokasi_id)}>{lokasiName(r.lokasi_id)}</td>
                 <td>{r.radius}m</td>
                 <td style={{ fontFamily: "monospace", fontSize: 11 }}>
-                  {r.latitude?.toFixed?.(4)}, {r.longitude?.toFixed?.(4)}
+                  {r.latitude != null && r.longitude != null ? `${Number(r.latitude).toFixed(4)}, ${Number(r.longitude).toFixed(4)}` : <span className="muted">ikut lokasi</span>}
                 </td>
                 <td>
                   <span className={`badge badge-${statusColor(r.status)}`}>
-                    {r.status}
+                    {statusLabel(r.status)}
                   </span>
                 </td>
                 <td>
                   <div className="btn-group">
-                    <button className="btn-icon" onClick={() => openEdit(r)}>
+                    <button className="btn-icon" onClick={() => openEdit(r)} title="Edit">
                       <i className="fas fa-pen" />
                     </button>
                     <button
                       className="btn-icon"
                       onClick={() => setDel(r)}
                       style={{ color: "var(--danger)" }}
+                      title="Hapus"
                     >
                       <i className="fas fa-trash" />
                     </button>
@@ -171,31 +213,32 @@ export default function PosJagaPage() {
                 </td>
               </tr>
             ))}
-            {data.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td colSpan={6} className="empty-row">
-                  Tidak ada data
+                  {loading ? "Memuat..." : "Belum ada pos jaga" + (search || filterLok ? " untuk filter ini" : ". Klik Tambah untuk membuat pos jaga pertama.")}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      <Pagination currentPage={currentPage} totalItems={data.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
+      <Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
       </div>
       {modal && (
         <Modal
           title={`${edit ? "Edit" : "Tambah"} Pos Jaga`}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -307,7 +350,7 @@ export default function PosJagaPage() {
                   className={`form-chip ${form.status === s ? "active" : ""}`}
                   onClick={() => setForm({ ...form, status: s })}
                 >
-                  {s}
+                  {statusLabel(s)}
                 </button>
               ))}
             </div>

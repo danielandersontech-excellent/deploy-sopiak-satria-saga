@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { lokasiApi, clientsApi } from "@/lib/api";
-import { fmtDate, statusColor } from "@/lib/formatters";
+import { fmtDate, statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -15,6 +15,7 @@ export default function LokasiPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [form, setForm] = useState({
     nama: "",
@@ -46,6 +47,9 @@ export default function LokasiPage() {
   useEffect(() => {
     load();
   }, []);
+  // [Audit 2B] Reset ke halaman 1 saat kata kunci berubah (sebelumnya bisa
+  // terjebak di halaman kosong).
+  useEffect(() => { setCurrentPage(1); }, [search]);
   useEffect(() => {
     const h = (e: MessageEvent) => {
       if (e.data?.t === "lok-map")
@@ -91,16 +95,30 @@ export default function LokasiPage() {
     else setForm((f) => ({ ...f, client_id: "" }));
   };
   const save = async () => {
-    if (!form.nama) return toast("Nama lokasi wajib diisi", "warning");
+    if (saving) return;
+    const nama = form.nama.trim();
+    const alamat = (form.alamat || "").trim();
+    const lat = parseFloat(form.latitude);
+    const lng = parseFloat(form.longitude);
+    const radius = parseInt(form.radius) || 500;
+    if (nama.length < 3) return toast("Nama lokasi minimal 3 karakter", "warning");
+    if (!alamat) return toast("Alamat wajib diisi", "warning");
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90) return toast("Latitude tidak valid (-90 s/d 90)", "warning");
+    if (!Number.isFinite(lng) || lng < -180 || lng > 180) return toast("Longitude tidak valid (-180 s/d 180)", "warning");
+    if (radius < 50 || radius > 5000) return toast("Radius geofence harus 50–5000 meter", "warning");
+    // [Audit 2B] clients.id adalah UUID (migrasi 003). parseInt(uuid) menghasilkan
+    // angka acak/NaN → simpan lokasi dengan klien SELALU gagal (400/500). Kirim apa
+    // adanya sebagai string; null bila kosong.
     const payload: any = {
-      nama: form.nama,
-      alamat: form.alamat,
-      latitude: parseFloat(form.latitude),
-      longitude: parseFloat(form.longitude),
-      radius: parseInt(form.radius) || 500,
+      nama,
+      alamat,
+      latitude: lat,
+      longitude: lng,
+      radius,
       status: form.status,
-      client_id: form.client_id ? parseInt(form.client_id) : null,
+      client_id: form.client_id || null,
     };
+    setSaving(true);
     try {
       if (edit) {
         await lokasiApi.update(edit.id, payload);
@@ -113,9 +131,13 @@ export default function LokasiPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await lokasiApi.del(del.id);
       toast("Lokasi berhasil dihapus");
@@ -123,6 +145,8 @@ export default function LokasiPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const filtered = data.filter(
@@ -188,7 +212,7 @@ export default function LokasiPage() {
             ) : (
               <>
                 {pagedData.map((r) => {
-                  const kl = klienUsers.find((k) => k.id == r.client_id);
+                  const kl = klienUsers.find((k) => String(k.id) === String(r.client_id));
                   return (
                     <tr key={r.id}>
                       <td className="cell-ellipsis" title={r.nama}>
@@ -210,7 +234,7 @@ export default function LokasiPage() {
                       </td>
                       <td>
                         <span className={`badge badge-${statusColor(r.status)}`}>
-                          {r.status}
+                          {statusLabel(r.status)}
                         </span>
                       </td>
                       <td>{fmtDate(r.created_at)}</td>
@@ -252,29 +276,30 @@ export default function LokasiPage() {
       {modal && (
         <Modal
           title={edit ? "Edit Lokasi" : "Tambah Lokasi"}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
         >
           <div className="form-group">
-            <label className="form-label">Pilih Klien *</label>
+            <label className="form-label">Pilih Klien <small className="muted">(opsional — mengisi nama otomatis)</small></label>
             <select
               className="form-select"
               value={form.client_id}
               onChange={(e) => handleKlienSelect(e.target.value)}
             >
-              <option value="">-- Pilih Klien --</option>
+              <option value="">-- Tanpa Klien --</option>
               {klienUsers.map((k) => (
                 <option key={k.id} value={k.id}>
                   {k.nama_klien} ({k.kode_klien})
@@ -383,7 +408,7 @@ export default function LokasiPage() {
                   className={`form-chip ${form.status === s ? "active" : ""}`}
                   onClick={() => setForm({ ...form, status: s })}
                 >
-                  {s}
+                  {statusLabel(s)}
                 </button>
               ))}
             </div>
@@ -393,7 +418,7 @@ export default function LokasiPage() {
       {del && (
         <ConfirmDialog
           title="Hapus Lokasi?"
-          msg={`"${del.nama}" akan dihapus permanen.`}
+          msg={`"${del.nama}" akan dihapus permanen. Pastikan tidak ada personil, pos jaga, checkpoint, atau jadwal yang masih terikat ke lokasi ini.`}
           onConfirm={doDelete}
           onCancel={() => setDel(null)}
         />

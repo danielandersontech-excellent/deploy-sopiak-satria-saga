@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { lokasiApi, checkpointsApi, routesApi, jadwalApi } from "@/lib/api";
-import { statusColor } from "@/lib/formatters";
+import { statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { useToast } from "@/hooks/useToast";
@@ -16,6 +16,7 @@ export default function RoutesPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const emptyForm = {
     nama: "",
@@ -27,21 +28,27 @@ export default function RoutesPage() {
   };
   const [form, setForm] = useState(emptyForm);
   const load = async () => {
+    setLoading(true);
     try {
-      setData(await routesApi.list());
-    } catch {}
+      setData(await routesApi.list("all=true"));
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat rute", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
       setLokasi(await lokasiApi.list());
     } catch {}
     try {
-      setCheckpoints(await checkpointsApi.list());
+      setCheckpoints(await checkpointsApi.list("all=true"));
     } catch {}
     try {
-      setJadwalList(await jadwalApi.list());
+      setJadwalList(await jadwalApi.list("all=true"));
     } catch {}
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const lokasiName = (id: string) =>
     lokasi.find((l: any) => l.id === id)?.nama || "-";
@@ -77,11 +84,21 @@ export default function RoutesPage() {
     setModal(true);
   };
   const save = async () => {
+    if (saving) return;
+    const nama = form.nama.trim();
+    const estimasi = parseInt(form.waktu_estimasi);
+    if (!form.lokasi_id) return toast("Pilih lokasi/klien terlebih dahulu", "warning");
+    if (nama.length < 2) return toast("Nama rute minimal 2 karakter", "warning");
+    if (form.checkpoint_ids.length === 0) return toast("Pilih minimal 1 checkpoint untuk rute ini", "warning");
+    if (!Number.isFinite(estimasi) || estimasi < 1 || estimasi > 1440) return toast("Estimasi harus 1–1440 menit", "warning");
+    const payload = {
+      ...form,
+      nama,
+      assigned_shift: form.assigned_shift || null,
+      waktu_estimasi: estimasi,
+    };
+    setSaving(true);
     try {
-      const payload = {
-        ...form,
-        waktu_estimasi: parseInt(form.waktu_estimasi) || 30,
-      };
       if (edit) {
         await routesApi.update(edit.id, payload);
         toast("Rute diperbarui");
@@ -93,9 +110,13 @@ export default function RoutesPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await routesApi.del(del.id);
       toast("Rute dihapus");
@@ -103,6 +124,8 @@ export default function RoutesPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const filtered = data.filter(
@@ -154,18 +177,19 @@ export default function RoutesPage() {
                 <td>{r.assigned_shift || "-"}</td>
                 <td>
                   <span className={`badge badge-${statusColor(r.status)}`}>
-                    {r.status}
+                    {statusLabel(r.status)}
                   </span>
                 </td>
                 <td>
                   <div className="btn-group">
-                    <button className="btn-icon" onClick={() => openEdit(r)}>
+                    <button className="btn-icon" onClick={() => openEdit(r)} title="Edit">
                       <i className="fas fa-pen" />
                     </button>
                     <button
                       className="btn-icon"
                       onClick={() => setDel(r)}
                       style={{ color: "var(--danger)" }}
+                      title="Hapus"
                     >
                       <i className="fas fa-trash" />
                     </button>
@@ -176,7 +200,7 @@ export default function RoutesPage() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="empty-row">
-                  Tidak ada data
+                  {loading ? "Memuat..." : "Belum ada rute patroli" + (search ? " yang cocok" : ". Klik Tambah untuk membuat rute pertama.")}
                 </td>
               </tr>
             )}
@@ -186,17 +210,18 @@ export default function RoutesPage() {
       {modal && (
         <Modal
           title={`${edit ? "Edit" : "Tambah"} Rute Patroli`}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -320,7 +345,7 @@ export default function RoutesPage() {
                   className={`form-chip ${form.status === s ? "active" : ""}`}
                   onClick={() => setForm({ ...form, status: s })}
                 >
-                  {s}
+                  {statusLabel(s)}
                 </button>
               ))}
             </div>

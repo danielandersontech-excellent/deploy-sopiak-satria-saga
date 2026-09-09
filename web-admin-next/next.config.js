@@ -78,7 +78,11 @@ const CSP_VALUE = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://unpkg.com",
   "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com",
   // OpenStreetMap tile servers are accessed via <img>, hence img-src.
-  "img-src 'self' data: blob: https://ui-avatars.com https://*.tile.openstreetmap.org https://unpkg.com",
+  // [Audit 2B] apiBase ditambahkan: foto absensi/laporan/patroli/avatar dilayani
+  // dari https://api.sopiaksatriasaga.com/uploads/* dan sebelumnya DIBLOKIR CSP
+  // (semua <img src={foto_url}> di web-admin gagal dimuat).
+  `img-src 'self' data: blob: ${apiBase} https://ui-avatars.com https://*.tile.openstreetmap.org https://unpkg.com`,
+  `media-src 'self' blob: ${apiBase}`,
   // AUDIT FIX (P1-19): connect-src now restricted to the configured API.
   `connect-src ${ALLOWED_CONNECT}`,
   // Leaflet's tile preview / iframe maps render data: and blob: URLs.

@@ -1434,3 +1434,37 @@ h1, h2, h3, h4, h5, h6 {
 }
 .btn-ghost:hover { background: var(--bg-tertiary); color: var(--text-primary); }
 .btn-sm { padding: 6px 10px; font-size: 13px; }
+
+/* ============ [Audit 2B] UTILITAS BERSAMA ============ */
+/* Tombol nonaktif (saat submit ganda dicegah) harus terlihat nonaktif. */
+.btn:disabled, .btn-icon:disabled, .form-chip:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+/* Skeleton: kelas .animate-pulse dipakai di banyak halaman tapi belum pernah
+   didefinisikan → placeholder statis. */
+@keyframes adminPulse { 0%, 100% { opacity: 1; } 50% { opacity: .45; } }
+.animate-pulse { animation: adminPulse 1.4s ease-in-out infinite; }
+/* Grid responsif untuk kartu/chart (menggantikan gridTemplateColumns inline
+   yang tidak bisa dibuat responsif oleh media query). */
+.grid-2   { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.grid-2-1 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+.grid-1-2 { display: grid; grid-template-columns: 1fr 2fr; gap: 16px; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-bottom: 20px; }
+@media (max-width: 900px) {
+  .grid-2, .grid-2-1, .grid-1-2 { grid-template-columns: 1fr; }
+}
+/* Header halaman & filter di layar sempit: tombol aksi turun ke baris berikutnya. */
+@media (max-width: 640px) {
+  .page-header { flex-wrap: wrap; gap: 10px; }
+  .page-actions { flex-wrap: wrap; }
+  .modal-footer { flex-wrap: wrap; }
+  .detail-grid { grid-template-columns: 1fr; }
+}
+/* Sel tabel yang membungkus (untuk kolom teks panjang yang sengaja dibiarkan
+   multi-baris) tetap dibatasi lebarnya agar tidak mendorong kolom lain. */
+.cell-wrap { max-width: 260px; white-space: normal; word-break: break-word; }
+/* Keterangan kosong yang lebih informatif. */
+.empty-hint { display: block; font-size: 12px; margin-top: 6px; color: var(--text-muted); font-style: normal; }

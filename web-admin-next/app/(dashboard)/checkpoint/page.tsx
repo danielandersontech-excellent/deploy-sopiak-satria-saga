@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { lokasiApi, checkpointsApi } from "@/lib/api";
-import { statusColor } from "@/lib/formatters";
+import { statusColor, statusLabel } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -16,6 +16,7 @@ export default function CheckpointPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
   const [search, setSearch] = useState("");
   const [filterLok, setFilterLok] = useState("");
   const emptyForm = {
@@ -32,16 +33,23 @@ export default function CheckpointPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
   const load = async () => {
+    setLoading(true);
     try {
-      setData(await checkpointsApi.list());
-    } catch {}
+      setData(await checkpointsApi.list("all=true"));
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat checkpoint", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
       setLokasi(await lokasiApi.list());
     } catch {}
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { setCurrentPage(1); }, [search, filterLok]);
   useEffect(() => {
     const h = (e: MessageEvent) => {
       if (e.data?.t === "cp-map")
@@ -83,15 +91,31 @@ export default function CheckpointPage() {
     setModal(true);
   };
   const save = async () => {
+    if (saving) return;
+    // [Audit 2B] Validasi di klien (sebelumnya lat/lng kosong dikirim sebagai 0,0
+    // → checkpoint "di laut" dan scan patroli selalu di luar radius).
+    const nama = form.nama.trim();
+    const lat = parseFloat(form.latitude);
+    const lng = parseFloat(form.longitude);
+    const radius = parseInt(form.radius);
+    if (!form.lokasi_id) return toast("Pilih lokasi/klien terlebih dahulu", "warning");
+    if (nama.length < 2) return toast("Nama checkpoint minimal 2 karakter", "warning");
+    if (!Number.isFinite(lat) || lat < -90 || lat > 90 || !Number.isFinite(lng) || lng < -180 || lng > 180 || (lat === 0 && lng === 0))
+      return toast("Koordinat wajib diisi — klik pada peta atau isi latitude/longitude", "warning");
+    if (!Number.isFinite(radius) || radius < 1 || radius > 5000) return toast("Radius harus 1–5000 meter", "warning");
+    const qr = (form.qr_code || autoQR(nama, form.lokasi_id)).trim();
+    if (!/^[A-Za-z0-9._:\-]{4,64}$/.test(qr)) return toast("Kode QR hanya huruf/angka/.-_: (4–64 karakter)", "warning");
+    const payload = {
+      ...form,
+      nama,
+      area: form.area.trim() || null,
+      qr_code: qr,
+      latitude: lat,
+      longitude: lng,
+      radius,
+    };
+    setSaving(true);
     try {
-      const qr = form.qr_code || autoQR(form.nama, form.lokasi_id);
-      const payload = {
-        ...form,
-        qr_code: qr,
-        latitude: parseFloat(form.latitude) || 0,
-        longitude: parseFloat(form.longitude) || 0,
-        radius: parseInt(form.radius) || 15,
-      };
       if (edit) {
         await checkpointsApi.update(edit.id, payload);
         toast("Checkpoint diperbarui");
@@ -103,9 +127,13 @@ export default function CheckpointPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await checkpointsApi.del(del.id);
       toast("Checkpoint dihapus");
@@ -113,12 +141,14 @@ export default function CheckpointPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const filtered = data.filter(
     (r) =>
       (!filterLok || r.lokasi_id === filterLok) &&
-      (!search || r.nama?.toLowerCase().includes(search.toLowerCase())),
+      (!search || `${r.nama || ""} ${r.area || ""} ${r.qr_code || ""}`.toLowerCase().includes(search.toLowerCase())),
   );
   const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   return (
@@ -196,18 +226,19 @@ export default function CheckpointPage() {
                 </td>
                 <td>
                   <span className={`badge badge-${statusColor(r.status)}`}>
-                    {r.status}
+                    {statusLabel(r.status)}
                   </span>
                 </td>
                 <td>
                   <div className="btn-group">
-                    <button className="btn-icon" onClick={() => openEdit(r)}>
+                    <button className="btn-icon" onClick={() => openEdit(r)} title="Edit">
                       <i className="fas fa-pen" />
                     </button>
                     <button
                       className="btn-icon"
                       onClick={() => setDel(r)}
                       style={{ color: "var(--danger)" }}
+                      title="Hapus"
                     >
                       <i className="fas fa-trash" />
                     </button>
@@ -218,7 +249,7 @@ export default function CheckpointPage() {
             {filtered.length === 0 && (
               <tr>
                 <td colSpan={8} className="empty-row">
-                  Tidak ada data
+                  {loading ? "Memuat..." : "Tidak ada checkpoint" + (search || filterLok ? " untuk filter ini" : ". Klik Tambah untuk membuat checkpoint pertama.")}
                 </td>
               </tr>
             )}
@@ -229,17 +260,18 @@ export default function CheckpointPage() {
       {modal && (
         <Modal
           title={`${edit ? "Edit" : "Tambah"} Checkpoint`}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -388,7 +420,7 @@ export default function CheckpointPage() {
                   className={`form-chip ${form.status === s ? "active" : ""}`}
                   onClick={() => setForm({ ...form, status: s })}
                 >
-                  {s}
+                  {statusLabel(s)}
                 </button>
               ))}
             </div>
@@ -398,7 +430,7 @@ export default function CheckpointPage() {
       {del && (
         <ConfirmDialog
           title="Hapus Checkpoint?"
-          msg={`"${del.nama}" akan dihapus.`}
+          msg={`"${del.nama}" akan dihapus. Rute patroli yang memuat checkpoint ini perlu diperbarui.`}
           onConfirm={doDelete}
           onCancel={() => setDel(null)}
         />

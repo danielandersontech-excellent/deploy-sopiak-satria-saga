@@ -1,7 +1,7 @@
 "use client";
 import React, { useState, useEffect } from "react";
 import { authApi, apiUploadFile, usersApi, lokasiApi, apiFetch, API_URL } from "@/lib/api";
-import { fmtDate, fmtDateTime, statusColor, avatarUrl } from "@/lib/formatters";
+import { fmtDate, fmtDateTime, statusColor, statusLabel, avatarUrl } from "@/lib/formatters";
 import { Modal } from "@/components/ui/Modal";
 import { Pagination } from "@/components/ui/Pagination";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
@@ -25,6 +25,7 @@ export default function PersonilPage() {
   const [slidePanel, setSlidePanel] = useState(false);
   const [berkasModal, setBerkasModal] = useState<any>(null);
   const [detailTab, setDetailTab] = useState<"info" | "berkas">("info");
+  const [saving, setSaving] = useState(false);
   const emptyForm = {
     nrp: "",
     nama: "",
@@ -154,16 +155,25 @@ export default function PersonilPage() {
     setModal(true);
   };
   const save = async () => {
-    if (!form.nama || !form.nrp)
-      return toast("Nama dan NRP wajib diisi", "warning");
+    if (saving) return;
+    const nama = form.nama.trim();
+    const nrp = form.nrp.trim().toUpperCase();
+    if (nama.length < 3) return toast("Nama minimal 3 karakter", "warning");
+    if (!edit && !/^[A-Z0-9-]{3,20}$/.test(nrp)) return toast("NRP hanya huruf/angka/strip (3–20 karakter), mis. AGT051", "warning");
+    if (form.no_hp && !/^(\+62|62|0)8[0-9]{7,12}$/.test(form.no_hp.replace(/[\s-]/g, ""))) return toast("Nomor HP tidak valid (mis. 0812xxxxxxx)", "warning");
+    if (form.no_ktp && !/^\d{16}$/.test(form.no_ktp.trim())) return toast("No KTP harus 16 digit angka", "warning");
+    const skor = parseInt(form.skor);
+    if (!Number.isFinite(skor) || skor < 0 || skor > 100) return toast("Skor harus 0–100", "warning");
+    if (form.tanggal_lahir && form.tanggal_lahir > new Date().toISOString().slice(0, 10)) return toast("Tanggal lahir tidak valid", "warning");
+    setSaving(true);
     try {
       const payload: any = {
-        nama: form.nama,
-        no_hp: form.no_hp,
+        nama,
+        no_hp: form.no_hp.trim() || null,
         role: form.role,
-        shift: form.shift,
+        shift: ["anggota", "komandan"].includes(form.role) ? form.shift : null,
         lokasi_id: form.lokasi_id || null,
-        skor: parseInt(form.skor),
+        skor,
         foto_url: form.foto_url || null,
         no_ktp: form.no_ktp || null,
         tempat_lahir: form.tempat_lahir || null,
@@ -184,22 +194,27 @@ export default function PersonilPage() {
       } else {
         // [2-1] Backend membuat PIN acak & mengembalikannya sekali sebagai
         // `initial_pin`. Tampilkan PIN itu (bukan "123456" yang ditebak).
-        const created: any = await authApi.register({ nrp: form.nrp, ...payload });
+        const created: any = await authApi.register({ nrp, ...payload });
         const initialPin = created?.initial_pin ?? created?.data?.initial_pin ?? null;
-        toast(
-          initialPin
-            ? `${form.nama} (${form.role}) ditambahkan. Login: ${form.nrp} / PIN awal: ${initialPin} — sampaikan ke user (tampil sekali), minta ganti saat login pertama.`
-            : `${form.nama} (${form.role}) ditambahkan. PIN awal dibuat namun tidak tercatat di respons — lakukan reset PIN bila user tidak dapat login.`,
-          initialPin ? "success" : "warning",
-        );
+        if (initialPin) {
+          // [Audit 2B] PIN awal tampil di modal (bukan toast yang hilang dalam
+          // beberapa detik) dengan tombol salin.
+          setPinResult({ nama, nrp, pin: String(initialPin), secondsLeft: 120 });
+        } else {
+          toast(`${nama} (${form.role}) ditambahkan. PIN awal tidak tercatat di respons — lakukan reset PIN bila user tidak dapat login.`, "warning");
+        }
       }
       setModal(false);
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await usersApi.del(del.id);
       toast(`${del.nama} berhasil dihapus`);
@@ -207,7 +222,22 @@ export default function PersonilPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
+  };
+  // [Audit 2B] Modal PIN awal (sekali tampil) + hitung mundur.
+  const [pinResult, setPinResult] = useState<{ nama: string; nrp: string; pin: string; secondsLeft: number } | null>(null);
+  useEffect(() => {
+    if (!pinResult) return;
+    if (pinResult.secondsLeft <= 0) { setPinResult(null); return; }
+    const t = window.setTimeout(() => setPinResult((p) => (p ? { ...p, secondsLeft: p.secondsLeft - 1 } : p)), 1000);
+    return () => window.clearTimeout(t);
+  }, [pinResult]);
+  const copyPin = async () => {
+    if (!pinResult) return;
+    try { await navigator.clipboard.writeText(`NRP: ${pinResult.nrp}\nPIN awal: ${pinResult.pin}`); toast("NRP & PIN tersalin"); }
+    catch { toast("Gagal menyalin ke clipboard", "warning"); }
   };
   const openBerkas = (u: any) => {
     setBerkasModal(u);
@@ -220,6 +250,8 @@ export default function PersonilPage() {
     });
   };
   const saveBerkas = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await usersApi.updateBerkas(berkasModal.id, berkasForm);
       toast("Berkas personil berhasil diperbarui");
@@ -227,6 +259,8 @@ export default function PersonilPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const roles = ["anggota", "komandan", "supervisor", "admin"];
@@ -382,14 +416,14 @@ export default function PersonilPage() {
                   <span
                     className={`badge badge-${statusColor(u.status_penempatan || "belum_ditempatkan")}`}
                   >
-                    {u.status_penempatan || "belum_ditempatkan"}
+                    {statusLabel(u.status_penempatan || "belum_ditempatkan")}
                   </span>
                 </td>
                 <td>{u.shift}</td>
                 <td>{u.no_hp || "-"}</td>
-                <td>
+                <td style={{ whiteSpace: "nowrap" }}>
                   <span className={`status-dot ${u.status}`} />
-                  {u.status?.replace("_", " ")}
+                  {statusLabel(u.status)}
                 </td>
                 <td>
                   <strong>{u.skor}</strong>
@@ -712,11 +746,12 @@ export default function PersonilPage() {
               <button
                 className="btn btn-outline"
                 onClick={() => setBerkasModal(null)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={saveBerkas}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={saveBerkas} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> Simpan
               </button>
             </>
           }
@@ -799,18 +834,19 @@ export default function PersonilPage() {
       {modal && (
         <Modal
           title={edit ? "Edit Personil" : "Tambah Personil Baru"}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           wide
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }
@@ -849,9 +885,12 @@ export default function PersonilPage() {
               <input
                 className="form-input"
                 value={form.nrp}
-                onChange={(e) => setForm({ ...form, nrp: e.target.value })}
+                onChange={(e) => setForm({ ...form, nrp: e.target.value.toUpperCase() })}
                 disabled={!!edit}
+                placeholder="mis. AGT051 / KMD004"
+                maxLength={20}
               />
+              {!edit && <small className="muted">Dipakai untuk login; tidak bisa diubah setelah dibuat.</small>}
             </div>
           </div>
           <div className="form-row">
@@ -1095,10 +1134,34 @@ export default function PersonilPage() {
       {del && (
         <ConfirmDialog
           title="Hapus Personil?"
-          msg={`${del.nama} (${del.nrp}) akan dihapus.`}
+          msg={`${del.nama} (${del.nrp}) akan dihapus. Riwayat absensi/laporan tetap tersimpan. Untuk personil yang keluar, lebih disarankan mengubah Penempatan menjadi "nonaktif".`}
           onConfirm={doDelete}
           onCancel={() => setDel(null)}
         />
+      )}
+      {pinResult && (
+        <Modal
+          title="Akun Personil Dibuat"
+          onClose={() => { /* tutup lewat tombol agar PIN sempat dicatat */ }}
+          footer={
+            <>
+              <button className="btn btn-outline" onClick={copyPin}><i className="fas fa-copy" /> Salin NRP & PIN</button>
+              <button className="btn btn-primary" onClick={() => setPinResult(null)}>Sudah Dicatat & Tutup</button>
+            </>
+          }
+        >
+          <div style={{ textAlign: "center" }}>
+            <div className="muted" style={{ fontSize: 13, marginBottom: 6 }}>{pinResult.nama}</div>
+            <div style={{ fontSize: 13, marginBottom: 8 }}>Login NRP: <code style={{ fontSize: 14 }}>{pinResult.nrp}</code></div>
+            <div style={{ fontFamily: "monospace", fontSize: "2.25rem", fontWeight: 700, letterSpacing: "0.25rem", padding: "16px 24px", margin: "6px auto 16px", background: "var(--hover-row, #f3f4f6)", border: "2px dashed var(--primary, #1a5276)", borderRadius: 12, display: "inline-block" }} aria-label="PIN awal">
+              {pinResult.pin}
+            </div>
+            <div style={{ color: "var(--danger, #dc2626)", fontSize: 13, fontWeight: 600, marginBottom: 6 }}>
+              ⚠️ PIN awal hanya tampil sekali. Sampaikan ke personil; sistem akan meminta ganti PIN saat login pertama.
+            </div>
+            <div className="muted" style={{ fontSize: 12 }}>Jendela ini menutup otomatis dalam <strong>{pinResult.secondsLeft}</strong> detik.</div>
+          </div>
+        </Modal>
       )}
     </div>
   );

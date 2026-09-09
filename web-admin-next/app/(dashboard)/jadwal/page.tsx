@@ -14,6 +14,8 @@ export default function JadwalPage() {
   const [modal, setModal] = useState(false);
   const [edit, setEdit] = useState<any>(null);
   const [del, setDel] = useState<any>(null);
+  const [saving, setSaving] = useState(false);
+  const [filterLok, setFilterLok] = useState("");
   const emptyForm = {
     nama: "",
     lokasi_id: "",
@@ -25,16 +27,23 @@ export default function JadwalPage() {
   const [currentPage, setCurrentPage] = useState(1);
   const PAGE_SIZE = 15;
   const load = async () => {
+    setLoading(true);
     try {
-      setData(await jadwalApi.list());
-    } catch {}
+      setData(await jadwalApi.list("all=true"));
+    } catch (e: any) {
+      toast(e?.message || "Gagal memuat jadwal shift", "error");
+    } finally {
+      setLoading(false);
+    }
     try {
       setLokasi(await lokasiApi.list());
     } catch {}
   };
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  useEffect(() => { setCurrentPage(1); }, [filterLok]);
   const lokasiName = (id: string) =>
     lokasi.find((l: any) => l.id === id)?.nama || "-";
   const openNew = () => {
@@ -54,21 +63,36 @@ export default function JadwalPage() {
     setModal(true);
   };
   const save = async () => {
+    if (saving) return;
+    const nama = form.nama.trim();
+    if (!form.lokasi_id) return toast("Pilih lokasi/klien terlebih dahulu", "warning");
+    if (nama.length < 2) return toast("Nama shift minimal 2 karakter", "warning");
+    if (!/^\d{2}:\d{2}$/.test(form.waktu_mulai) || !/^\d{2}:\d{2}$/.test(form.waktu_selesai)) return toast("Waktu mulai/selesai wajib diisi (HH:MM)", "warning");
+    if (form.waktu_mulai === form.waktu_selesai) return toast("Waktu mulai dan selesai tidak boleh sama", "warning");
+    if (!/^#[0-9a-fA-F]{6}$/.test(form.warna)) return toast("Warna tidak valid", "warning");
+    // [Audit 2B] Cegah nama shift ganda pada lokasi yang sama.
+    const dup = data.find((s: any) => s.lokasi_id === form.lokasi_id && (s.nama || "").trim().toLowerCase() === nama.toLowerCase() && s.id !== edit?.id);
+    if (dup) return toast(`Shift "${nama}" sudah ada di lokasi ini`, "warning");
+    setSaving(true);
     try {
       if (edit) {
-        await jadwalApi.update(edit.id, form);
+        await jadwalApi.update(edit.id, { ...form, nama });
         toast("Jadwal Shift diperbarui");
       } else {
-        await jadwalApi.create(form);
+        await jadwalApi.create({ ...form, nama });
         toast("Jadwal Shift ditambahkan");
       }
       setModal(false);
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
   const doDelete = async () => {
+    if (saving) return;
+    setSaving(true);
     try {
       await jadwalApi.del(del.id);
       toast("Jadwal dihapus");
@@ -76,10 +100,13 @@ export default function JadwalPage() {
       load();
     } catch (e: any) {
       toast(e.message, "error");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const pagedData = data.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  const filtered = filterLok ? data.filter((r) => r.lokasi_id === filterLok) : data;
+  const pagedData = filtered.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
   return (
     <div>
       <div className="page-header">
@@ -111,6 +138,15 @@ export default function JadwalPage() {
           </strong>{" "}
           untuk menugaskan personil ke shift ini pada tanggal tertentu
         </p>
+        <div className="filters-row">
+          <select className="form-select" style={{ width: "auto" }} value={filterLok} onChange={(e) => setFilterLok(e.target.value)}>
+            <option value="">Semua Lokasi</option>
+            {lokasi.map((l) => (
+              <option key={l.id} value={l.id}>{l.nama}</option>
+            ))}
+          </select>
+          <span className="muted">{filtered.length} shift</span>
+        </div>
         <table>
           <thead>
             <tr>
@@ -177,31 +213,32 @@ export default function JadwalPage() {
                 </tr>
               );
             })}
-            {data.length === 0 && (
+            {filtered.length === 0 && (
               <tr>
                 <td colSpan={7} className="empty-row">
-                  Tidak ada data
+                  {loading ? "Memuat..." : "Belum ada jadwal shift" + (filterLok ? " untuk lokasi ini" : ". Klik Tambah untuk membuat shift pertama.")}
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      <Pagination currentPage={currentPage} totalItems={data.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
+      <Pagination currentPage={currentPage} totalItems={filtered.length} pageSize={PAGE_SIZE} onPageChange={setCurrentPage} />
       </div>
       {modal && (
         <Modal
           title={`${edit ? "Edit" : "Tambah"} Jadwal Shift`}
-          onClose={() => setModal(false)}
+          onClose={() => !saving && setModal(false)}
           footer={
             <>
               <button
                 className="btn btn-outline"
                 onClick={() => setModal(false)}
+                disabled={saving}
               >
                 Batal
               </button>
-              <button className="btn btn-primary" onClick={save}>
-                <i className="fas fa-save" /> Simpan
+              <button className="btn btn-primary" onClick={save} disabled={saving}>
+                <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-save"}`} /> {saving ? "Menyimpan..." : "Simpan"}
               </button>
             </>
           }

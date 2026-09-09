@@ -7,20 +7,25 @@ function LoginForm() {
   const searchParams = useSearchParams();
   const [nrp, setNrp] = useState("");
   const [pin, setPin] = useState("");
-  const [error, setError] = useState("");
+  // [Audit 2B] apiFetch mengarahkan ke /login?reason=... saat sesi tidak valid
+  // (akun dinonaktifkan, dsb.) — tampilkan alasannya agar pengguna paham.
+  const [error, setError] = useState(searchParams.get("reason") || "");
   const [loading, setLoading] = useState(false);
   const handle = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (loading) return;
     setError("");
     setLoading(true);
     try {
       await authApi.login(nrp, pin);
-      const redirect = searchParams.get("redirect") || "/";
+      // Hanya izinkan redirect ke path internal (bukan URL luar).
+      const raw = searchParams.get("redirect") || "/";
+      const redirect = raw.startsWith("/") && !raw.startsWith("//") ? raw : "/";
       window.location.href = redirect;
     } catch (err: any) {
       setError(err.message || "Login gagal");
+      setLoading(false);
     }
-    setLoading(false);
   };
   return (
     <form onSubmit={handle}>
@@ -28,18 +33,22 @@ function LoginForm() {
         placeholder="NRP / ID / Kode Klien"
         value={nrp}
         onChange={(e) => setNrp(e.target.value)}
+        autoComplete="username"
+        autoCapitalize="characters"
         required
       />
       <input
         placeholder="PIN (6 digit)"
         type="password"
+        inputMode="numeric"
+        autoComplete="current-password"
         value={pin}
         onChange={(e) => setPin(e.target.value)}
         required
       />
       {error && <div className="login-error">{error}</div>}
       <button type="submit" disabled={loading}>
-        {loading ? "Loading..." : "Masuk"}
+        {loading ? "Memeriksa..." : "Masuk"}
       </button>
       <p className="muted" style={{ textAlign: "center", marginTop: 10, fontSize: 11 }}>
         Klien: Gunakan Kode Klien untuk login

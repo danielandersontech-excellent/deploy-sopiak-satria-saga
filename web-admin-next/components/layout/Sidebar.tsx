@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { authApi, getUser, laporanHarianApi, laporanKejadianApi, panicApi, rekrutmenApi, ROLE_MENUS } from "@/lib/api";
+import { authApi, getUser, apiFetchPaged, panicApi, rekrutmenApi, ROLE_MENUS } from "@/lib/api";
 import { onRealtimeEvent } from "@/lib/socketClient";
 import { useSettings } from "@/hooks/useSettings";
 
@@ -19,15 +19,17 @@ export function Sidebar({
   const refreshCounts = useCallback(async () => {
     try {
       const role = getUser()?.role || "anggota";
+      // [Audit 2B] Hitung dari pagination.total — sebelumnya .length dari
+      // 20 baris pertama (badge mentok di 20 walau pending lebih banyak).
       const [lh, lk, pa, rk] = await Promise.all([
-        laporanHarianApi.list("status=pending"),
-        laporanKejadianApi.list("status=pending"),
+        apiFetchPaged("/api/laporan/harian", "status=pending&limit=1"),
+        apiFetchPaged("/api/laporan/kejadian", "status=pending&limit=1"),
         panicApi.list("status=active"),
         // [Rekrutmen] badge pelamar baru — hanya admin/supervisor yang punya akses.
         ["admin", "supervisor"].includes(role) ? rekrutmenApi.ringkasan().catch(() => null) : Promise.resolve(null),
       ]);
       setCounts({
-        pending: (lh?.length || 0) + (lk?.length || 0),
+        pending: (Number(lh?.pagination?.total) || 0) + (Number(lk?.pagination?.total) || 0),
         panic: pa?.length || 0,
         rekrutmen: Number(rk?.baru) || 0,
       });

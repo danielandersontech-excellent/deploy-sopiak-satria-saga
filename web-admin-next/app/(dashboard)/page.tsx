@@ -1,107 +1,81 @@
 "use client";
 import React, { useState, useEffect, useCallback } from "react";
-import { absensiApi, dashboardApi } from "@/lib/api";
+import Link from "next/link";
+import { absensiApi, dashboardApi, getUser } from "@/lib/api";
 import { onRealtimeEvent } from "@/lib/socketClient";
-import { fmtTime, statusColor, avatarUrl } from "@/lib/formatters";
+import { fmtTime, fmtDateTime, statusColor, statusLabel, avatarUrl } from "@/lib/formatters";
 import { useSettings } from "@/hooks/useSettings";
 
+/**
+ * DASHBOARD
+ * [Audit 2B]
+ *  - Grafik 7 hari kini memakai `weekly_absensi` dari /dashboard/stats
+ *    (dihitung di DB). Sebelumnya 7 request /api/absensi?date= yang masing-
+ *    masing dibatasi 20 baris → grafik mentok di 20.
+ *  - Grid 2 kolom inline diganti .grid-2 responsif (≤900px jadi 1 kolom).
+ *  - State error & kosong yang jelas; insiden terbaru ditampilkan.
+ */
 export default function DashboardPage() {
   const [s, setS] = useState<any>({});
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
   const [act, setAct] = useState<any[]>([]);
-  const [weekly, setWeekly] = useState<any[]>([]);
   const { t } = useSettings();
+  const user = getUser();
+
   const loadDashboard = useCallback(async () => {
     setLoading(true);
+    setError("");
     try {
-      try {
-        const stats = await dashboardApi.stats();
-        setS(stats);
-        const absData = await absensiApi.today();
-        setAct(Array.isArray(absData) ? absData.slice(0, 8) : []);
-      } catch {}
-      const days: string[] = [];
-      for (let i = 6; i >= 0; i--) {
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        days.push(d.toISOString().split("T")[0]);
-      }
-      try {
-        const weekData = await Promise.all(
-          days.map(async (day) => {
-            const d = await absensiApi.byDate(day);
-            return {
-              day: new Date(day).toLocaleDateString("id-ID", {
-                weekday: "short",
-                day: "2-digit",
-              }),
-              count: Array.isArray(d) ? d.length : 0,
-            };
-          }),
-        );
-        setWeekly(weekData);
-      } catch {}
+      const [stats, absData] = await Promise.all([
+        dashboardApi.stats(),
+        absensiApi.today().catch(() => []),
+      ]);
+      setS(stats || {});
+      setAct(Array.isArray(absData) ? absData.slice(0, 8) : []);
+    } catch (e: any) {
+      setError(e?.message || "Gagal memuat dashboard");
     } finally {
-      // BUG #4 (P2-2): finally guarantees loading clears on any error.
       setLoading(false);
     }
   }, []);
+
   useEffect(() => {
     loadDashboard();
     const unsub = onRealtimeEvent((ev) => {
-      if (
-        [
-          "absensi:new",
-          "patroli:update",
-          "laporan:new",
-          "panic:alert",
-          "panic:resolved",
-          "stats:update",
-        ].includes(ev)
-      )
-        loadDashboard();
+      if (["absensi:new", "patroli:update", "laporan:new", "panic:alert", "panic:resolved", "stats:update"].includes(ev)) loadDashboard();
     });
     return unsub;
-  }, []);
+  }, [loadDashboard]);
+
+  // 7 hari terakhir (termasuk hari ini) — isi 0 untuk hari tanpa data.
+  const weekly = (() => {
+    const map: Record<string, number> = {};
+    (s.weekly_absensi || []).forEach((w: any) => {
+      const key = String(w.tanggal).slice(0, 10);
+      map[key] = Number(w.jumlah) || 0;
+    });
+    const days: { key: string; label: string; count: number }[] = [];
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(); d.setDate(d.getDate() - i);
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      days.push({ key, label: d.toLocaleDateString("id-ID", { weekday: "short", day: "2-digit" }), count: map[key] || 0 });
+    }
+    return days;
+  })();
   const maxW = Math.max(...weekly.map((w) => w.count), 1);
+
   const kpis = [
-    {
-      label: t("total_personil"),
-      value: s.total_personil || s.total || 0,
-      icon: "fa-users",
-      color: "blue",
-    },
-    {
-      label: t("sedang_bertugas"),
-      value: s.on_duty || s.onDuty || 0,
-      icon: "fa-user-check",
-      color: "green",
-    },
-    {
-      label: t("absensi_hari_ini"),
-      value: s.absensi_today || s.absToday || 0,
-      icon: "fa-fingerprint",
-      color: "purple",
-    },
-    {
-      label: t("laporan_pending"),
-      value: s.pending_reports || s.pending || 0,
-      icon: "fa-file-alt",
-      color: "orange",
-    },
-    {
-      label: t("panic_aktif"),
-      value: s.active_panic || s.panic || 0,
-      icon: "fa-bell",
-      color: "red",
-    },
-    {
-      label: t("lokasi_klien"),
-      value: s.total_lokasi || s.lokasi || 0,
-      icon: "fa-building",
-      color: "blue",
-    },
+    { label: t("total_personil"), value: s.total_personil ?? s.total ?? 0, icon: "fa-users", color: "blue", href: "/personil" },
+    { label: t("sedang_bertugas"), value: s.on_duty ?? s.onDuty ?? 0, icon: "fa-user-check", color: "green", href: "/live-map" },
+    { label: t("absensi_hari_ini"), value: s.absensi_today ?? s.absToday ?? 0, icon: "fa-fingerprint", color: "purple", href: "/absensi" },
+    { label: t("laporan_pending"), value: s.pending_laporan ?? s.pending_reports ?? s.pending ?? 0, icon: "fa-file-alt", color: "orange", href: "/laporan-harian" },
+    { label: t("panic_aktif"), value: s.active_panic ?? s.panic ?? 0, icon: "fa-bell", color: "red", href: "/panic" },
+    { label: t("lokasi_klien"), value: s.total_lokasi ?? s.lokasi ?? 0, icon: "fa-building", color: "blue", href: "/lokasi" },
   ];
+  const pc = s.patrol_completion || { total: 0, completed: 0, rate: 0 };
+  const incidents: any[] = Array.isArray(s.recent_incidents) ? s.recent_incidents : [];
+
   return (
     <div>
       <div className="page-header">
@@ -109,49 +83,61 @@ export default function DashboardPage() {
           <i className="fas fa-th-large" />
           {t("dashboard")}
         </h1>
-        <span className="muted">
-          {new Date().toLocaleDateString("id-ID", {
-            weekday: "long",
-            day: "numeric",
-            month: "long",
-            year: "numeric",
-          })}
-        </span>
+        <div className="page-actions">
+          <span className="muted">
+            {new Date().toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+          </span>
+          <button className="btn btn-outline btn-sm" onClick={loadDashboard} disabled={loading} title="Muat ulang">
+            <i className={`fas fa-sync-alt ${loading ? "fa-spin" : ""}`} />
+          </button>
+        </div>
       </div>
+
+      {error && (
+        <div className="section-card" style={{ borderLeft: "4px solid var(--danger)", color: "var(--danger)" }}>
+          <i className="fas fa-exclamation-circle" /> {error}
+        </div>
+      )}
+
       <div className="kpi-grid">
         {kpis.map((k, i) => (
-          <div key={i} className={`kpi-card ${k.color}`}>
+          <Link key={i} href={k.href} className={`kpi-card ${k.color}`} style={{ textDecoration: "none", color: "inherit" }}>
             <div className="kpi-icon">
               <i className={`fas ${k.icon}`} />
             </div>
             <div>
-              <div className="kpi-val">{k.value}</div>
+              <div className="kpi-val">{loading && !s.total_personil ? "…" : k.value}</div>
               <div className="kpi-label">{k.label}</div>
             </div>
-          </div>
+          </Link>
         ))}
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+
+      <div className="grid-2">
         <div className="section-card">
-          <h3 style={{ marginBottom: 12 }}>📊 {t("absensi_7hari")}</h3>
+          <div className="section-header">
+            <h3>📊 {t("absensi_7hari")}</h3>
+            <span className="muted">Total: {weekly.reduce((a, w) => a + w.count, 0)}</span>
+          </div>
           <div className="bar-chart">
-            {weekly.map((w, i) => (
-              <div key={i} className="bar-col">
+            {weekly.map((w) => (
+              <div key={w.key} className="bar-col" title={`${w.key}: ${w.count} absensi`}>
                 <div className="bar-val">{w.count}</div>
-                <div
-                  className="bar-fill"
-                  style={{
-                    height: `${(w.count / maxW) * 140}px`,
-                    background: "var(--primary)",
-                  }}
-                />
-                <div className="bar-label">{w.day}</div>
+                <div className="bar-fill" style={{ height: `${(w.count / maxW) * 140}px`, background: "var(--primary)" }} />
+                <div className="bar-label">{w.label}</div>
               </div>
             ))}
           </div>
+          <div style={{ display: "flex", gap: 16, marginTop: 10, flexWrap: "wrap", fontSize: 12 }} className="muted">
+            <span><i className="fas fa-route" /> Patroli 30 hari: <strong>{pc.completed}/{pc.total}</strong> selesai ({pc.rate}%)</span>
+            <span><i className="fas fa-map-marker-alt" /> Checkpoint aktif: <strong>{s.total_checkpoints ?? 0}</strong></span>
+          </div>
         </div>
         <div className="section-card">
-          <h3 style={{ marginBottom: 12 }}>📋 {t("aktivitas_terbaru")}</h3>
+          <div className="section-header">
+            <h3>📋 {t("aktivitas_terbaru")}</h3>
+            <Link href="/absensi" className="muted" style={{ fontSize: 12 }}>Lihat semua →</Link>
+          </div>
           <table>
             <thead>
               <tr>
@@ -165,31 +151,56 @@ export default function DashboardPage() {
               {act.map((a: any) => (
                 <tr key={a.id}>
                   <td className="user-cell">
-                    <img
-                      className="avatar avatar-sm"
-                      src={avatarUrl(a.users?.foto_url || a.foto_url)}
-                     alt="avatar" />
-                    <span>{a.users?.nama || a.nama || "-"}</span>
+                    <img className="avatar avatar-sm" src={avatarUrl(a.user_foto_url || a.users?.foto_url)} alt="" />
+                    <span title={a.nama || a.users?.nama || "-"}>{a.nama || a.users?.nama || "-"}</span>
                   </td>
                   <td>
-                    <span
-                      className={`badge badge-${a.tipe === "masuk" ? "success" : "info"}`}
-                    >
-                      {a.tipe}
-                    </span>
+                    <span className={`badge badge-${a.tipe === "masuk" ? "success" : "info"}`}>{a.tipe}</span>
                   </td>
-                  <td>{fmtTime(a.waktu)}</td>
+                  <td>{fmtTime(a.waktu || a.created_at)}</td>
                   <td>
-                    <span className={`badge badge-${statusColor(a.status)}`}>
-                      {a.status}
-                    </span>
+                    <span className={`badge badge-${statusColor(a.status)}`}>{statusLabel(a.status)}</span>
                   </td>
+                </tr>
+              ))}
+              {act.length === 0 && (
+                <tr><td colSpan={4} className="empty-row">{loading ? "Memuat..." : "Belum ada absensi hari ini"}</td></tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {incidents.length > 0 && (
+        <div className="section-card">
+          <div className="section-header">
+            <h3>🚨 Insiden Terbaru</h3>
+            <Link href="/laporan-kejadian" className="muted" style={{ fontSize: 12 }}>Lihat semua →</Link>
+          </div>
+          <table>
+            <thead>
+              <tr><th>Jenis</th><th>Pelapor</th><th>Prioritas</th><th>Status</th><th>Waktu</th></tr>
+            </thead>
+            <tbody>
+              {incidents.map((k: any) => (
+                <tr key={k.id}>
+                  <td className="cell-ellipsis" title={k.jenis}><strong>{k.jenis}</strong></td>
+                  <td className="cell-ellipsis-sm" title={k.nama || "-"}>{k.nama || "-"}</td>
+                  <td><span className={`badge badge-${statusColor(k.prioritas)}`}>{statusLabel(k.prioritas)}</span></td>
+                  <td><span className={`badge badge-${statusColor(k.status)}`}>{statusLabel(k.status)}</span></td>
+                  <td style={{ whiteSpace: "nowrap" }}>{fmtDateTime(k.created_at)}</td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
-      </div>
+      )}
+
+      {user?.role === "klien" && (
+        <p className="muted" style={{ marginTop: 8 }}>
+          <i className="fas fa-info-circle" /> Anda melihat data untuk lokasi yang terdaftar atas nama klien Anda.
+        </p>
+      )}
     </div>
   );
 }
