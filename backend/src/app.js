@@ -42,7 +42,16 @@ const IS_PRODUCTION = process.env.NODE_ENV === 'production';
 // client-side IP it forwards. If you ever add another proxy layer
 // (e.g. Cloudflare in front of Traefik), increase this to match the
 // number of trusted hops — never set it to true or 0.0.0.0/0.
+//
+// [Misi V3 / B1] Cloudflare memang berada di depan Traefik, tetapi Traefik
+// MENIMPA X-Forwarded-For dengan IP peer-nya (edge Cloudflare) sehingga
+// menaikkan angka ini tidak membantu. IP klien asli diambil dari header
+// CF-Connecting-IP oleh middleware/clientIp.js — hanya bila peer terbukti
+// berada dalam rentang IP Cloudflare (fail-closed).
 app.set('trust proxy', 1);
+const { cloudflareRealIp } = require('./middleware/clientIp');
+app.use(cloudflareRealIp());
+const { ipKey } = require('./utils/ipKey');
 
 // ===== MIDDLEWARE =====
 // Konfigurasi helmet eksplisit untuk REST API.
@@ -140,7 +149,7 @@ app.use('/api/auth/login', rateLimit({
   message: { error: 'Terlalu banyak percobaan login. Coba lagi dalam 15 menit.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => ipKey(req.ip),
   skip: isBypassed,
 }));
 
@@ -156,7 +165,7 @@ app.use('/api/auth/refresh', rateLimit({
   message: { error: 'Terlalu banyak refresh token. Coba lagi dalam 1 menit.' },
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => ipKey(req.ip),
   skip: isBypassed,
 }));
 
@@ -187,7 +196,7 @@ app.use('/api/', rateLimit({
         }
       }
     } catch (e) { /* ignore - fallback to IP */ }
-    return `ip:${req.ip}`; // Fallback: rate limit by IP
+    return `ip:${ipKey(req.ip)}`; // Fallback: rate limit by IP
   },
 }));
 
@@ -232,8 +241,11 @@ app.get('/ping', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  const clientIp = req.headers['x-forwarded-for'] || req.socket?.remoteAddress || 'unknown';
+  // [Misi V3] req.ip sudah IP klien asli (lihat middleware/clientIp.js).
+  const clientIp = req.ip || req.socket?.remoteAddress || 'unknown';
   const poolStats = getPoolStats();
+  let pinHashStats = null;
+  try { pinHashStats = require('./utils/pinHash').getPoolStats(); } catch {}
   let storageStats = {};
   try { storageStats = require('./middleware/driveCDN').getStorageStats(); } catch {}
   res.json({
@@ -242,6 +254,7 @@ app.get('/api/health', (req, res) => {
     version: '13.0.0',
     realtime: { engine: 'socket.io', online: getOnlineCount() },
     database: poolStats,
+    pin_hash_pool: pinHashStats,
     storage: storageStats,
     client_ip: clientIp,
   });

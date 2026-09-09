@@ -282,9 +282,9 @@ class DataService {
       let _tempPin = null;
       if (!data.pin_hash) {
         try {
-          const bcrypt = require('bcryptjs');
+          const { hashPin } = require('../utils/pinHash');
           _tempPin = randomPin();
-          data.pin_hash = await bcrypt.hash(_tempPin, BCRYPT_ROUNDS);
+          data.pin_hash = await hashPin(_tempPin, BCRYPT_ROUNDS);
           data.must_change_pin = true;
         } catch (e) { logger.info(`[DataService] bcrypt error: ${e.message}`); }
       }
@@ -313,8 +313,8 @@ class DataService {
       // Handle pin update
       if (data.pin && !data.pin_hash) {
         try {
-          const bcrypt = require('bcryptjs');
-          data.pin_hash = await bcrypt.hash(String(data.pin), BCRYPT_ROUNDS);
+          const { hashPin } = require('../utils/pinHash');
+          data.pin_hash = await hashPin(String(data.pin), BCRYPT_ROUNDS);
           // P0-14: an admin pushing a new PIN through the data update
           // endpoint is effectively a forced reset — the client never
           // chose this PIN. Flag for rotation on next login so the

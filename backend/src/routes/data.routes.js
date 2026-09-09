@@ -9,7 +9,7 @@ const { uploadLimiter } = require('../middleware/uploadLimit');
 const { logEvent } = require('../middleware/auditlog');
 const { query, queryOne } = require('../config/database');
 const { logger } = require('../utils/logger');
-const bcrypt = require('bcryptjs');
+const { hashPin } = require('../utils/pinHash');
 const crypto = require('crypto');
 
 // =============================================================================
@@ -71,7 +71,7 @@ router.post(
       const pin = String(crypto.randomInt(100000, 1000000)).padStart(6, '0');
 
       const rounds = parseInt(process.env.BCRYPT_ROUNDS || '12', 10);
-      const pinHash = await bcrypt.hash(pin, rounds);
+      const pinHash = await hashPin(pin, rounds);
 
       const updated = await queryOne(
         `UPDATE clients

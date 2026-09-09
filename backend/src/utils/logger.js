@@ -204,7 +204,18 @@ process.on('exit', closeAll);
 process.on('SIGTERM', closeAll);
 process.on('SIGINT', closeAll);
 
+// [Misi V3 / B1] Level DEBUG untuk instrumentasi waktu (mis. tahapan login).
+// Aktif hanya bila LOG_LEVEL=debug (produksi default 'info' → nol biaya I/O).
+const LOG_LEVEL = String(process.env.LOG_LEVEL || (process.env.NODE_ENV === 'production' ? 'info' : 'debug')).toLowerCase();
+const DEBUG_ENABLED = LOG_LEVEL === 'debug';
+
 const logger = {
+  debug: (msg, meta) => {
+    if (!DEBUG_ENABLED) return;
+    appendLog('app.log', 'DEBUG', msg, meta);
+    if (process.env.NODE_ENV !== 'production') console.log(`[DEBUG] ${msg}`);
+  },
+  isDebug: () => DEBUG_ENABLED,
   info: (msg, meta) => {
     appendLog('app.log', 'INFO', msg, meta);
     if (process.env.NODE_ENV !== 'production') console.log(`[INFO] ${msg}`);

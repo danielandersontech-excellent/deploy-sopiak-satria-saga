@@ -17,6 +17,7 @@
  *   REKRUTMEN_RATE_WINDOW_MS  = window dalam milidetik (default 900000)
  */
 const rateLimit = require('express-rate-limit');
+const { ipKey } = require('../utils/ipKey');
 const { logger } = require('../utils/logger');
 const { isBypassed } = require('../utils/rateLimitBypass');
 
@@ -38,7 +39,7 @@ const rekrutmenSubmitLimiter = rateLimit({
   max: SUBMIT_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => ipKey(req.ip),
   skip: isBypassed,
   handler: handler('REKRUTMEN'),
 });
@@ -48,7 +49,7 @@ const rekrutmenStatusLimiter = rateLimit({
   max: STATUS_MAX,
   standardHeaders: true,
   legacyHeaders: false,
-  keyGenerator: (req) => req.ip,
+  keyGenerator: (req) => ipKey(req.ip),
   skip: isBypassed,
   handler: handler('REKRUTMEN_STATUS'),
 });

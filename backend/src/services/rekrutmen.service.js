@@ -16,7 +16,7 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const bcrypt = require('bcryptjs');
+const { hashPin } = require('../utils/pinHash');
 const rekrutmenRepo = require('../repositories/rekrutmen.repository');
 const opRepo = require('../repositories/operasional.repository');
 const { logEvent } = require('../middleware/auditlog');
@@ -292,7 +292,7 @@ class RekrutmenService {
     const lokasi_id = str(body.lokasi_id, 40) || null;
     if (lokasi_id && !/^[0-9a-f-]{36}$/i.test(lokasi_id)) throw { status: 400, message: 'lokasi_id tidak valid' };
 
-    const pin_hash = await bcrypt.hash(PIN_AWAL_REKRUTMEN, BCRYPT_ROUNDS);
+    const pin_hash = await hashPin(PIN_AWAL_REKRUTMEN, BCRYPT_ROUNDS);
     const salinan = await this._salinBerkasKePersonil(p);
 
     const result = await rekrutmenRepo.jadikanAnggota(id, {
