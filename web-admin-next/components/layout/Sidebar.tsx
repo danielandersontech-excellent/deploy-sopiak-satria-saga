@@ -2,7 +2,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
-import { authApi, getUser, laporanHarianApi, laporanKejadianApi, panicApi, ROLE_MENUS } from "@/lib/api";
+import { authApi, getUser, laporanHarianApi, laporanKejadianApi, panicApi, rekrutmenApi, ROLE_MENUS } from "@/lib/api";
 import { onRealtimeEvent } from "@/lib/socketClient";
 import { useSettings } from "@/hooks/useSettings";
 
@@ -15,17 +15,21 @@ export function Sidebar({
 }) {
   const pathname = usePathname();
   const { isDark, toggleDark, lang, setLang, t } = useSettings();
-  const [counts, setCounts] = useState({ pending: 0, panic: 0 });
+  const [counts, setCounts] = useState({ pending: 0, panic: 0, rekrutmen: 0 });
   const refreshCounts = useCallback(async () => {
     try {
-      const [lh, lk, pa] = await Promise.all([
+      const role = getUser()?.role || "anggota";
+      const [lh, lk, pa, rk] = await Promise.all([
         laporanHarianApi.list("status=pending"),
         laporanKejadianApi.list("status=pending"),
         panicApi.list("status=active"),
+        // [Rekrutmen] badge pelamar baru — hanya admin/supervisor yang punya akses.
+        ["admin", "supervisor"].includes(role) ? rekrutmenApi.ringkasan().catch(() => null) : Promise.resolve(null),
       ]);
       setCounts({
         pending: (lh?.length || 0) + (lk?.length || 0),
         panic: pa?.length || 0,
+        rekrutmen: Number(rk?.baru) || 0,
       });
     } catch {}
   }, []);
@@ -38,6 +42,7 @@ export function Sidebar({
           "panic:alert",
           "panic:resolved",
           "stats:update",
+          "rekrutmen:new",
         ].includes(ev)
       )
         refreshCounts();
@@ -90,6 +95,12 @@ export function Sidebar({
             { p: "/lokasi", i: "fa-building", l: t("lokasi") },
             { p: "/clients", i: "fa-user-tie", l: "Klien" },
             { p: "/personil", i: "fa-users", l: t("personil") },
+            {
+              p: "/rekrutmen",
+              i: "fa-user-plus",
+              l: "Rekrutmen",
+              b: counts.rekrutmen || undefined,
+            },
           ],
         },
         {

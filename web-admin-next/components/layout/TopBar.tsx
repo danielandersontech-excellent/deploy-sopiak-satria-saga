@@ -9,6 +9,7 @@ const BREADCRUMB_MAP: Record<string, string> = {
   "/": "Dashboard",
   "/lokasi": "Lokasi",
   "/personil": "Personil",
+  "/rekrutmen": "Rekrutmen",
   "/absensi": "Absensi",
   "/patroli": "Patroli",
   "/laporan-harian": "Laporan Harian",

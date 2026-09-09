@@ -582,6 +582,56 @@ CREATE TABLE public.users (
 
 
 --
+-- Name: rekrutmen_pelamar; Type: TABLE; Schema: public; Owner: -
+-- Modul Rekrutmen (migrasi 008). Disalin ke skema dasar agar instalasi BARU
+-- (bootstrap memuat file ini lalu menandai semua migrasi sebagai applied)
+-- juga memiliki tabel ini. Definisi HARUS identik dengan migrasi 008.
+--
+
+CREATE TABLE IF NOT EXISTS public.rekrutmen_pelamar (
+    id uuid DEFAULT public.uuid_generate_v4() NOT NULL,
+    nomor_referensi text NOT NULL,
+    nik text NOT NULL,
+    nama text NOT NULL,
+    jenis_kelamin text DEFAULT 'L'::text NOT NULL,
+    tempat_lahir text,
+    tanggal_lahir date,
+    no_hp text NOT NULL,
+    email text,
+    alamat text,
+    pendidikan text,
+    tinggi_badan integer,
+    berat_badan integer,
+    pengalaman text,
+    posisi_dilamar text DEFAULT 'anggota'::text NOT NULL,
+    lokasi_preferensi text,
+    catatan text,
+    berkas jsonb DEFAULT '{}'::jsonb NOT NULL,
+    status text DEFAULT 'baru'::text NOT NULL,
+    catatan_admin text,
+    diproses_oleh uuid,
+    diproses_at timestamp with time zone,
+    user_id uuid,
+    idempotency_key text,
+    ip_address text,
+    user_agent text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT rekrutmen_pelamar_pkey PRIMARY KEY (id),
+    CONSTRAINT rekrutmen_pelamar_status_check CHECK ((status = ANY (ARRAY['baru'::text, 'diproses'::text, 'wawancara'::text, 'diterima'::text, 'ditolak'::text, 'dibatalkan'::text]))),
+    CONSTRAINT rekrutmen_pelamar_jk_check CHECK ((jenis_kelamin = ANY (ARRAY['L'::text, 'P'::text]))),
+    CONSTRAINT rekrutmen_pelamar_nik_check CHECK ((nik ~ '^[0-9]{16}$'::text)),
+    CONSTRAINT rekrutmen_pelamar_posisi_check CHECK ((posisi_dilamar = ANY (ARRAY['anggota'::text, 'komandan'::text])))
+);
+
+CREATE UNIQUE INDEX IF NOT EXISTS ux_rekrutmen_nomor ON public.rekrutmen_pelamar USING btree (nomor_referensi);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_rekrutmen_nik ON public.rekrutmen_pelamar USING btree (nik);
+CREATE UNIQUE INDEX IF NOT EXISTS ux_rekrutmen_idem ON public.rekrutmen_pelamar USING btree (idempotency_key) WHERE (idempotency_key IS NOT NULL);
+CREATE INDEX IF NOT EXISTS idx_rekrutmen_status ON public.rekrutmen_pelamar USING btree (status);
+CREATE INDEX IF NOT EXISTS idx_rekrutmen_created ON public.rekrutmen_pelamar USING btree (created_at DESC);
+
+
+--
 -- TOC entry 4838 (class 2604 OID 41308)
 -- Name: clients id; Type: DEFAULT; Schema: public; Owner: -
 --

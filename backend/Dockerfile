@@ -62,8 +62,11 @@ COPY backend/firebase-service-account.json* ./
 # can find migration files at /app/database/migrations/.
 COPY database/ ./database/
 
-# Required runtime directories (uploads/logs/backups)
-RUN mkdir -p uploads logs backups downloads && chown -R ptsss:ptsss /app
+# Required runtime directories (uploads/logs/backups/private-uploads).
+# private-uploads = berkas pelamar rekrutmen (volume backend_private_uploads),
+# sengaja di luar folder uploads yang dilayani express.static. Dibuat di image
+# dengan owner ptsss agar named volume yang baru dibuat mewarisi kepemilikannya.
+RUN mkdir -p uploads logs backups downloads private-uploads && chown -R ptsss:ptsss /app
 
 # P1-11: declare production explicitly so the running app (and any child
 # process spawned by it) picks up production behaviour. Placed BEFORE

@@ -47,8 +47,8 @@ export function setUser(u: any) {
 }
 
 export const ROLE_MENUS: Record<string, string[]> = {
-  admin:      ['/', '/live-map', '/lokasi', '/clients', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/backup', '/analytics', '/qr-generator'],
-  supervisor: ['/', '/live-map', '/lokasi', '/clients', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/analytics', '/qr-generator'],
+  admin:      ['/', '/live-map', '/lokasi', '/clients', '/personil', '/rekrutmen', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/backup', '/analytics', '/qr-generator'],
+  supervisor: ['/', '/live-map', '/lokasi', '/clients', '/personil', '/rekrutmen', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/checkpoint', '/routes', '/pos-jaga', '/jadwal', '/shift-assignment', '/broadcast', '/panic', '/export', '/analytics', '/qr-generator'],
   komandan:   ['/', '/live-map', '/personil', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima', '/geofence', '/broadcast', '/panic', '/export'],
   anggota:    ['/', '/absensi', '/patroli', '/laporan-harian', '/laporan-kejadian', '/serah-terima'],
   // P1-15 (tahap 5): klien restricted to read-only.
@@ -205,6 +205,40 @@ export const notifApi = crud('/api/data/notifikasi');
 export const reportExportsApi = crud('/api/data/report-exports');
 export const clientsApi = crud('/api/data/clients');
 export const dashboardApi = { stats: () => apiFetch('/api/data/dashboard/stats') };
+
+/**
+ * Unduh berkas ber-auth (cookie httpOnly) sebagai Blob — untuk berkas privat
+ * yang TIDAK dilayani express.static (mis. berkas pelamar rekrutmen).
+ * Meniru refresh-on-401 apiFetch, lalu mengembalikan object URL siap dibuka.
+ */
+export async function apiFetchBlobUrl(endpoint: string): Promise<string> {
+  const init: RequestInit = { method: 'GET', credentials: 'include' };
+  let res = await fetch(`${API_URL}${endpoint}`, init);
+  if (res.status === 401) {
+    const refreshed = await tryRefresh();
+    if (refreshed) res = await fetch(`${API_URL}${endpoint}`, init);
+  }
+  if (!res.ok) {
+    let msg = `HTTP ${res.status}`;
+    try { const j = await res.json(); if (j?.error) msg = j.error; } catch { /* bukan JSON */ }
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}
+
+// [Rekrutmen] Pelamar dari formulir publik website /karir.
+export const rekrutmenApi = {
+  list: (params = '') => apiFetch(`/api/rekrutmen${params ? '?' + params : ''}`),
+  ringkasan: () => apiFetch('/api/rekrutmen/ringkasan'),
+  get: (id: string) => apiFetch(`/api/rekrutmen/${id}`),
+  ubahStatus: (id: string, status: string, catatan_admin?: string) =>
+    apiFetch(`/api/rekrutmen/${id}/status`, { method: 'PUT', body: { status, catatan_admin: catatan_admin || null } }),
+  jadikanAnggota: (id: string, data: { lokasi_id?: string | null; shift?: string; role?: string }) =>
+    apiFetch(`/api/rekrutmen/${id}/jadikan-anggota`, { method: 'POST', body: data }),
+  del: (id: string) => apiFetch(`/api/rekrutmen/${id}`, { method: 'DELETE' }),
+  berkasBlobUrl: (id: string, jenis: string) => apiFetchBlobUrl(`/api/rekrutmen/${id}/berkas/${jenis}`),
+};
 
 export const geofenceApi = {
   liveMap: (lokasiId?: string) => apiFetch(`/api/geofence/live-map${lokasiId ? '?lokasi_id=' + lokasiId : ''}`),

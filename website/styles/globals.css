@@ -1790,3 +1790,180 @@ button { font-family: var(--font-body); cursor: pointer; }
   .pf-flow-num { width: 44px; height: 44px; font-size: 13px; }
   .pf-closing { padding: 86px 0; }
 }
+/* ══════════════════════════════════════════════════════════════
+   [Rekrutmen] HALAMAN /karir — formulir lamaran publik
+   Prefiks .kr-* ; mengikuti design system Tactical Luxury & .pf-* (profil).
+   Addition-only: tidak mengubah aturan sebelumnya.
+   ══════════════════════════════════════════════════════════════ */
+
+/* ─── Info posisi / syarat / alur ─── */
+.kr-info-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 44px; align-items: start; }
+.kr-posisi-list { display: flex; flex-direction: column; gap: 14px; margin-top: 8px; }
+.kr-posisi-card {
+  display: flex; gap: 16px; align-items: flex-start;
+  padding: 20px 22px; border-radius: 16px;
+  background: var(--navy-card); border: 1px solid var(--border-subtle);
+  transition: border-color .25s ease, transform .25s ease;
+}
+.kr-posisi-card:hover { border-color: var(--border-glow); transform: translateY(-3px); }
+.kr-posisi-icon {
+  flex-shrink: 0; width: 46px; height: 46px; border-radius: 12px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,180,216,.1); border: 1px solid rgba(0,180,216,.22);
+}
+.kr-posisi-card h3 { font-family: var(--font-head); font-size: 16px; font-weight: 700; margin-bottom: 5px; }
+.kr-posisi-card p { color: var(--text-muted); font-size: 13.5px; line-height: 1.7; }
+.kr-syarat-card {
+  padding: 30px 28px; border-radius: 20px;
+  background: var(--navy-card); border: 1px solid var(--border-subtle);
+}
+.kr-syarat-list { list-style: none; display: flex; flex-direction: column; gap: 11px; margin-top: 16px; }
+.kr-syarat-list li { display: flex; gap: 10px; align-items: flex-start; color: var(--text-muted); font-size: 13.5px; line-height: 1.6; }
+.kr-syarat-list li svg { flex-shrink: 0; margin-top: 3px; }
+.kr-benefit-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.kr-langkah { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-top: 44px; }
+.kr-langkah-item {
+  display: flex; gap: 14px; align-items: flex-start;
+  padding: 20px; border-radius: 16px;
+  background: var(--navy-card); border: 1px solid var(--border-subtle);
+}
+.kr-langkah-num {
+  flex-shrink: 0; width: 40px; height: 40px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--font-head); font-weight: 800; font-size: 13px; color: var(--cyan-bright);
+  background: rgba(0,180,216,.08); border: 1px solid rgba(0,180,216,.3);
+}
+.kr-langkah-item h4 { font-family: var(--font-head); font-size: 14.5px; font-weight: 700; margin-bottom: 5px; }
+.kr-langkah-item p { color: var(--text-muted); font-size: 12.5px; line-height: 1.65; }
+
+/* ─── Formulir ─── */
+.kr-form { display: flex; flex-direction: column; gap: 18px; max-width: 960px; }
+.kr-card {
+  background: var(--glass-bg); backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border); border-radius: 20px; padding: 28px;
+}
+.kr-card-title {
+  font-family: var(--font-head); font-size: 16px; font-weight: 800; color: #fff;
+  margin-bottom: 18px; display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.kr-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; }
+.kr-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px 16px; }
+.kr-span-2 { grid-column: span 2; }
+.kr-span-3 { grid-column: span 3; }
+.kr-field { display: flex; flex-direction: column; min-width: 0; }
+.kr-field > label { font-size: 12px; font-weight: 700; color: var(--text-muted); letter-spacing: .3px; margin-bottom: 7px; }
+.kr-field .form-input { margin-bottom: 0; }
+.kr-field select.form-input { appearance: auto; }
+.kr-field input[type="date"].form-input { color-scheme: dark; }
+.kr-hint { font-size: 11.5px; color: var(--text-dim); font-weight: 500; }
+.kr-field .kr-hint { margin-top: 5px; text-align: right; }
+.kr-err { display: block; margin-top: 6px; font-size: 12px; font-weight: 600; color: var(--red); }
+.kr-input-wrap { position: relative; }
+.kr-input-wrap .form-input { padding-right: 56px; }
+.kr-live {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  display: inline-flex; align-items: center; font-size: 11px; font-weight: 700;
+}
+.kr-live.ok { color: var(--green); }
+.kr-live.bad { color: var(--amber); }
+.kr-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.kr-chip {
+  padding: 11px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 600;
+  border: 1.5px solid rgba(255,255,255,.08); background: rgba(255,255,255,.03); color: var(--text-muted);
+  transition: all .2s;
+}
+.kr-chip.active { border-color: var(--cyan); color: #fff; background: rgba(0,180,216,.12); }
+
+/* Honeypot: disembunyikan tanpa display:none agar bot naif tetap "melihatnya". */
+.kr-hp { position: absolute; left: -10000px; top: auto; width: 1px; height: 1px; overflow: hidden; opacity: 0; }
+
+/* ─── Berkas ─── */
+.kr-files { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.kr-file {
+  padding: 14px 16px; border-radius: 14px;
+  background: rgba(255,255,255,.02); border: 1px dashed rgba(255,255,255,.14);
+  transition: border-color .2s;
+}
+.kr-file.has-file { border-style: solid; border-color: rgba(0,200,150,.35); background: rgba(0,200,150,.04); }
+.kr-file.has-err { border-color: rgba(255,71,87,.5); }
+.kr-file-head { display: flex; justify-content: space-between; gap: 10px; align-items: baseline; margin-bottom: 10px; flex-wrap: wrap; }
+.kr-file-label { font-size: 13px; font-weight: 700; color: #fff; }
+.kr-file-drop {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 12px; border-radius: 10px; cursor: pointer;
+  background: rgba(0,180,216,.06); border: 1px solid rgba(0,180,216,.15);
+  color: var(--cyan-light); font-size: 13px; font-weight: 600; transition: background .2s;
+}
+.kr-file-drop:hover { background: rgba(0,180,216,.12); }
+.kr-file-drop input { display: none; }
+.kr-file-picked { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.kr-file-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; color: #fff; }
+.kr-file-remove {
+  flex-shrink: 0; width: 30px; height: 30px; border-radius: 8px; border: 1px solid rgba(255,71,87,.3);
+  background: rgba(255,71,87,.08); color: var(--red); display: inline-flex; align-items: center; justify-content: center;
+}
+.kr-check { display: flex; gap: 12px; align-items: flex-start; font-size: 13.5px; color: var(--text-muted); line-height: 1.65; cursor: pointer; }
+.kr-check input { margin-top: 4px; width: 16px; height: 16px; accent-color: var(--cyan); flex-shrink: 0; }
+.form-submit:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
+.kr-alert {
+  display: flex; gap: 10px; align-items: flex-start; margin-top: 16px;
+  padding: 13px 16px; border-radius: 12px; font-size: 13.5px; line-height: 1.6;
+}
+.kr-alert svg { flex-shrink: 0; margin-top: 2px; }
+.kr-alert-danger { background: rgba(255,71,87,.08); border: 1px solid rgba(255,71,87,.25); color: #ffb3ba; }
+.kr-alert-warn { background: rgba(255,170,51,.08); border: 1px solid rgba(255,170,51,.28); color: #ffd28a; }
+.kr-alert-ok { background: rgba(0,200,150,.08); border: 1px solid rgba(0,200,150,.3); color: #c6f5e6; }
+@keyframes kr-spin { to { transform: rotate(360deg); } }
+.kr-spin { animation: kr-spin 1s linear infinite; }
+
+/* ─── Sukses ─── */
+.kr-success {
+  max-width: 640px; margin: 0 auto; text-align: center;
+  padding: 44px 36px; border-radius: 22px;
+  background: var(--navy-card); border: 1px solid rgba(0,200,150,.28);
+}
+.kr-success-icon {
+  width: 76px; height: 76px; border-radius: 50%; margin: 0 auto 18px;
+  display: flex; align-items: center; justify-content: center;
+  background: rgba(0,200,150,.1); border: 1px solid rgba(0,200,150,.3);
+}
+.kr-success h2 { font-family: var(--font-head); font-size: clamp(22px, 3vw, 30px); font-weight: 800; margin-bottom: 10px; }
+.kr-success p { color: var(--text-muted); font-size: 15px; line-height: 1.75; }
+.kr-ref {
+  display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap;
+  margin: 22px 0 18px;
+}
+.kr-ref code {
+  font-family: var(--font-head); font-size: clamp(20px, 3.5vw, 30px); font-weight: 800; letter-spacing: 2px;
+  color: var(--gold-light); padding: 12px 22px; border-radius: 14px;
+  background: rgba(212,168,83,.08); border: 1px dashed rgba(212,168,83,.5);
+}
+.kr-success-note {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  padding: 14px 16px; border-radius: 12px; font-size: 13px; color: var(--text-muted); line-height: 1.65;
+  background: rgba(212,168,83,.06); border: 1px solid rgba(212,168,83,.2);
+}
+.kr-success-note svg { flex-shrink: 0; margin-top: 2px; }
+
+/* ─── Cek status ─── */
+.kr-cek-card {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 40px; align-items: center;
+  padding: 36px; border-radius: 22px;
+  background: var(--navy-card); border: 1px solid var(--border-subtle);
+}
+.kr-cek-form { display: flex; flex-direction: column; gap: 4px; }
+.kr-cek-form .form-input { margin-bottom: 8px; }
+
+/* ─── Responsive ─── */
+@media (max-width: 1024px) {
+  .kr-info-grid, .kr-cek-card { grid-template-columns: 1fr; gap: 28px; }
+  .kr-langkah { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 640px) {
+  .kr-grid-2, .kr-grid-3, .kr-files, .kr-benefit-grid, .kr-langkah { grid-template-columns: 1fr; }
+  .kr-span-2, .kr-span-3 { grid-column: span 1; }
+  .kr-card { padding: 20px 16px; border-radius: 16px; }
+  .kr-cek-card { padding: 24px 18px; }
+  .kr-success { padding: 30px 18px; }
+  .kr-syarat-card { padding: 22px 18px; }
+}

@@ -54,6 +54,8 @@ const REALTIME_EVENTS = [
   'geofence:warning',
   'geofence:outside_permitted',
   'geofence:returned',
+  // [Rekrutmen] lamaran baru dari website → badge sidebar & halaman /rekrutmen.
+  'rekrutmen:new',
   // [5-2] DIHAPUS: 'laporan:validated' & 'user:status' — TIDAK pernah di-emit
   // backend (validasi via FCM; status via 'user:location'). Listener mati dibuang.
 ];

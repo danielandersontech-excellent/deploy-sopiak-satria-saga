@@ -9,6 +9,8 @@ import {
   UserCheck, Footprints, Crown, Trees,
   Radar, LayoutDashboard, FileCheck2, Handshake, Landmark, HeartPulse,
   Wallet, ClipboardList, Server, Banknote, ShoppingBag,
+  // [Rekrutmen] ikon halaman /karir
+  UserRoundCheck, UsersRound, GraduationCap, BadgeDollarSign, Stethoscope, TrendingUp,
   type LucideIcon,
 } from 'lucide-react'
 
@@ -133,7 +135,44 @@ export const NAV_LINKS = [
   { label: 'Layanan', href: '/#layanan' },
   { label: 'Teknologi', href: '/#teknologi' },
   { label: 'Keunggulan', href: '/#keunggulan' },
+  { label: 'Karir', href: '/karir' },
   { label: 'Kontak', href: '/#kontak' },
+]
+
+/* ══════════════════════════════════════════════════════════════
+   [Rekrutmen] Konten halaman /karir — posisi, persyaratan umum,
+   manfaat, dan alur seleksi. Nilai konkret (gaji, dsb.) sengaja tidak
+   dicantumkan agar tidak menjadi janji yang tidak resmi.
+   ══════════════════════════════════════════════════════════════ */
+
+export const KARIR_POSISI = [
+  { kode: 'anggota', Icon: UserRoundCheck, title: 'Anggota Satpam', desc: 'Penjagaan pos, patroli checkpoint QR, absensi selfie GPS, dan pelaporan digital harian di lokasi klien.' },
+  { kode: 'komandan', Icon: UsersRound, title: 'Komandan Regu (Danru)', desc: 'Memimpin regu di satu lokasi, memvalidasi laporan anggota, koordinasi dengan klien dan supervisor.' },
+]
+
+export const KARIR_SYARAT = [
+  'WNI, usia 18–55 tahun, sehat jasmani dan rohani',
+  'Pendidikan minimal SMA/SMK atau sederajat',
+  'Memiliki KTP, ijazah, dan SKCK yang masih berlaku',
+  'Disiplin, jujur, berintegritas, dan siap bekerja dalam sistem shift',
+  'Diutamakan memiliki sertifikat Gada Pratama / pengalaman keamanan',
+  'Mampu mengoperasikan aplikasi Android (absensi, patroli, laporan)',
+]
+
+export const KARIR_BENEFIT = [
+  { Icon: BadgeDollarSign, title: 'Gaji & Tunjangan Tepat Waktu' },
+  { Icon: HeartPulse, title: 'BPJS Ketenagakerjaan' },
+  { Icon: GraduationCap, title: 'Pelatihan Berjenjang' },
+  { Icon: Stethoscope, title: 'Perlengkapan & Seragam' },
+  { Icon: TrendingUp, title: 'Jenjang Karir Jelas' },
+  { Icon: ShieldCheck, title: 'Sertifikasi Satpam' },
+]
+
+export const KARIR_LANGKAH = [
+  { title: 'Daftar Online', desc: 'Isi formulir dan unggah berkas. Anda langsung menerima nomor referensi.' },
+  { title: 'Seleksi Administrasi', desc: 'Tim HR meninjau kelengkapan dan keabsahan berkas (1–7 hari kerja).' },
+  { title: 'Wawancara & Tes Fisik', desc: 'Kandidat terpilih dihubungi via WhatsApp untuk jadwal wawancara di kantor Pekanbaru.' },
+  { title: 'Pelatihan & Penempatan', desc: 'Pembekalan SOP dan aplikasi, lalu penempatan di lokasi klien sesuai kebutuhan.' },
 ]
 
 /* ══════════════════════════════════════════════════════════════

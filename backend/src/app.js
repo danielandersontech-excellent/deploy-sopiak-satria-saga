@@ -127,7 +127,11 @@ app.use(sanitizeMiddleware);
 // di-bypass oleh skip mechanism.
 // API authenticated: 200 request / menit PER USER (berdasarkan JWT user ID).
 // API unauthenticated: 200 / menit per IP (fallback).
-const RATE_LIMIT_SECRET = process.env.RATE_LIMIT_BYPASS_SECRET || '__test_bypass__';
+//
+// Bypass header `X-Skip-Rate-Limit` kini fail-CLOSED lewat utils/rateLimitBypass:
+// sebelumnya fallback '__test_bypass__' aktif bila env RATE_LIMIT_BYPASS_SECRET
+// kosong (kondisi produksi) → siapa pun bisa melewati limiter login/refresh.
+const { isBypassed } = require('./utils/rateLimitBypass');
 
 app.use('/api/auth/login', rateLimit({
   windowMs: 15 * 60 * 1000, // 15 menit
@@ -136,7 +140,7 @@ app.use('/api/auth/login', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
-  skip: (req) => req.headers['x-skip-rate-limit'] === RATE_LIMIT_SECRET,
+  skip: isBypassed,
 }));
 
 // Tahap 10 (P3-6): dedicated rate limiter for refresh endpoint.
@@ -152,7 +156,7 @@ app.use('/api/auth/refresh', rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => req.ip,
-  skip: (req) => req.headers['x-skip-rate-limit'] === RATE_LIMIT_SECRET,
+  skip: isBypassed,
 }));
 
 // General API rate limit - per user (authenticated) atau per IP (unauthenticated)
@@ -207,6 +211,10 @@ app.use('/api/export', require('./routes/export.routes'));
 app.use('/api/geofence', require('./routes/geofence.routes'));
 app.use('/api/audit-log', require('./routes/auditlog.routes'));
 app.use('/api/backup', require('./routes/backup.routes'));
+// Modul Rekrutmen: formulir publik /karir + pengelolaan pelamar di web-admin.
+// Berkas pelamar disimpan di PRIVATE_UPLOAD_DIR (bukan di bawah /uploads
+// statis) — SENGAJA tidak ada express.static untuk folder itu.
+app.use('/api/rekrutmen', require('./routes/rekrutmen.routes'));
 
 // Health check (includes Socket.io stats)
 const { getOnlineCount } = require('./realtime/socketio');

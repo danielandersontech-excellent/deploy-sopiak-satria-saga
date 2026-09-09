@@ -71,6 +71,7 @@ export default function Footer() {
             <Link href="/#layanan">Layanan Kami</Link>
             <Link href="/#teknologi">Teknologi</Link>
             <Link href="/#keunggulan">Keunggulan</Link>
+            <Link href="/karir">Karir &amp; Rekrutmen</Link>
             <Link href="/#kontak">Hubungi Kami</Link>
           </div>
 

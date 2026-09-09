@@ -19,13 +19,11 @@
  */
 const rateLimit = require('express-rate-limit');
 const { logger } = require('../utils/logger');
+// Bypass fail-closed (lihat utils/rateLimitBypass.js) — sama dengan app.js.
+const { isBypassed } = require('../utils/rateLimitBypass');
 
 const WINDOW_MS = parseInt(process.env.UPLOAD_RATE_WINDOW_MS || '') || 15 * 60 * 1000;
 const MAX_UPLOADS = parseInt(process.env.UPLOAD_RATE_MAX || '') || 30;
-
-// Bypass secret yang sama dengan rate limit lain di app.js, supaya developer
-// bisa testing batch upload tanpa kena lock.
-const RATE_LIMIT_SECRET = process.env.RATE_LIMIT_BYPASS_SECRET || '__test_bypass__';
 
 const uploadLimiter = rateLimit({
   windowMs: WINDOW_MS,
@@ -36,7 +34,7 @@ const uploadLimiter = rateLimit({
   // req.ip mencerminkan IP klien asli (bukan IP container internal),
   // jadi rate limit per-IP berfungsi dengan benar.
   keyGenerator: (req) => req.ip,
-  skip: (req) => req.headers['x-skip-rate-limit'] === RATE_LIMIT_SECRET,
+  skip: isBypassed,
   // Custom handler supaya bisa nge-log dan pakai pesan Indonesia yang
   // konsisten dengan endpoint lain (login, general API).
   handler: (req, res /* , next, options */) => {
