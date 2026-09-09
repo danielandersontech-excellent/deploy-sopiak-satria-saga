@@ -86,6 +86,16 @@ exports.createHarian = async (req, res) => {
   } catch (e) { res.status(e.status || 500).json({ error: e.message }); }
 };
 
+// [Misi V3 / C2] PUT /api/laporan/harian/validate-bulk  { ids: [], status, catatan }
+exports.validateHarianBulk = async (req, res) => {
+  try { res.json(await laporanService.validateBulk('harian', req.body.ids, req.user, req.body)); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+};
+exports.validateKejadianBulk = async (req, res) => {
+  try { res.json(await laporanService.validateBulk('kejadian', req.body.ids, req.user, req.body)); }
+  catch (e) { res.status(e.status || 500).json({ error: e.message }); }
+};
+
 exports.validateHarian = async (req, res) => {
   try {
     const result = await laporanService.validateHarian(req.params.id, req.user, req.body);

@@ -23,6 +23,8 @@
 const opRepo = require('../repositories/operasional.repository');
 const { emitToAll, emitToRole, emitToLokasi, emitToUser } = require('../realtime/socketio');
 const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
+const { queryAll } = require('../config/database');
+const { logger } = require('../utils/logger');
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HIGH_ROLES = ['komandan', 'supervisor', 'admin'];
@@ -63,7 +65,31 @@ class OperasionalService {
     } else {
       emitToAll('broadcast:new', payload);
     }
+    // [Misi V3 / D3] Notifikasi in-app persisten (event socket hilang bila
+    // penerima offline). Broadcast ber-lokasi → hanya user di lokasi itu
+    // (per-user, agar tidak bocor lintas lokasi); global → per peran.
+    this._notifyBroadcast(row, user).catch((e) => logger.warn(`[Broadcast] notifikasi gagal: ${e.message}`));
     return row;
+  }
+
+  async _notifyBroadcast(row, user) {
+    if (!row) return;
+    const roles = row.target === 'all' ? ['anggota', 'komandan', 'supervisor', 'admin'] : [row.target];
+    const notif = {
+      tipe: row.prioritas === 'urgent' ? 'warning' : 'info',
+      judul: `${row.prioritas === 'urgent' ? 'Broadcast Mendesak' : 'Broadcast'}: ${row.judul}`,
+      pesan: `${String(row.pesan || '').slice(0, 300)} — ${user.nama || 'Komando'}`,
+      data: { entity: 'broadcast', id: row.id, lokasi_id: row.lokasi_id || null, path: '/broadcast' },
+    };
+    if (row.lokasi_id) {
+      const rows = await queryAll(
+        `SELECT id FROM users WHERE lokasi_id = $1 AND role = ANY($2::text[]) AND status_penempatan IS DISTINCT FROM 'nonaktif' AND id <> $3`,
+        [row.lokasi_id, roles, user.id]
+      );
+      await opRepo.createNotifikasiForUsers(rows.map((r) => r.id), notif);
+    } else {
+      await opRepo.createNotifikasi({ ...notif, target_role: roles });
+    }
   }
 
   // Serah Terima
@@ -106,6 +132,13 @@ class OperasionalService {
     emitToRole(['supervisor', 'admin', 'komandan'], 'panic:alert', payload);
     if (lokasi_id) emitToLokasi(lokasi_id, 'panic:alert', payload);
     emitToUser(user.id, 'panic:alert', payload);
+    // [Misi V3 / D3] Notifikasi persisten ke komando (klik → halaman Panic).
+    opRepo.createNotifikasi({
+      tipe: 'danger', judul: `PANIC: ${user.nama || user.nrp || 'Personil'}`,
+      pesan: `Tombol darurat ditekan${row.lokasi_nama ? ` di ${row.lokasi_nama}` : ''}. Segera tindak lanjuti.`,
+      target_role: ['komandan', 'supervisor', 'admin'],
+      data: { entity: 'panic', id: row.id, lokasi_id: lokasi_id || null, path: '/panic' },
+    }).catch((e) => logger.warn(`[Panic] notifikasi gagal: ${e.message}`));
     return row;
   }
   async resolvePanic(id, user, status, catatan) {
@@ -132,6 +165,13 @@ class OperasionalService {
     emitToRole(['supervisor', 'admin', 'komandan'], 'panic:resolved', payload);
     if (row.lokasi_id) emitToLokasi(row.lokasi_id, 'panic:resolved', payload);
     if (row.user_id) emitToUser(row.user_id, 'panic:resolved', payload);
+    if (row.user_id && row.user_id !== user.id) {
+      opRepo.createNotifikasi({
+        tipe: 'success', judul: status === 'false_alarm' ? 'Panic ditandai alarm palsu' : 'Panic Anda telah ditangani',
+        pesan: `Ditangani oleh ${user.nama || 'komando'}${catatan ? `: ${String(catatan).slice(0, 200)}` : '.'}`,
+        target_user_id: row.user_id, data: { entity: 'panic', id: row.id, path: '/panic' },
+      }).catch((e) => logger.warn(`[Panic] notifikasi resolve gagal: ${e.message}`));
+    }
     return row;
   }
 

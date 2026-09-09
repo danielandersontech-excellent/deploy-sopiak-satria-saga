@@ -27,6 +27,11 @@
 const laporanRepo = require('../repositories/laporan.repository');
 const { logEvent } = require('../middleware/auditlog');
 const { emitToAll, emitToRole, emitToLokasi, emitToUser } = require('../realtime/socketio');
+// [Misi V3 / D3] notifikasi in-app persisten untuk pelapor saat laporannya divalidasi.
+const opRepo = require('../repositories/operasional.repository');
+const { logger } = require('../utils/logger');
+const UUID_RE_BULK = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const BULK_MAX = 100;
 const { getScopeFilter, applyLokasiScope } = require('../utils/scope');
 
 const VALID_STATUS = ['approved', 'revision', 'rejected'];
@@ -100,8 +105,65 @@ class LaporanService {
     const row = await laporanRepo.validateHarian(id, data.status, data.catatan || null, user.id);
     if (!row) throw { status: 404, message: 'Laporan tidak ditemukan' };
     logEvent(user.id, user.nama || '', 'VALIDATE', 'laporan_harian', id, { status: data.status }).catch(() => {});
-    if (row.user_id) emitToUser(row.user_id, 'laporan:validated', { type: 'harian', id: row.id, status: row.status, catatan: row.catatan_komandan });
+    this._afterValidated('harian', row, user);
     return row;
+  }
+
+  /**
+   * [Misi V3 / D3] Setelah validasi: event realtime ke pelapor + notifikasi
+   * in-app persisten (tipe/judul seragam, `data` menunjuk entitas terkait agar
+   * klik notifikasi bisa membuka laporannya di web-admin/mobile).
+   */
+  _afterValidated(type, row, user) {
+    if (!row || !row.user_id) return;
+    const table = type === 'harian' ? 'laporan_harian' : 'laporan_kejadian';
+    const label = type === 'harian' ? 'Laporan Harian' : 'Laporan Kejadian';
+    emitToUser(row.user_id, 'laporan:validated', { type, id: row.id, status: row.status, catatan: row.catatan_komandan });
+    const tipe = row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning';
+    const judul = `${label} ${row.status === 'approved' ? 'Disetujui' : row.status === 'rejected' ? 'Ditolak' : 'Perlu Revisi'}`;
+    const pesan = row.catatan_komandan
+      ? `Catatan ${user && user.nama ? user.nama : 'komandan'}: ${String(row.catatan_komandan).slice(0, 300)}`
+      : `${label} Anda telah ${row.status === 'approved' ? 'disetujui' : row.status === 'rejected' ? 'ditolak' : 'diminta revisi'} oleh ${user && user.nama ? user.nama : 'komandan'}.`;
+    opRepo.createNotifikasi({
+      tipe, judul, pesan, target_user_id: row.user_id,
+      data: { entity: table, id: row.id, status: row.status, path: type === 'harian' ? '/laporan-harian' : '/laporan-kejadian' },
+    }).catch((e) => logger.warn(`[Laporan] Gagal membuat notifikasi validasi: ${e.message}`));
+  }
+
+  /**
+   * [Misi V3 / C2] Validasi massal (checkbox di web-admin). Tiap laporan tetap
+   * melewati pemeriksaan scope & status yang sama dengan validasi tunggal —
+   * komandan tetap yang memutuskan, sistem hanya mempercepat aksinya.
+   * Mengembalikan rincian per id agar UI bisa menampilkan yang gagal.
+   */
+  async validateBulk(type, ids, user, data = {}) {
+    if (!VALID_STATUS.includes(data.status)) throw { status: 400, message: 'Status tidak valid' };
+    if (!Array.isArray(ids) || ids.length === 0) throw { status: 400, message: 'Pilih minimal satu laporan' };
+    if (ids.length > BULK_MAX) throw { status: 400, message: `Maksimal ${BULK_MAX} laporan per aksi massal` };
+    const unik = [...new Set(ids.map((x) => String(x)))];
+    if (unik.some((x) => !UUID_RE_BULK.test(x))) throw { status: 400, message: 'ID laporan tidak valid' };
+    if (data.status !== 'approved' && !(data.catatan && String(data.catatan).trim())) {
+      throw { status: 400, message: 'Catatan wajib diisi untuk revisi/penolakan massal' };
+    }
+    const table = type === 'harian' ? 'laporan_harian' : 'laporan_kejadian';
+    const hasil = [];
+    for (const id of unik) {
+      try {
+        await this._assertCanValidate(table, id, user);
+        const row = type === 'harian'
+          ? await laporanRepo.validateHarian(id, data.status, data.catatan || null, user.id)
+          : await laporanRepo.validateKejadian(id, data.status, data.catatan || null, user.id);
+        if (!row) throw { status: 404, message: 'Laporan tidak ditemukan' };
+        this._afterValidated(type, row, user);
+        hasil.push({ id, ok: true });
+      } catch (e) {
+        hasil.push({ id, ok: false, error: (e && e.message) || 'Gagal' });
+      }
+    }
+    const berhasil = hasil.filter((h) => h.ok).length;
+    logEvent(user.id, user.nama || '', 'VALIDATE_BULK', table, null, { status: data.status, diminta: unik.length, berhasil }).catch(() => {});
+    if (berhasil > 0) emitToAll('stats:update', { type: 'laporan' });
+    return { berhasil, gagal: hasil.length - berhasil, hasil };
   }
 
   // ====== KEJADIAN ======
@@ -145,7 +207,7 @@ class LaporanService {
     const row = await laporanRepo.validateKejadian(id, data.status, data.catatan || null, user.id);
     if (!row) throw { status: 404, message: 'Laporan tidak ditemukan' };
     logEvent(user.id, user.nama || '', 'VALIDATE', 'laporan_kejadian', id, { status: data.status }).catch(() => {});
-    if (row.user_id) emitToUser(row.user_id, 'laporan:validated', { type: 'kejadian', id: row.id, status: row.status, catatan: row.catatan_komandan });
+    this._afterValidated('kejadian', row, user);
     return row;
   }
 }

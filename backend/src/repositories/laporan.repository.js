@@ -52,9 +52,18 @@ function buildCommon(filters, alias, params) {
   }
   if (filters.start_date && DATE_RE.test(filters.start_date)) { params.push(filters.start_date); where += ` AND ${alias}.created_at >= $${params.length}::date`; }
   if (filters.end_date && DATE_RE.test(filters.end_date)) { params.push(filters.end_date); where += ` AND ${alias}.created_at < ($${params.length}::date + INTERVAL '1 day')`; }
+  // [Misi V3 / C2] umur minimal laporan (hari) — filter "Pending > 30 hari".
+  const minAge = parseInt(filters.min_age_days, 10);
+  if (Number.isFinite(minAge) && minAge > 0 && minAge <= 3650) {
+    params.push(String(minAge));
+    where += ` AND ${alias}.created_at < NOW() - ($${params.length} || ' days')::interval`;
+  }
   where += buildLokasiClause(filters, 'u.lokasi_id', params);
   return where;
 }
+
+// [Misi V3 / C2] umur laporan dalam hari (kolom turunan untuk penanda "Pending N hari").
+const UMUR_SQL = (alias) => `GREATEST(0, FLOOR(EXTRACT(EPOCH FROM (NOW() - ${alias}.created_at)) / 86400))::int AS umur_hari`;
 
 class LaporanRepository {
   // ====== HARIAN ======
@@ -75,7 +84,7 @@ class LaporanRepository {
     const countResult = await queryOne(`SELECT COUNT(*)::int as total ${baseFrom} ${where}`, params);
     const dataParams = [...params, limit, offset];
     const rows = await queryAll(
-      `SELECT lh.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama
+      `SELECT lh.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama, ${UMUR_SQL('lh')}
        ${baseFrom} LEFT JOIN lokasi l ON l.id = COALESCE(lh.lokasi_id, u.lokasi_id) LEFT JOIN users v ON v.id = lh.validated_by
        ${where} ORDER BY lh.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams
@@ -128,7 +137,7 @@ class LaporanRepository {
     const countResult = await queryOne(`SELECT COUNT(*)::int as total ${baseFrom} ${where}`, params);
     const dataParams = [...params, limit, offset];
     const rows = await queryAll(
-      `SELECT lk.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama
+      `SELECT lk.*, u.nama, u.nrp, u.foto_url AS user_foto_url, u.lokasi_id, l.nama AS lokasi_nama, v.nama AS validated_by_nama, ${UMUR_SQL('lk')}
        ${baseFrom} LEFT JOIN lokasi l ON l.id = COALESCE(lk.lokasi_id, u.lokasi_id) LEFT JOIN users v ON v.id = lk.validated_by
        ${where} ORDER BY lk.created_at DESC LIMIT $${dataParams.length - 1} OFFSET $${dataParams.length}`,
       dataParams
@@ -170,6 +179,32 @@ class LaporanRepository {
    * lokasi pelapor) + status saat ini — untuk pemeriksaan scope validasi.
    * `table` hanya boleh 'laporan_harian' | 'laporan_kejadian'.
    */
+  /**
+   * [Misi V3 / C2] Rekap laporan pending berumur > `days` hari per lokasi
+   * (harian + kejadian) — dipakai job pengingat harian ke komandan.
+   */
+  async findPendingLamaPerLokasi(days = 30) {
+    const d = String(Math.max(1, parseInt(days, 10) || 30));
+    return queryAll(
+      `SELECT lokasi_id, l.nama AS lokasi_nama, SUM(jumlah)::int AS jumlah, MIN(tertua) AS tertua
+         FROM (
+           SELECT COALESCE(lh.lokasi_id, u.lokasi_id) AS lokasi_id, COUNT(*) AS jumlah, MIN(lh.created_at) AS tertua
+             FROM laporan_harian lh LEFT JOIN users u ON u.id = lh.user_id
+            WHERE lh.status = 'pending' AND lh.created_at < NOW() - ($1 || ' days')::interval
+            GROUP BY 1
+           UNION ALL
+           SELECT COALESCE(lk.lokasi_id, u.lokasi_id) AS lokasi_id, COUNT(*) AS jumlah, MIN(lk.created_at) AS tertua
+             FROM laporan_kejadian lk LEFT JOIN users u ON u.id = lk.user_id
+            WHERE lk.status = 'pending' AND lk.created_at < NOW() - ($1 || ' days')::interval
+            GROUP BY 1
+         ) x LEFT JOIN lokasi l ON l.id = x.lokasi_id
+        WHERE x.lokasi_id IS NOT NULL
+        GROUP BY x.lokasi_id, l.nama
+        ORDER BY jumlah DESC`,
+      [d]
+    );
+  }
+
   async findLokasiOf(table, id) {
     if (!['laporan_harian', 'laporan_kejadian'].includes(table)) return null;
     return queryOne(

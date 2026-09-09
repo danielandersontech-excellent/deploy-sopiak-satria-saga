@@ -140,14 +140,52 @@ class OperasionalRepository {
   }
 
   // ===== NOTIFIKASI =====
+  // [Misi V3] Subjek klien ber-id 'client-<uuid>' (bukan uuid) → membandingkan
+  // dengan kolom uuid target_user_id memicu error Postgres → 500. Nilai non-uuid
+  // dinormalkan ke NULL sehingga klien hanya melihat notifikasi role/global.
+  _uid(userId) {
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(String(userId || '')) ? userId : null;
+  }
   async findNotifikasi(userId, role) {
     return queryAll(`SELECT * FROM notifikasi WHERE target_user_id = $1 OR $2 = ANY(target_role) OR target_user_id IS NULL
-       ORDER BY created_at DESC LIMIT 50`, [userId, role]);
+       ORDER BY created_at DESC LIMIT 50`, [this._uid(userId), role]);
   }
   async createNotifikasi(data) {
     const roleArr = Array.isArray(data.target_role) ? data.target_role : (data.target_role ? [data.target_role] : null);
     return queryOne(`INSERT INTO notifikasi (tipe, judul, pesan, target_user_id, target_role, data) VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
       [data.tipe || 'info', data.judul, data.pesan, data.target_user_id || null, roleArr, data.data ? JSON.stringify(data.data) : null]);
+  }
+  /**
+   * [Misi V3 / D3] Satu notifikasi untuk banyak user sekaligus (mis. broadcast
+   * ber-lokasi, pengingat komandan) — satu INSERT dengan unnest.
+   */
+  async createNotifikasiForUsers(userIds, data) {
+    const ids = [...new Set((userIds || []).filter(Boolean))];
+    if (ids.length === 0) return 0;
+    const r = await query(
+      `INSERT INTO notifikasi (tipe, judul, pesan, target_user_id, data)
+       SELECT $1, $2, $3, u, $4::jsonb FROM unnest($5::uuid[]) AS u`,
+      [data.tipe || 'info', data.judul, data.pesan || null, data.data ? JSON.stringify(data.data) : null, ids]
+    );
+    return r.rowCount;
+  }
+  /** [Misi V3 / D3] Hapus notifikasi lama: sudah dibaca > readDays, atau apa pun > allDays. */
+  async purgeOld(readDays, allDays) {
+    const r = await query(
+      `DELETE FROM notifikasi
+        WHERE (dibaca = true AND created_at < NOW() - ($1 || ' days')::interval)
+           OR created_at < NOW() - ($2 || ' days')::interval`,
+      [String(readDays), String(allDays)]
+    );
+    return r.rowCount;
+  }
+  /** [Misi V3 / C2] Apakah user sudah menerima pengingat berjenis `kind` hari ini. */
+  async hasNotifToday(userId, kind) {
+    const row = await queryOne(
+      `SELECT 1 FROM notifikasi WHERE target_user_id = $1 AND data->>'kind' = $2 AND created_at >= CURRENT_DATE LIMIT 1`,
+      [userId, kind]
+    );
+    return !!row;
   }
   async markRead(id) { return query('UPDATE notifikasi SET dibaca=true WHERE id=$1', [id]); }
   /**
@@ -159,12 +197,12 @@ class OperasionalRepository {
     const r = await query(
       `UPDATE notifikasi SET dibaca = true
         WHERE id = $1 AND (target_user_id = $2 OR $3 = ANY(target_role) OR target_user_id IS NULL)`,
-      [id, userId, role]
+      [id, this._uid(userId), role]
     );
     return r.rowCount > 0;
   }
   async markAllRead(userId, role) {
-    return query(`UPDATE notifikasi SET dibaca=true WHERE target_user_id=$1 OR $2=ANY(target_role) OR target_user_id IS NULL`, [userId, role]);
+    return query(`UPDATE notifikasi SET dibaca=true WHERE target_user_id=$1 OR $2=ANY(target_role) OR target_user_id IS NULL`, [this._uid(userId), role]);
   }
 }
 

@@ -47,7 +47,11 @@ class DashboardRepository {
     const bAbsensi = buildLokasiBits(lokasiArg, 'a.lokasi_id');
     const bLokasiId = buildLokasiBits(lokasiArg, 'id');
 
-    const [personil, onDuty, absensiToday, pendingLH, pendingLK, activePatrol, activePanic, totalLokasi, totalCheckpoints] = await Promise.all([
+    // [Misi V3 / C1-C2] peringatan dashboard: kontrak klien habis / ≤30 hari
+    // (hanya tampilan tak ter-scope lokasi = admin/supervisor) dan laporan
+    // pending > 30 hari (ter-scope). Tidak mengubah data apa pun.
+    const unrestricted = lokasiArg == null;
+    const [personil, onDuty, absensiToday, pendingLH, pendingLK, activePatrol, activePanic, totalLokasi, totalCheckpoints, kontrak, pendingLama] = await Promise.all([
       queryOne(`SELECT COUNT(*)::int as c FROM users u WHERE role IN ('anggota','komandan')${bUser.clause}`, bUser.params),
       queryOne(`SELECT COUNT(*)::int as c FROM users u WHERE status != 'off_duty' AND role IN ('anggota','komandan')${bUser.clause}`, bUser.params),
       queryOne(`SELECT COUNT(*)::int as c FROM absensi a WHERE DATE(a.created_at) = CURRENT_DATE${bAbsensi.clause}`, bAbsensi.params),
@@ -57,8 +61,16 @@ class DashboardRepository {
       queryOne(`SELECT COUNT(*)::int as c FROM panic_alerts WHERE status = 'active'${bDirect.clause}`, bDirect.params),
       queryOne(`SELECT COUNT(*)::int as c FROM lokasi WHERE status = 'active'${bLokasiId.clause}`, bLokasiId.params),
       queryOne(`SELECT COUNT(*)::int as c FROM checkpoints WHERE status = 'active'${bDirect.clause}`, bDirect.params),
+      unrestricted
+        ? queryOne(`SELECT COUNT(*) FILTER (WHERE tgl_habis_kontrak < CURRENT_DATE)::int AS habis,
+                           COUNT(*) FILTER (WHERE tgl_habis_kontrak >= CURRENT_DATE AND tgl_habis_kontrak <= CURRENT_DATE + 30)::int AS hampir
+                      FROM clients WHERE status_klien = 'Aktif' AND tgl_habis_kontrak IS NOT NULL`)
+        : Promise.resolve({ habis: 0, hampir: 0 }),
+      queryOne(`SELECT (SELECT COUNT(*) FROM laporan_harian WHERE status = 'pending' AND created_at < NOW() - INTERVAL '30 days'${bDirect.clause})::int
+                     + (SELECT COUNT(*) FROM laporan_kejadian WHERE status = 'pending' AND created_at < NOW() - INTERVAL '30 days'${bDirect.clause})::int AS c`, bDirect.params),
     ]);
     return {
+      kontrak_habis: kontrak.habis, kontrak_hampir_habis: kontrak.hampir, pending_lama: pendingLama.c,
       personil: personil.c, onDuty: onDuty.c, absensiToday: absensiToday.c,
       pendingLH: pendingLH.c, pendingLK: pendingLK.c, activePatrol: activePatrol.c, activePanic: activePanic.c,
       totalLokasi: totalLokasi.c, totalCheckpoints: totalCheckpoints.c,

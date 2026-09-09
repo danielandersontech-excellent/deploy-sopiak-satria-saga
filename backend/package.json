@@ -8,7 +8,9 @@
     "dev": "nodemon src/app.js",
     "seed": "node src/utils/seed.js",
     "seed:full": "node src/utils/seed-full.js",
-    "test": "jest --verbose --forceExit --runInBand"
+    "test": "jest --verbose --forceExit --runInBand",
+    "test:api": "node tests/api-smoke.js",
+    "lint": "eslint src --ext .js"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

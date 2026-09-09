@@ -20,9 +20,51 @@
  *
  * Nonaktifkan dengan MAINTENANCE_ENABLED=false.
  */
-const { query } = require('../config/database');
+const { query, queryAll } = require('../config/database');
 const { logger } = require('./logger');
 const patroliRepo = require('../repositories/patroli.repository');
+const laporanRepo = require('../repositories/laporan.repository');
+const opRepo = require('../repositories/operasional.repository');
+
+// [Misi V3 / C2] pengingat laporan pending lama ke komandan lokasi terkait.
+const PENDING_REMINDER_DAYS = parseInt(process.env.PENDING_REMINDER_DAYS || '30', 10) || 30;
+const PENDING_REMINDER_ENABLED = String(process.env.PENDING_REMINDER_ENABLED || 'true').toLowerCase() !== 'false';
+// [Misi V3 / D3] retensi notifikasi: sudah dibaca > 90 hari atau apa pun > 180 hari dihapus.
+const NOTIF_READ_RETENTION_DAYS = parseInt(process.env.NOTIF_READ_RETENTION_DAYS || '90', 10) || 90;
+const NOTIF_RETENTION_DAYS = parseInt(process.env.NOTIF_RETENTION_DAYS || '180', 10) || 180;
+
+/**
+ * Kirim satu notifikasi per komandan per hari untuk lokasi yang memiliki
+ * laporan pending berumur > PENDING_REMINDER_DAYS. Tidak mengubah laporan —
+ * keputusan validasi tetap di tangan komandan (klik notifikasi → filter
+ * "Pending > 30 hari" di web-admin/mobile).
+ */
+async function remindPendingLaporan() {
+  if (!PENDING_REMINDER_ENABLED) return 0;
+  const rekap = await laporanRepo.findPendingLamaPerLokasi(PENDING_REMINDER_DAYS);
+  let terkirim = 0;
+  for (const r of rekap) {
+    const komandan = await queryAll(
+      `SELECT id FROM users WHERE role = 'komandan' AND lokasi_id = $1 AND status_penempatan IS DISTINCT FROM 'nonaktif'`,
+      [r.lokasi_id]
+    );
+    if (komandan.length === 0) continue;
+    const umurTertua = r.tertua ? Math.floor((Date.now() - new Date(r.tertua).getTime()) / 86400000) : null;
+    const targets = [];
+    for (const k of komandan) {
+      if (!(await opRepo.hasNotifToday(k.id, 'pending_reminder'))) targets.push(k.id);
+    }
+    if (targets.length === 0) continue;
+    terkirim += await opRepo.createNotifikasiForUsers(targets, {
+      tipe: 'warning',
+      judul: `${r.jumlah} laporan menunggu validasi > ${PENDING_REMINDER_DAYS} hari`,
+      pesan: `${r.lokasi_nama || 'Lokasi Anda'}: ${r.jumlah} laporan masih berstatus menunggu${umurTertua != null ? ` (tertua ${umurTertua} hari)` : ''}. Mohon ditinjau dan divalidasi.`,
+      data: { kind: 'pending_reminder', entity: 'laporan_harian', lokasi_id: r.lokasi_id, jumlah: r.jumlah, min_age_days: PENDING_REMINDER_DAYS, path: `/laporan-harian?min_age_days=${PENDING_REMINDER_DAYS}&status=pending` },
+    });
+  }
+  if (terkirim > 0) logger.info(`[Maintenance] pengingat laporan pending lama terkirim ke ${terkirim} komandan`);
+  return terkirim;
+}
 
 const STALE_HOURS = parseInt(process.env.PATROLI_STALE_HOURS || '24', 10) || 24;
 const HISTORY_DAYS = parseInt(process.env.LOCATION_HISTORY_DAYS || '180', 10) || 180;
@@ -58,6 +100,14 @@ async function runMaintenance() {
     summary.location_history_dihapus = r.rowCount;
   } catch (e) { logger.warn(`[Maintenance] location_history: ${e.message}`); }
 
+  try {
+    summary.notifikasi_dihapus = await opRepo.purgeOld(NOTIF_READ_RETENTION_DAYS, NOTIF_RETENTION_DAYS);
+  } catch (e) { logger.warn(`[Maintenance] notifikasi lama: ${e.message}`); }
+
+  try {
+    summary.pengingat_pending = await remindPendingLaporan();
+  } catch (e) { logger.warn(`[Maintenance] pengingat laporan pending: ${e.message}`); }
+
   logger.info(`[Maintenance] Selesai: ${JSON.stringify(summary)}`);
   return summary;
 }
@@ -78,4 +128,4 @@ function scheduleMaintenance() {
   logger.info(`[Maintenance] Terjadwal (stale patroli > ${STALE_HOURS} jam, location_history > ${HISTORY_DAYS} hari, izin expired tiap ${IZIN_EXPIRE_MINUTES} menit)`);
 }
 
-module.exports = { runMaintenance, scheduleMaintenance, expireIzin };
+module.exports = { runMaintenance, scheduleMaintenance, expireIzin, remindPendingLaporan };

@@ -46,6 +46,7 @@ class DashboardService {
         total_personil: 0, on_duty: 0, absensi_today: 0,
         pending_laporan: 0, active_patroli: 0, active_panic: 0,
         total_lokasi: 0, total_checkpoints: 0,
+        kontrak_habis: 0, kontrak_hampir_habis: 0, pending_lama: 0,
         weekly_absensi: [], weekly_patroli: [], weekly_laporan: [],
         absensi_breakdown: [],
         patrol_completion: { total: 0, completed: 0, rate: 0 },
@@ -61,6 +62,8 @@ class DashboardService {
       total_personil: stats.personil, on_duty: stats.onDuty, absensi_today: stats.absensiToday,
       pending_laporan: stats.pendingLH + stats.pendingLK, active_patroli: stats.activePatrol,
       active_panic: stats.activePanic, total_lokasi: stats.totalLokasi, total_checkpoints: stats.totalCheckpoints,
+      // [Misi V3 / C1-C2] kartu peringatan dashboard
+      kontrak_habis: stats.kontrak_habis || 0, kontrak_hampir_habis: stats.kontrak_hampir_habis || 0, pending_lama: stats.pending_lama || 0,
       weekly_absensi: trends.absensi, weekly_patroli: trends.patroli, weekly_laporan: trends.laporan,
       absensi_breakdown: breakdown,
       patrol_completion: {
