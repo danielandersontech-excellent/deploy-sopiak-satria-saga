@@ -339,6 +339,8 @@ Backend uji lokal (port 3100) dan SSH tunnel (15432) dihentikan. Berkas uji loka
 
 ## 5. Perubahan mobile yang menunggu EAS build
 
+> **Pembaruan Misi V3 (9 Sep 2026 15:22 WIB):** EAS build Android profil `preview` dari commit `252b2a5` (mencakup `60f3e69` + seluruh perubahan mobile Misi V3) **selesai** — build: https://expo.dev/accounts/danielandersontech/projects/sopiak-satria-saga/builds/392c075d-2ba8-4e94-b0ac-cb2ec292f4f8 · APK: https://expo.dev/artifacts/eas/YOOJnX-3tpsA6DQ1RdkHH3VJRyrFxYoEpsGfS2EjONA.apk . Perubahan di bagian ini baru berlaku setelah APK dipasang di HP. Daftar uji tambahan di V3.11.
+
 Commit terpisah: **`60f3e69` `fix(mobile): audit 2D - … (menunggu EAS build)`** — 26 berkas di `src/`, +404/−85 baris, line ending per berkas dipertahankan. **Belum live**: Coolify tidak membangun aplikasi mobile; perubahan berlaku setelah EAS build & pembaruan di HP. Versi mobile lama tetap kompatibel dengan backend baru (bentuk respons array/flat dipertahankan), tetapi bug di bawah ini masih ada di build lama.
 
 | # | Berkas | Gejala di HP (build lama) | Akar masalah | Perbaikan |
@@ -404,8 +406,8 @@ Temuan mobile yang **tidak** diperbaiki (usulan, lihat §6): klien tidak bisa Ed
 
 ## 7. Menunggu tindakan pengguna
 
-1. **Set `RATE_LIMIT_BYPASS_SECRET`** di Coolify (Environment Variables backend) dengan string acak ≥32 karakter (mis. `openssl rand -hex 32`), lalu **Redeploy**. Nilai tidak boleh dicommit. Setelah itu uji otomatis dapat mengirim header `X-Skip-Rate-Limit: <nilai>`.
-2. **EAS build** untuk aplikasi mobile dari commit `60f3e69` atau yang lebih baru (§5) — perubahan mobile **belum live**; jalankan `node verify-fixes.js` sebelum build.
+1. **Set `RATE_LIMIT_BYPASS_SECRET`** di Coolify (Environment Variables backend) dengan string acak ≥32 karakter (mis. `openssl rand -hex 32`), lalu **Redeploy**. Nilai tidak boleh dicommit. Setelah itu uji otomatis dapat mengirim header `X-Skip-Rate-Limit: <nilai>`. — **SELESAI di Misi V3 (9 Sep 2026 13:41 WIB), lihat V3.1.**
+2. **EAS build** untuk aplikasi mobile dari commit `60f3e69` atau yang lebih baru (§5) — perubahan mobile **belum live**; jalankan `node verify-fixes.js` sebelum build. — **Dijalankan di Misi V3, lihat V3.10.**
 3. **Verifikasi visual di HP** (Android/iOS): alur login (termasuk klien & `must_change_pin`), absensi, laporan, patroli/scan, panic, izin keluar, sinkronisasi offline; lihat daftar di §5.
 4. **Uji manual web-admin** dengan akun admin (§3.8) — tidak ada kredensial admin produksi yang diberikan kepada saya, sehingga alur ber-login hanya diuji lokal.
 5. (Opsional) Hapus `~/backups-sopiak/ptsss_backup_20260909.dump` di server bila cadangan sudah disalin ke tempat lain.
@@ -422,3 +424,249 @@ Temuan mobile yang **tidak** diperbaiki (usulan, lihat §6): klien tidak bisa Ed
 5. **Keamanan**: rotasi `JWT_SECRET` bila ada indikasi kebocoran (semua sesi logout), tinjau daftar admin (`SELECT nrp,nama FROM users WHERE role='admin'`), pertimbangkan menutup pgAdmin publik, perbarui dependensi (`npm audit`) tiap kuartal, aktifkan 2FA GitHub & Coolify.
 6. **Data**: minta admin melengkapi koordinat checkpoint/pos jaga yang masih 0,0 (kini dicegah untuk data baru), unggah ulang PDF kontrak klien, nonaktifkan personil keluar lewat `status_penempatan='nonaktif'` alih-alih menghapus.
 7. **Mobile**: setelah EAS build, dorong pembaruan ke semua HP; versi lama masih kompatibel dengan backend (respons array/flat dipertahankan), tetapi perbaikan §5 hanya berlaku di build baru.
+
+---
+
+# MISI LANJUTAN V3 — Tuntaskan Semua (9 September 2026, 13:30–selesai WIB)
+
+Semua nilai rahasia disamarkan. Aturan keras misi sebelumnya dipatuhi; satu pelonggaran baru (edit `docker-compose.yml` Sopiak) dipakai hanya untuk batas memori.
+
+## V3.0 Ringkasan
+
+| Item | Hasil |
+|---|---|
+| Commit | 18 commit kode (14 dideploy Coolify, 4 mobile "menunggu EAS build") + 1 commit laporan — daftar di V3.9 |
+| Deploy Coolify | 5 batch sukses (env saja; B1+D2; B2/C/D3/D4; B3/D5/E/409; putaran-2 UI) — semua health 200, log bersih. Catatan: push ke `main` juga memicu auto-deploy webhook Coolify (terlihat deploy `3e4457b` tanpa pemicu manual) |
+| Login | bcrypt dipindah ke worker thread: 5 login paralel 1.590 → 711 ms, 10 paralel 1.266 ms; health 3 ms saat bcrypt sibuk; IP klien asli tercatat (bukan IP Cloudflare) |
+| UI | web-admin 29 halaman + website 7 rute diseragamkan (token tunggal, badge/peran/status terpadu, komponen bersama) |
+| Form | inventaris 40+ form web-admin & 16 layar mobile; perbaikan P1/P2 (lihat V3.4) |
+| Perkakas bisnis | Klien: filter kontrak, Perpanjang, Nonaktifkan (konfirmasi keras); Laporan: penanda umur, filter >30 hari, validasi massal, pengingat harian komandan; kartu peringatan dashboard |
+| Usulan §6 | 8/8 dieksekusi (D1 ternyata tidak perlu perubahan; D8 = rekomendasi, menunggu keputusan) |
+| Uji otomatis | `backend/tests/api-smoke.js` 50/50 + `api-flow.js` 33/33 terhadap salinan DB produksi; bug nyata ditemukan & diperbaiki (klien notifikasi 500; hapus data master 500) |
+| Data uji produksi | Tidak ada baris uji dibuat di produksi (semua uji ber-login di DB salinan `ptsss_audit_test`, dihapus di akhir — V3.8) |
+
+## V3.1 FASE A — `RATE_LIMIT_BYPASS_SECRET`
+
+| Langkah | Bukti |
+|---|---|
+| Generate | `ssh … openssl rand -hex 32` → 64 hex, dialirkan langsung ke API (tidak pernah ditampilkan/ditulis ke repo) |
+| Coolify API | Token write+deploy tanpa read (semua GET → 403). Resource bertipe *application*. `POST /api/v1/applications/{uuid}/envs` → 409 "already exists" (variabel sudah ada, kosong) → `PATCH …/envs` body `{key,value,is_preview:false,is_literal:true,is_multiline:false}` → **201** (`is_runtime:true`, `updated_at 06:36:55Z`). Catatan: field `is_build_time` ditolak 422 |
+| Redeploy | `deployment_uuid p68ieuh1dbifehddshihynz1` 13:37 WIB → container baru 13:41 WIB |
+| Verifikasi | `docker exec backend sh -c 'test -n "$RATE_LIMIT_BYPASS_SECRET" && echo ADA'` → **ADA len=64**; 12× `POST /api/auth/refresh` header **salah** (koneksi sama) → 401×10 lalu **429×2** (limit 10/menit tetap tegak); 12× header **benar** → 401×12, tidak pernah 429 (bypass bekerja) |
+
+Status §7 no. 1 sebelumnya: **selesai**.
+
+## V3.2 FASE B1 — Login lambat: pengukuran → akar → perbaikan → pengukuran ulang
+
+Pengukuran (9 Sep 2026, 13:4x WIB, sebelum perbaikan; produksi `8c99eca`):
+
+| Jalur | Hasil |
+|---|---|
+| Eksternal via Cloudflare → login NRP ada + PIN salah (jalur bcrypt), 6× | total 0,49–0,86 s (TLS 0,12–0,28 s; TTFB 0,49–0,86 s) |
+| Eksternal via Cloudflare → NRP tidak ada (DB saja), 4× | total 0,29–0,49 s |
+| Eksternal via Cloudflare → `/api/health` (baseline jaringan), 4× | total 0,37–0,48 s |
+| Host server via Traefik saja (tanpa Cloudflare), 4× | total 0,32–0,36 s |
+| Dalam container (node fetch), NRP ada / tidak ada | **307–417 ms** / **4–7 ms** |
+| `bcryptjs.compareSync` cost 12 di container | **301 ms** rata-rata |
+| 5 login paralel di container | **1.590 ms** total (terserialisasi: bcryptjs berjalan di thread utama) |
+| Web-admin `/login` SSR langsung ke container / via Cloudflare | **4–6 ms** / 0,37–0,67 s; JS 431 KB (7 chunk) |
+| Mobile pasca-login | `LoginScreen` menunggu `loadAllData` = 12 request paralel + 1 sekuensial sebelum pindah layar |
+| Pool DB | `waitingClients: 0` sepanjang pengujian |
+
+Akar yang terbukti:
+1. **bcryptjs (JavaScript murni) cost 12 = ±300 ms CPU di thread utama** → login beruntun (ganti shift) antre satu per satu, dan SEMUA request lain (absensi, health, socket) ikut tertahan. Ini penyebab "kadang sangat lambat".
+2. **IP klien = IP edge Cloudflare**: Traefik menimpa `X-Forwarded-For`, sehingga rate limit login 50/15 menit "per IP" dibagi oleh semua pengguna di PoP yang sama → 429 kolektif saat ramai; access log tidak berguna untuk forensik.
+3. **Mobile menunggu 13 request** (±0,3–0,5 s tiap request lewat Cloudflare) sebelum masuk beranda.
+4. Bukan penyebab: SSR web-admin (4–6 ms), pool DB, query login (5 ms), Traefik (+10 ms). Hop Cloudflare menambah 150–500 ms per request (di luar kendali aplikasi; jitter sesekali >2 s teramati — server tetap 307 ms).
+
+Perbaikan (commit `37bb0f0`, `5c8610f`):
+
+| # | Berkas | Perubahan |
+|---|---|---|
+| B1-1 | `backend/src/utils/pinHash.js` + `pinHash.worker.js` | Pool `worker_threads` (bawaan Node, tanpa dependensi) untuk bcrypt compare/hash; ukuran default min(4, CPU−1)=3; fail-safe kembali ke thread utama; `PIN_HASH_WORKERS` (0 = mati) |
+| B1-2 | `services/auth.service.js` | `comparePin/hashPin`; tahapan login diukur (`logger.debug` per tahap; `WARN "Login lambat"` bila > `SLOW_LOGIN_MS`=1500 ms — instrumentasi permanen di level debug, tanpa PIN); `last_seen` fire-and-forget |
+| B1-3 | `middleware/clientIp.js` | `req.ip` = `CF-Connecting-IP` **hanya bila** peer terbukti dalam rentang IP Cloudflare (fail-closed); dipakai rate limiter, morgan, audit |
+| B1-4 | `utils/ipKey.js`, `app.js`, `publicLimit.js` | Kunci limiter seragam; `/api/health` menampilkan `pin_hash_pool` & IP asli |
+| B1-5 | `utils/logger.js` | Level `debug` (`LOG_LEVEL=debug`) |
+| B1-6 | mobile `LoginScreen.tsx` | `loadAllData` berjalan di latar; layar berpindah segera setelah PIN benar (menunggu EAS) |
+| B1-7 | `data.service`, `rekrutmen.service`, `data.routes` | Hash PIN lewat pool |
+
+Pengukuran ulang (setelah deploy `81ea5a8`, 13:57 WIB):
+
+| Ukuran | Sebelum | Sesudah |
+|---|---|---|
+| 1 login (dalam container) | 307–417 ms | 314–412 ms (per-login tetap ±300 ms bcrypt; cost 12 dipertahankan) |
+| 5 login paralel | **1.590 ms** | **711 ms** |
+| 10 login paralel | (ekstrapolasi ±3.200 ms) | **1.266 ms** |
+| `/api/health` saat 3 bcrypt berjalan | ikut terblokir ±300 ms | **3 ms** |
+| IP di access.log | 104.22.x / 162.158.x (Cloudflare) | IP pengguna asli (IPv4/IPv6) |
+| Eksternal via Cloudflare (6×) | 0,49–0,86 s | 0,57–0,82 s (dominan jaringan Cloudflare; 1 outlier 2,3 s = jaringan, server 307 ms) |
+| `pin_hash_pool` | — | `{enabled:true,size:3,failures:0}` |
+
+Usulan lanjutan (tidak dilakukan karena mengubah postur keamanan): `BCRYPT_ROUNDS=11` akan memangkas per-login ±150 ms; keputusan pemilik.
+
+## V3.3 FASE B2 — Penyeragaman UI total
+
+Inventaris (agen, 23 halaman web-admin + login + komponen) menemukan penyimpangan terkonsentrasi; perbaikan (commit `c142821`, `c4cbc42`, `7442c91`):
+
+| Halaman/komponen | Sebelum | Sesudah |
+|---|---|---|
+| `styles/design-tokens.css` vs `globals.css` | Dua keluarga token paralel (`--brand-primary`/`--bg-primary`/`--text-primary` vs `--primary`/`--bg`/`--text`) dengan nilai berbeda & saling menimpa | `design-tokens.css` = alias ke token kanonik `globals.css`; satu sumber warna |
+| `globals.css` | — | Kelas bersama baru: `.floating-prompt`, `.image-preview-overlay`, `.dropdown-menu/.icon-badge`, `.notif-*`, `.alert-grid/.alert-card`, `.skeleton-row`, `.bulk-bar/.check-cell`, `.form-help/.form-error/.is-invalid`, `.confirm-danger-note`, `.error-page/.error-card`, `.pin-display`, util `.text-*`, `.badge-primary/.badge-lg`, `.btn-block/.btn-warning` |
+| `lib/formatters.ts` | Status rekrutmen & klien di luar peta; peran tanpa peta | `statusColor/statusLabel` lengkap (baru/diproses/wawancara/diterima/ditolak/dibatalkan, Aktif/Non-Aktif/Blacklist), `roleColor/roleLabel`, `daysUntil/ageDays/fmtRupiah/fmtDateLong` |
+| personil | 3 pemetaan warna peran berbeda (tabel/grid/modal), `badge-primary` tak terdefinisi, PIN inline hex | satu `roleColor`, `.pin-display`, `.text-danger` |
+| rekrutmen | `STATUS[]`/`statusBadge` lokal | formatter bersama |
+| analytics | palet hex hardcode + tooltip gelap permanen (salah di tema terang) | `hooks/useThemeColors.ts` membaca token CSS → grafik ikut tema |
+| clients | fallback hex usang (`#1a5276`, `#d97706`, `#dc2626`) | token murni, `.pin-display` |
+| login | `<button>` polos | `.btn .btn-primary .btn-block` |
+| routes | tanpa Pagination (semua rute dirender) | `Pagination` 15/halaman seperti halaman setipe |
+| live-map | loading teks polos | skeleton `.animate-pulse .skeleton-row` |
+| qr-generator | empty state inline | `.empty-row` |
+| laporan-harian/kejadian, patroli, serah-terima | 4 salinan overlay pratinjau foto | `components/ui/ImagePreview.tsx` (Esc/klik menutup) |
+| InstallPrompt, PWAUpdatePrompt | 100 % inline, token lama, toast gelap permanen | `.floating-prompt` + `.btn` (ikut tema) |
+| unauthorized, 404 | inline / 404 bawaan Next | `.error-page/.error-card`; `app/not-found.tsx` ramah |
+| TopBar | inline style, bel hanya tautan /panic, klien tak bisa Ganti PIN | kelas `.topbar-*`, panel notifikasi (V3.6), Ganti PIN untuk klien + mode wajib |
+| dashboard | tanggal manual | `fmtDateLong`; kartu peringatan (V3.5) |
+| Judul tab | semua "PT Sopiak Satria Saga" | `lib/pageTitles.ts` → "Laporan Harian · PT Sopiak Satria Saga" |
+| Responsif | breakpoint 768/480/375 sudah ada | dipertahankan; komponen baru memakai grid auto-fit |
+
+Website (agen; commit `0952f8d`): CTA tombol pill+hover JS → `.btn-primary/.btn-outline/.btn-whatsapp`; label section 3 komponen → `.section-label.centered/.gold`; ±90 hex ikon lucide → `var(--token)`; footer brand memakai token & kelas navbar; form Contact: label per field + tombol disabled+spinner "Mengirim..."; grid Contact/Hero/ServiceDetail inline → kelas; CSS mati dihapus; breakpoint ≤380px; `app/not-found.tsx` (Navbar+Footer). `npm run build` 7 rute; `check-boundaries` lolos. Tidak diubah: logika/API form /karir, warna khas per layanan.
+
+Gerbang: `npm run build` web-admin 29 halaman ✔ (×3), website 7 rute ✔, `next lint` 0 error (4 `no-unescaped-entities` diperbaiki), `verify/run-all.js` 5/5 ✔.
+
+## V3.4 FASE B3 — Sapuan form (2 putaran: inventaris → perbaikan → uji ulang)
+
+Inventaris web-admin (agen, 40 form) — semua form sudah punya anti-dobel & toast error; temuan yang diperbaiki (commit `30ebfc7`):
+
+| Prioritas | Temuan | Perbaikan |
+|---|---|---|
+| P1 | Validasi massal: catatan revisi/tolak "nyangkut" ke aksi Setujui berikutnya | `bulkCatatan` direset saat ganti aksi/batal |
+| P1 | Restore DB (aksi paling destruktif) hanya konfirmasi standar | `ConfirmDialog` ketik `RESTORE` + catatan risiko + `busy`, dialog terbuka sampai selesai, daftar dimuat ulang |
+| P1 | `ConfirmDialog` tanpa `busy` di 10 lokasi (tidak ada indikator memproses) | `busy={saving}` diteruskan (lokasi, checkpoint, jadwal, personil, pos-jaga, rekrutmen, routes, shift-assignment, panic, reset PIN klien, hapus backup) |
+| P1 | Alasan tolak izin min 3 vs skema backend 5 | min 5 |
+| P2 | Tidak ada Enter-to-submit di hampir semua modal; tidak ada Esc; tidak ada autofocus | Diselesaikan **sekali di `Modal.tsx`**: Esc menutup, fokus otomatis field pertama, Enter di `<input>` memicu tombol utama footer; `ConfirmDialog`: Esc batal / Enter konfirmasi |
+| P2 | Dropdown pendukung gagal dimuat → `catch {}` diam | toast peringatan (checkpoint, routes, pos-jaga, jadwal, shift-assignment, qr-generator) |
+| P2 (usulan) | `label` tanpa `htmlFor` (aksesibilitas) | Belum — lihat V3.10 |
+
+Uji alur lintas-form end-to-end (`backend/tests/api-flow.js`, 33 kasus, DB salinan): buat lokasi → pos → checkpoint → rute → tugaskan personil → absensi (idempotency tidak menggandakan) → tampil di daftar lokasi (admin) tetapi **tidak** bagi komandan lokasi lain → patroli start/scan/end → pembersihan. Putaran 1 menemukan **bug produksi**: hapus rute/checkpoint/lokasi yang masih dirujuk riwayat → **500 "Internal server error"**; kini **409** "tidak bisa dihapus karena masih dipakai … ubah statusnya menjadi nonaktif" dan pelanggaran UNIQUE → 409 "sudah dipakai" (commit `86ca743`). Putaran 2: **33/33 PASS**, smoke **50/50 PASS**.
+
+Inventaris mobile (agen, 16 layar) → perbaikan (commit `3e4457b`, 14 berkas, menunggu EAS build):
+
+| Prioritas | Temuan | Perbaikan |
+|---|---|---|
+| P1 | "Simpan Draft" Laporan Kejadian hanya Alert, tidak menyimpan apa pun | Draft nyata ke AsyncStorage per user (`@ptsss_draft_laporan_kejadian_<userId>`), dimuat otomatis, dihapus setelah kirim/queued; foto tidak ikut (dijelaskan di Alert) |
+| P1 | `startPatrol/scanCheckpoint/endPatrol` fire-and-forget (`.catch(console.error)`) → "Checkpoint Berhasil!" palsu, status offline tak terlihat | Kini `Promise<SubmitResult>`; layar QR/Patroli: sukses → berhasil, `queued` → "Tersimpan Offline", ditolak server → Alert + checkpoint TIDAK ditandai & bisa scan ulang; start yang ditolak membatalkan patroli lokal |
+| P1 | Tambah/Edit User hanya `err.message` ("Validasi gagal") | `details` validasi server ditampilkan |
+| P2 | `details` hilang di EditProfil (non-klien), SetupCheckpoint, ManajemenLokasi (pos jaga), UbahPIN | ditambahkan |
+| P2 | `maxLength` Broadcast 120/2000 & Laporan Harian 500 lebih ketat dari server (200/5000, 2000) | diselaraskan; target/prioritas broadcast direset setelah sukses |
+| P2 | Keyboard: tanpa `KeyboardAvoidingView` (LaporanKejadian, SerahTerima, TambahEditUser, modal revisi Validasi), PIN login tanpa `onSubmitEditing`, input manual QR tanpa submit | dilengkapi; SerahTerima `loading={submitting}` |
+
+Verifikasi: `npx tsc --noEmit` hanya 4 error lama (`expo-file-system/legacy`), `node verify-fixes.js` 25 PASS, CRLF/LF per berkas dijaga (diperiksa byte-level).
+
+## V3.5 FASE C — Dua "keputusan bisnis" → perkakas (tanpa perubahan data massal)
+
+| Kebutuhan | Backend | Web-admin | Mobile |
+|---|---|---|---|
+| Kontrak habis (12 klien) | `dashboard/stats`: `kontrak_habis`, `kontrak_hampir_habis` (≤30 hari; hanya admin/supervisor) | Klien: filter "Kontrak Habis / ≤30 hari / Berjalan / Tanpa tanggal", ringkasan "N habis · M hampir", badge "Habis N hr"/"Sisa N hr", aksi **Perpanjang Kontrak** (modal tanggal, default +1 tahun, validasi), **Nonaktifkan** (ketik kode klien; penjelasan: klien tidak bisa login, sesi putus ≤30 menit, data tetap) & **Aktifkan kembali**; dashboard kartu "N kontrak klien sudah habis" → `/clients?filter=kontrak-habis` | — |
+| Laporan pending >30 hari (30 buah) | filter `min_age_days`, kolom `umur_hari`; `PUT /api/laporan/{harian,kejadian}/validate-bulk` (scope & status diperiksa per laporan, maks 100, rincian gagal); job perawatan: pengingat harian ke komandan lokasi terkait (1 notifikasi/komandan/hari); `pending_lama` di stats | Laporan Harian: badge "Pending N hari" (merah ≥30, kuning ≥7), chip "Pending >30 hari (N)", checkbox + bar aksi Setujui/Revisi/Tolak dengan modal konfirmasi & catatan; `?status=&min_age_days=&focus=` dari notifikasi/dashboard; dashboard kartu "N laporan menunggu validasi > 30 hari" | Validasi Laporan komandan: badge "Pending N hari", filter cepat "Pending > 30 hari (N)" (menunggu EAS) |
+
+Verifikasi produksi (14:45 WIB, run pertama job perawatan pasca-deploy): `pengingat laporan pending lama terkirim ke 7 komandan` (7 notifikasi; data laporan **tidak berubah**: `pending_all=30`). Kartu dashboard & filter hanya membaca; setiap perubahan tetap lewat aksi admin/komandan.
+
+## V3.6 FASE D — Usulan §6
+
+| # | Usulan | Hasil |
+|---|---|---|
+| D1 | Refresh checksum migrasi 002–005 | **Tidak diperlukan**: sha256 file di container (dihitung dengan cara yang sama seperti `migrationRunner`) = nilai di `schema_migrations` untuk 002–005 (`8a848c32…`, `af178bb9…`, `a4a85397…`, `f1e117bc…`), dan log boot 3 container terakhir tanpa peringatan drift. Peringatan saat audit sebelumnya berasal dari salinan lokal ber-CRLF. Tidak ada UPDATE, tidak ada rollback. |
+| D2 | Endpoint profil klien | `PUT /api/auth/me` (role klien; `kontak_person`, `nomor_telepon`, `email`; validasi; audit `UPDATE_PROFIL`) — commit `81ea5a8`; `GET /auth/me` klien kini memuat `kode_klien`, `kontak_person`, `alamat_klien`, `foto_url`, `must_change_pin`. Mobile `EditProfilScreen` jalur klien (nama kontak/telepon/email; nama perusahaan & foto read-only) — `5c8610f`. Uji: 403 anggota, 400 email salah, 200 tersimpan & dipulihkan. |
+| D3 | Redesain notifikasi (pragmatis) | Backend: notifikasi persisten dibuat saat laporan divalidasi (ke pelapor), panic dibuat/ditangani, broadcast (per-user untuk broadcast ber-lokasi agar tidak bocor lintas lokasi; per-peran untuk global); `data` memuat `entity/id/path`; retensi (dibaca >90 hari, semua >180 hari) di job perawatan; **bug 500** klien (`id 'client-<uuid>'` vs kolom uuid) saat baca/tandai notifikasi diperbaiki. Web-admin: panel notifikasi di TopBar (daftar ≤50, badge belum dibaca akurat, "Tandai semua", klik → halaman entitas dengan `?focus=`), ikon/warna per tipe seragam dengan mobile (info/success/warning/danger). Mobile sudah punya layar Notifikasi dengan ikon/warna yang sama; `markRead/markAllRead` sudah ke server. Retensi run pertama: 30 notifikasi lama (dibaca, >90 hari) dihapus — rollback tersedia dari backup `ptsss_backup_20260909_1418.dump` (tabel `notifikasi`). |
+| D4 | ESLint | Backend: `.eslintrc.json` (eslint:recommended, longgar untuk kode lama), `eslint@8.57.1` devDependency dipin (tidak masuk image), `npm run lint` → **0 error**, 14 warning. Web-admin: `.eslintrc.json` (`next/core-web-vitals`), 4 error `react/no-unescaped-entities` diperbaiki → **0 error**; `next build` menjalankan lint. Tidak ada reformat massal. |
+| D5 | Batas memori container | `docker-compose.yml`: backend 768M, web-admin 512M, website 512M, postgres 1G, pgadmin 512M (`deploy.resources.limits.memory`; divalidasi `docker compose config`). Pemakaian terukur sebelum batas: backend 55 MiB, web-admin 38, website 34, postgres 44, pgadmin 248. Pasca-deploy batch 4 (`docker inspect HostConfig.Memory`): backend 805306368, web-admin/website/pgadmin 536870912, postgres 1073741824 ✔; pemakaian 08:03 UTC: backend 46 MiB/768 (6 %), web-admin 30/512, website 26/512, postgres 20/1024, **pgadmin 248/512 (48 %)** — bila pgAdmin mendekati batas, naikkan ke 768M (atau tutup ekspos publik, V3.7). |
+| D6 | Uji otomatis masuk repo | `backend/tests/api-smoke.js` (50 kasus) + `api-flow.js` (33 kasus) + `README.md`; `npm run test:api` / `test:flow`; menolak URL produksi tanpa `TEST_ALLOW_PROD=1`; tanpa dependensi; akun uji hanya di DB salinan. |
+| D7 | Mobile #12–14 | `dataStore`: `updateCheckpoint/deleteCheckpoint/updateLokasi/updateTeamMember` (+ `updateRoute/deleteRoute/removeTeamMember`) → `Promise<SubmitResult>` dengan rollback & pesan error server; layar pemanggil menunggu hasil; antrian offline: 409 "Patroli belum tersinkron" tidak dihitung retry (`updateQueueItemError`); pesan dev hanya di `__DEV__`; `roleGuard` klien untuk Notifikasi/Profil/EditProfil/UbahPIN/TentangAplikasi — commit `5c8610f` (menunggu EAS). |
+| D8 | pgAdmin publik | **Tidak diubah** (menunggu keputusan). Rekomendasi & langkah: V3.7. |
+
+## V3.7 pgAdmin publik — rekomendasi (BERHENTI-DAN-TANYA)
+
+Kondisi: `pgadmin.sopiaksatriasaga.com` diekspos Traefik (label di compose) dengan login pgAdmin (`PGADMIN_EMAIL/PASSWORD`), server-mode, cookie protection aktif; di belakang Cloudflare. Risiko: brute-force/celah pgAdmin langsung menghadap internet dan memegang kredensial DB produksi.
+
+Pilihan (urut dari yang saya rekomendasikan):
+1. **Tutup ekspos publik, akses via SSH tunnel** — hapus 10 baris `labels:` Traefik + `SERVICE_FQDN_PGADMIN_80` pada service `pgadmin` di `docker-compose.yml`, deploy; akses dengan `ssh -L 5050:<ip-container-pgadmin>:80 deployer@31.97.106.106` lalu buka `http://localhost:5050`. Nol biaya, DNS `pgadmin.` bisa dihapus/dibiarkan (Traefik akan 404). Reversibel dengan mengembalikan label.
+2. **Cloudflare Access (Zero Trust)** di depan `pgadmin.` — login email/OTP sebelum sampai ke pgAdmin; konfigurasi di dasbor Cloudflare (di luar repo), tanpa perubahan compose.
+3. **Allow-list IP kantor** lewat middleware Traefik `ipAllowList` pada router pgadmin (perlu IP statis; di balik Cloudflare harus memakai `CF-Connecting-IP` → lebih rumit).
+
+Saya berhenti di sini: mohon pilih opsi (saya sarankan 1); saya siapkan commit + deploy setelah persetujuan.
+
+## V3.8 FASE E — Saran tambahan yang diimplementasikan
+
+| # | Perubahan | Commit |
+|---|---|---|
+| E1 | Retensi berkas backup otomatis di job perawatan: hapus `.sql/.dump/.gz` > `BACKUP_RETENTION_DAYS` (30) tetapi selalu sisakan `BACKUP_KEEP_MIN` (7) terbaru; berkas yang sudah ke Drive dibiarkan. Jadwal backup harian tetap lewat menu Backup (persisten `schedule.json`) — **rekomendasi: aktifkan 02:00** | `98fbf8f` |
+| E2 | Halaman 404 ramah web-admin & website; `unauthorized` memakai kelas bersama | `c142821`, `0952f8d` |
+| E3 | Judul tab per halaman (`lib/pageTitles.ts`) | `7442c91` |
+| E4 | Konfirmasi keras (ketik kode) untuk hapus klien, nonaktifkan klien, restore DB; `busy` di semua dialog konfirmasi | `c4cbc42`, `30ebfc7` |
+| E5 | Error FK/UNIQUE → 409 dengan pesan tindak lanjut (bukan 500) untuk semua data master | `86ca743` |
+| E6 | `/api/health` memuat `pin_hash_pool` & `client_ip` asli; `LOG_LEVEL=debug` untuk tahapan login | `37bb0f0` |
+| E7 | Uji API menolak URL produksi; README cara menjalankan | `ed106ce` |
+
+## V3.9 Deploy, verifikasi produksi, dan daftar commit
+
+| Batch | Commit | Dipicu (WIB) | Selesai | Verifikasi |
+|---|---|---|---|---|
+| 1 (env A) | `8c99eca` (tanpa perubahan kode) | 13:37:18 | 13:41 | ADA len=64; 429 tegak; health 200 |
+| 2 (B1, D2) | `37bb0f0`, `81ea5a8` | 13:54:39 | 13:57 | `pin_hash_pool` aktif 3 worker; IP asli di access.log; angka V3.2; log bersih |
+| 3 (B2, C, D3, D4, E, website) | `ed106ce` … `c4cbc42` | 14:41:11 | 14:43 | health 200; smoke 10 URL (200/401/404 sesuai); CSS baru terpasang (`.notif-panel`, `.alert-card`, `.floating-prompt`, alias token); job perawatan 14:45: pengingat 7 komandan, retensi 30 notifikasi; log bersih |
+| 4 (B3 web, D5 compose, E1, 409) | `142117b` … `86ca743` | 14:59:06 | 15:02 | health 200; batas memori terpasang (V3.6 D5); smoke 6 URL (200/401); log bersih; job perawatan 15:04: `pengingat_pending 0` (dedupe per hari bekerja), `backup_dihapus 0` |
+| 5 (putaran-2 UI) | `3e4457b` (auto-deploy webhook), `252b2a5` | 15:07:01 | 15:09 | health 200; log bersih; web-admin `252b2a5` healthy |
+
+Daftar commit: `37bb0f0` perf login; `81ea5a8` PUT /auth/me; `5c8610f` mobile (EAS); `ed106ce` C2/D3/C1/tests; `a89e2b0` ESLint backend; `0952f8d` website; `c142821` web-admin B2/D3/D4; `c4cbc42` web-admin C1/C2; `142117b` compose memori; `3058d11` mobile validasi (EAS); `98fbf8f` retensi backup; `7442c91` judul tab; `30ebfc7` web-admin B3; `86ca743` 409 + api-flow; `3e4457b` mobile form B3 (EAS); `252b2a5` web-admin putaran 2; laporan ini.
+
+Pasca-deploy tiap batch: `docker ps … | grep v13` sampai 3 image bertag commit baru & healthy; `wget /api/health` 200; `docker logs --since` tanpa `error/fatal`; smoke URL publik; sampel 401 tanpa token.
+
+Lingkungan uji (bukan produksi): DB salinan `ptsss_audit_test` di Postgres Sopiak (restore dari backup baru `ptsss_backup_20260909_1418.dump`, 310.055 B; salinan di `~/backups-sopiak/` & `backups-local/`), role `audit_test` (sandi acak, hanya DB salinan), backend lokal :3100 lewat tunnel SSH. Akun uji `TESTADM/TESTKMD/TESTAGT` & PIN klien `KK-001` **hanya di DB salinan**. Penutupan (15:12 WIB): backend lokal & tunnel SSH dihentikan; `DROP DATABASE ptsss_audit_test` + `DROP ROLE audit_test` — sebelum: `ptsss_db, ptsss_audit_test / audit_test / 0 koneksi`; sesudah: hanya `ptsss_db`, tidak ada role `audit%`. Produksi: `users=65`, `users_uji=0`, `laporan_uji=0`, `lokasi_uji=0`, `clients=15`.
+
+**Koreksi laporan sebelumnya:** jumlah `clients` yang tercatat "21" di §1/§4 laporan pagi adalah salah tulis (nilai `lokasi`); kedua backup hari ini (10:31 & 14:18 WIB) memuat **15 baris clients**, `updated_at` terbaru 16 Mei 2026, tidak ada DELETE/PUT clients di access log maupun audit log hari ini → tidak ada kehilangan data. Kontrak habis = 12 dari 15 klien Aktif (0 hampir habis), laporan pending >30 hari = 30 — sesuai kartu peringatan dashboard.
+
+## V3.10 Menunggu tindakan pengguna & usulan lanjutan
+
+Menunggu Anda:
+1. **EAS build selesai** (Android, profil `preview`, commit `252b2a5`, versi 3.0.0, FINISHED 15:22 WIB, `node verify-fixes.js` 25 PASS sebelum build) — pasang & uji di HP:
+   - Halaman build: https://expo.dev/accounts/danielandersontech/projects/sopiak-satria-saga/builds/392c075d-2ba8-4e94-b0ac-cb2ec292f4f8
+   - APK: https://expo.dev/artifacts/eas/YOOJnX-3tpsA6DQ1RdkHH3VJRyrFxYoEpsGfS2EjONA.apk
+   Memuat seluruh perubahan mobile misi ini (`5c8610f`, `3058d11`, `3e4457b`) + `60f3e69` dari misi sebelumnya.
+2. **Pasang APK & uji visual di HP** (daftar V3.11).
+3. **Keputusan pgAdmin** (V3.7) — saya sarankan opsi 1.
+4. **Uji manual web-admin ber-login** (V3.12).
+5. (Rekomendasi) Aktifkan **Backup otomatis 02:00** di menu Backup; retensi 30 hari kini otomatis.
+6. (Opsional) `BCRYPT_ROUNDS=11` bila ingin login per-orang lebih cepat lagi (±150 ms lebih singkat) — keputusan keamanan.
+
+Usulan lanjutan (tidak dikerjakan):
+- `label htmlFor`/`id` di semua form web-admin (aksesibilitas) — perubahan mekanis luas.
+- Notifikasi mobile: buka entitas terkait saat diklik (web-admin sudah); memerlukan pemetaan `data.path` → layar RN.
+- `ipKeyGenerator` (subnet IPv6 /56) bila `express-rate-limit` dinaikkan ke ≥7.5 dengan helper tersebut.
+- Push FCM: `FIREBASE_*` masih kosong (kode siap).
+
+## V3.11 Daftar uji visual di HP setelah EAS build (tambahan atas §5)
+
+1. Login → langsung masuk beranda (tidak menggantung), data terisi bertahap.
+2. Klien → Profil → Edit Profil: nama kontak/telepon/email tersimpan; nama perusahaan & foto read-only; Ubah PIN & Notifikasi & Tentang bisa dibuka.
+3. Supervisor → Setup Checkpoint: nonaktifkan/hapus checkpoint yang sudah pernah discan → pesan 409 jelas, daftar tidak berubah (rollback).
+4. Supervisor → Setup Rute edit → hasil server ditunggu; error tampil.
+5. Komandan → Validasi Laporan: badge "Pending N hari" dan filter "Pending > 30 hari".
+6. Mode pesawat: scan checkpoint sebelum patrol_start tersinkron → tidak masuk dead-letter; sinkron saat online.
+7. Pesan error saat server tidak terjangkau berbahasa produksi (tanpa "npm run dev").
+8. Anggota → Laporan Kejadian → isi sebagian → "Simpan Draft" → tutup aplikasi → buka lagi: isian kembali (foto tidak).
+9. Anggota → Patroli → scan checkpoint saat online: "Checkpoint Berhasil"; saat mode pesawat: "Tersimpan Offline"; scan checkpoint yang ditolak server (mis. sudah nonaktif) → Alert pesan server, checkpoint tetap bisa discan ulang.
+10. Supervisor → Tambah User dengan NRP duplikat / HP salah → Alert menampilkan rincian validasi server.
+11. Komandan → Broadcast judul >120 karakter (≤200) diterima; setelah kirim, target & prioritas kembali ke default.
+12. Login: tekan "Done" di keypad PIN langsung mengirim; layar Laporan Kejadian/Serah Terima/Tambah User: keyboard tidak menutupi tombol simpan.
+
+## V3.12 Uji manual web-admin (akun admin/komandan)
+
+1. TopBar bel → panel notifikasi: daftar, badge, "Tandai semua", klik item membuka halaman terkait (laporan dengan `?focus=` membuka detail).
+2. Klien: filter Kontrak Habis; Perpanjang Kontrak (+1 tahun default) → badge hilang; Nonaktifkan (ketik kode) → klien tidak bisa login; Aktifkan kembali.
+3. Laporan Harian (komandan): chip "Pending >30 hari", checkbox → Setujui semua → toast ringkasan; pelapor menerima notifikasi.
+4. Dashboard: kartu peringatan kontrak/pending mengarah ke filter.
+5. Modal apa pun: Esc menutup, field pertama terfokus, Enter menyimpan; dialog hapus menampilkan spinner; Restore DB meminta ketik RESTORE.
+6. Analytics: ganti tema terang/gelap → warna grafik & tooltip ikut.
+7. Klien login web: menu akun menampilkan Ganti PIN; akun `must_change_pin` klien dipaksa ganti.
+8. Hapus checkpoint yang sudah discan → pesan 409 yang bisa ditindaklanjuti.
