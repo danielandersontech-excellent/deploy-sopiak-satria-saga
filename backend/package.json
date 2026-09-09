@@ -10,6 +10,7 @@
     "seed:full": "node src/utils/seed-full.js",
     "test": "jest --verbose --forceExit --runInBand",
     "test:api": "node tests/api-smoke.js",
+    "test:flow": "node tests/api-flow.js",
     "lint": "eslint src --ext .js"
   },
   "dependencies": {

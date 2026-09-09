@@ -49,6 +49,14 @@ Skrip menolak URL `*.sopiaksatriasaga.com` kecuali `TEST_ALLOW_PROD=1`.
 Keluaran: daftar `[PASS]/[FAIL]` per kasus + `RINGKASAN: PASS=n FAIL=m`; kode keluar 1 bila ada
 yang gagal — cocok dipakai sebagai gerbang sebelum push.
 
+## `api-flow.js` — alur lintas-form (`npm run test:flow`)
+
+Admin buat lokasi → pos jaga → checkpoint → rute → tugaskan anggota → anggota absen (idempotency
+tidak menggandakan) → absensi tampil di lokasi (admin) tetapi TIDAK bagi komandan lokasi lain (scope)
+→ patroli start/scan/end (scan dengan `client_patrol_id` yang belum tersinkron → 409) → hapus data
+master yang sudah dirujuk riwayat → **409 dengan pesan jelas** (bukan 500), lalu dinonaktifkan;
+`qr_code` duplikat → 409. Menyisakan absensi/patroli uji + lokasi/rute/checkpoint nonaktif di DB salinan.
+
 ## Cakupan `api-smoke.js`
 
 - Health (`pin_hash_pool`, `database.max`), login user & klien, PIN salah/NRP tak ada/PIN kosong,

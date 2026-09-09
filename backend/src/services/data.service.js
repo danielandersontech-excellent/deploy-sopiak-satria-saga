@@ -288,7 +288,8 @@ class DataService {
           data.must_change_pin = true;
         } catch (e) { logger.info(`[DataService] bcrypt error: ${e.message}`); }
       }
-      const created = await repo.create(data);
+      let created;
+      try { created = await repo.create(data); } catch (e) { throw this._mapPgError(e, table); }
       if (_tempPin && created) {
         // Return the temp PIN exactly once. Anything that re-reads the
         // client row later will NOT see it (we never store the plain
@@ -300,7 +301,7 @@ class DataService {
       }
       return created;
     }
-    return repo.create(data);
+    try { return await repo.create(data); } catch (e) { throw this._mapPgError(e, table); }
   }
 
   async update(table, id, data) {
@@ -330,7 +331,8 @@ class DataService {
     }
     
     try {
-      const row = await repo.update(id, data);
+      let row;
+      try { row = await repo.update(id, data); } catch (e) { throw this._mapPgError(e, table); }
       if (!row) throw { status: 404, message: 'Tidak ditemukan' };
       return row;
     } catch (err) {
@@ -339,9 +341,31 @@ class DataService {
     }
   }
 
+  /** [Misi V3 / B3] Pelanggaran UNIQUE (23505) → 409 yang jelas, bukan 500. */
+  _mapPgError(e, table) {
+    if (e && e.code === '23505') {
+      const c = String(e.constraint || '');
+      const field = /kode_klien/.test(c) ? 'Kode klien' : /nrp_login/.test(c) ? 'ID login klien' : /qr_code/.test(c) ? 'Kode QR' : /nama/.test(c) ? 'Nama' : 'Nilai';
+      return { status: 409, message: `${field} sudah dipakai data lain. Gunakan nilai yang berbeda.` };
+    }
+    return e;
+  }
+
   async remove(table, id) {
     const repo = this.getRepo(table);
-    return repo.delete(id);
+    try {
+      return await repo.delete(id);
+    } catch (e) {
+      // [Misi V3 / B3] Pelanggaran FK (23503) dulu menjadi 500 "Internal server error"
+      // di produksi. Kini 409 dengan pesan yang bisa ditindaklanjuti: data master
+      // yang masih dirujuk riwayat (patroli, scan, penugasan, personil) tidak boleh
+      // dihapus — nonaktifkan saja agar riwayat tetap utuh.
+      if (e && e.code === '23503') {
+        const label = { lokasi: 'Lokasi', 'pos-jaga': 'Pos jaga', checkpoints: 'Checkpoint', routes: 'Rute', 'jadwal-shift': 'Shift', 'shift-assignments': 'Penugasan', clients: 'Klien' }[table] || 'Data';
+        throw { status: 409, message: `${label} tidak bisa dihapus karena masih dipakai oleh data lain (riwayat patroli/scan/penugasan/personil). Ubah statusnya menjadi nonaktif sebagai gantinya.` };
+      }
+      throw e;
+    }
   }
 
   async _getLokasiPrefix(lokasiId) {
