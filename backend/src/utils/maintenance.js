@@ -12,6 +12,11 @@
  *   3. location_history > LOCATION_HISTORY_DAYS (default 180) dipangkas —
  *      tabel ini bertambah setiap ping GPS dan tidak dipakai untuk audit
  *      jangka panjang (live map hanya memakai users.last_latitude/longitude).
+ *   4. [Audit putaran 2] geofence_izin 'approved' yang batas_waktu-nya lewat
+ *      ditandai 'expired' (setiap IZIN_EXPIRE_MINUTES, default 10 menit).
+ *      Sebelumnya status hanya dihitung "on the fly" di geofence.service
+ *      sehingga web-admin/mobile terus menampilkan "Disetujui" (audit: 8 izin
+ *      approved dengan batas Mei 2026 masih tercatat approved).
  *
  * Nonaktifkan dengan MAINTENANCE_ENABLED=false.
  */
@@ -21,6 +26,17 @@ const patroliRepo = require('../repositories/patroli.repository');
 
 const STALE_HOURS = parseInt(process.env.PATROLI_STALE_HOURS || '24', 10) || 24;
 const HISTORY_DAYS = parseInt(process.env.LOCATION_HISTORY_DAYS || '180', 10) || 180;
+const IZIN_EXPIRE_MINUTES = parseInt(process.env.IZIN_EXPIRE_MINUTES || '10', 10) || 10;
+
+/** Tandai izin keluar yang sudah melewati batas waktu sebagai 'expired'. */
+async function expireIzin() {
+  const r = await query(
+    `UPDATE geofence_izin SET status = 'expired', updated_at = NOW()
+      WHERE status = 'approved' AND batas_waktu IS NOT NULL AND batas_waktu < NOW()`
+  );
+  if (r.rowCount > 0) logger.info(`[Maintenance] izin kedaluwarsa ditandai expired: ${r.rowCount}`);
+  return r.rowCount;
+}
 
 async function runMaintenance() {
   const summary = {};
@@ -28,6 +44,10 @@ async function runMaintenance() {
     const r = await query('DELETE FROM refresh_tokens WHERE expires_at < NOW()');
     summary.refresh_tokens_expired = r.rowCount;
   } catch (e) { logger.warn(`[Maintenance] refresh_tokens: ${e.message}`); }
+
+  try {
+    summary.izin_expired = await expireIzin();
+  } catch (e) { logger.warn(`[Maintenance] izin expired: ${e.message}`); }
 
   try {
     summary.patroli_ditutup = await patroliRepo.closeStale(STALE_HOURS);
@@ -50,8 +70,12 @@ function scheduleMaintenance() {
     setInterval(() => {
       runMaintenance().catch((e) => logger.error(`[Maintenance] Gagal: ${e.message}`));
     }, 24 * 60 * 60 * 1000);
+    // Izin keluar berdurasi menit → dicek lebih sering daripada job harian.
+    setInterval(() => {
+      expireIzin().catch((e) => logger.warn(`[Maintenance] izin expired: ${e.message}`));
+    }, IZIN_EXPIRE_MINUTES * 60 * 1000);
   }, 2 * 60 * 1000);
-  logger.info(`[Maintenance] Terjadwal (stale patroli > ${STALE_HOURS} jam, location_history > ${HISTORY_DAYS} hari)`);
+  logger.info(`[Maintenance] Terjadwal (stale patroli > ${STALE_HOURS} jam, location_history > ${HISTORY_DAYS} hari, izin expired tiap ${IZIN_EXPIRE_MINUTES} menit)`);
 }
 
-module.exports = { runMaintenance, scheduleMaintenance };
+module.exports = { runMaintenance, scheduleMaintenance, expireIzin };
