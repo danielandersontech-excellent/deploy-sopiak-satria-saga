@@ -2,3 +2,4 @@
 .env
 .env.production
 firebase-service-account.json
+private-uploads/

@@ -96,3 +96,8 @@ LAPORAN_VERIFIKASI.md
 verify/
 TAHAP_*.md
 !TAHAP_PERBAIKAN_SOPIAK.md
+# --- Berkas privat pelamar rekrutmen (volume backend_private_uploads) ---
+private-uploads/
+
+# --- Backup lokal DB produksi (Fase 0 misi audit) ---
+backups-local/
