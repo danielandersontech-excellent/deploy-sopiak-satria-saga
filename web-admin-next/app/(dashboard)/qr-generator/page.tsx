@@ -27,8 +27,8 @@ export default function QRGeneratorPage() {
     (async () => {
       setLoading(true);
       try {
-        try { setCheckpoints(await checkpointsApi.list()); } catch {}
-        try { setLokasi(await lokasiApi.list()); } catch {}
+        try { setCheckpoints(await checkpointsApi.list()); } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
+        try { setLokasi(await lokasiApi.list()); } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
       } finally {
         // BUG #4: ensure loading clears on any error path.
         setLoading(false);

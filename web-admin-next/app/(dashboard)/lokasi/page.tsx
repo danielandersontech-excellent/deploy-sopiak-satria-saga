@@ -417,6 +417,7 @@ export default function LokasiPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Lokasi?"
           msg={`"${del.nama}" akan dihapus permanen. Pastikan tidak ada personil, pos jaga, checkpoint, atau jadwal yang masih terikat ke lokasi ini.`}
           onConfirm={doDelete}

@@ -452,6 +452,7 @@ export default function RekrutmenPage() {
 
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Lamaran?"
           msg={`Lamaran ${del.nomor_referensi} (${del.nama}) beserta seluruh berkasnya akan dihapus permanen.`}
           onConfirm={doDelete}

@@ -68,7 +68,7 @@ export default function GeofencePage() {
   const handleReject = async () => {
     if (!rejectModal || saving) return;
     const alasan = catatan.trim();
-    if (alasan.length < 3) return toast("Alasan penolakan wajib diisi (min. 3 karakter)", "warning");
+    if (alasan.length < 5) return toast("Alasan penolakan wajib diisi (min. 5 karakter)", "warning");
     setSaving("reject");
     try {
       await geofenceApi.izinReject(rejectModal.id, alasan);

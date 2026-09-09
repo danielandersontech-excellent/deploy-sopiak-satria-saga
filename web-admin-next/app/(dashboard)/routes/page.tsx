@@ -42,13 +42,13 @@ export default function RoutesPage() {
     }
     try {
       setLokasi(await lokasiApi.list());
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
     try {
       setCheckpoints(await checkpointsApi.list("all=true"));
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
     try {
       setJadwalList(await jadwalApi.list("all=true"));
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
   };
   useEffect(() => {
     load();
@@ -361,6 +361,7 @@ export default function RoutesPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Rute?"
           msg={`"${del.nama}" akan dihapus.`}
           onConfirm={doDelete}

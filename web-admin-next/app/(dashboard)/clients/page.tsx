@@ -889,6 +889,7 @@ export default function ClientsPage() {
       {/* BUG #8: Reset PIN confirmation step. */}
       {resetPinConfirm && !resetPinResult && (
         <ConfirmDialog
+          busy={resetPinLoading}
           title="Reset PIN Klien?"
           msg={`PIN klien "${resetPinConfirm.nama_klien}" akan diganti dengan PIN baru acak. PIN lama tidak bisa digunakan lagi. Lanjutkan?`}
           onConfirm={doResetPin}

@@ -44,13 +44,13 @@ export default function ShiftAssignmentPage() {
       // BUG #5 (P2-4): the dropdown needs every assignable user; bypass
       // the new default pagination on /api/users.
       setUsers(await usersApi.list("all=true"));
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
     try {
       setShifts(await jadwalApi.list("all=true"));
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
     try {
       setPosJaga(await posJagaApi.list("all=true"));
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
   };
   useEffect(() => {
     load();
@@ -315,6 +315,7 @@ export default function ShiftAssignmentPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Penugasan?"
           msg="Data penugasan akan dihapus."
           onConfirm={doDelete}

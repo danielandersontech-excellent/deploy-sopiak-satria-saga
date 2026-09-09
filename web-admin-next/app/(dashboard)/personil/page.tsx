@@ -1125,6 +1125,7 @@ export default function PersonilPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Personil?"
           msg={`${del.nama} (${del.nrp}) akan dihapus. Riwayat absensi/laporan tetap tersimpan. Untuk personil yang keluar, lebih disarankan mengubah Penempatan menjadi "nonaktif".`}
           onConfirm={doDelete}

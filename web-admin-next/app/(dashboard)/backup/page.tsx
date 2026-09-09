@@ -68,24 +68,26 @@ export default function BackupPage() {
   };
   const doRestore = async () => {
     const filename = restoreTarget;
-    if (!filename) return;
-    setRestoreTarget(null);
+    if (!filename || loading) return;
+    // [Misi V3 / B3] dialog tetap terbuka (busy) sampai selesai; ditutup hanya bila sukses.
     setLoading("restore");
     try {
       await backupApi.restore(filename);
       toast(t("restore_berhasil"));
+      setRestoreTarget(null);
+      load();
     } catch (e: any) {
       toast(e.message, "error");
     } finally { setLoading(""); }
   };
   const doDelete = async () => {
     const filename = deleteTarget;
-    if (!filename) return;
-    setDeleteTarget(null);
+    if (!filename || loading) return;
     setLoading(`del-${filename}`);
     try {
       await backupApi.del(filename);
       toast("File backup dihapus");
+      setDeleteTarget(null);
       load();
     } catch (e: any) {
       toast(e.message, "error");
@@ -207,8 +209,11 @@ export default function BackupPage() {
       {restoreTarget && (
         <ConfirmDialog
           title="Restore Database?"
-          msg={`PERHATIAN: Restore dari "${restoreTarget}" akan MENIMPA seluruh database saat ini. Buat backup terbaru sebelum melanjutkan. Tindakan ini tidak dapat dibatalkan.`}
-          confirmLabel="Ya, Restore"
+          msg={`Restore dari "${restoreTarget}" akan MENIMPA seluruh database saat ini.`}
+          note="Aksi paling berisiko di aplikasi: semua data setelah backup ini hilang, sesi pengguna bisa terputus, dan tidak dapat dibatalkan. Buat backup terbaru dulu."
+          requireText="RESTORE"
+          confirmLabel={loading === "restore" ? "Memulihkan..." : "Ya, Restore"}
+          busy={loading === "restore"}
           onConfirm={doRestore}
           onCancel={() => setRestoreTarget(null)}
         />
@@ -217,6 +222,7 @@ export default function BackupPage() {
         <ConfirmDialog
           title="Hapus File Backup?"
           msg={`File "${deleteTarget}" akan dihapus permanen dari server.`}
+          busy={loading.startsWith("del-")}
           onConfirm={doDelete}
           onCancel={() => setDeleteTarget(null)}
         />

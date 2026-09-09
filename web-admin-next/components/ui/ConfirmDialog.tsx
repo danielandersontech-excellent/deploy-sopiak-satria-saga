@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 
 /**
  * Dialog konfirmasi bersama.
@@ -34,6 +34,16 @@ export function ConfirmDialog({
 }) {
   const [typed, setTyped] = useState("");
   const locked = !!requireText && typed.trim() !== requireText;
+  // [Misi V3 / B3] Esc = batal (kecuali sedang memproses); Enter = konfirmasi bila tidak terkunci.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (busy) return;
+      if (e.key === "Escape") onCancel();
+      else if (e.key === "Enter" && !requireText && !locked) { e.preventDefault(); onConfirm(); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [busy, locked, requireText, onCancel, onConfirm]);
   return (
     // [6-2] Klik area overlay (di luar box) = batal. Box ber-stopPropagation
     // sehingga klik di dalam tidak ikut menutup.

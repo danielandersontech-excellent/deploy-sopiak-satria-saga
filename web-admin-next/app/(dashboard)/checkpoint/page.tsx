@@ -43,7 +43,7 @@ export default function CheckpointPage() {
     }
     try {
       setLokasi(await lokasiApi.list());
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
   };
   useEffect(() => {
     load();
@@ -429,6 +429,7 @@ export default function CheckpointPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Checkpoint?"
           msg={`"${del.nama}" akan dihapus. Rute patroli yang memuat checkpoint ini perlu diperbarui.`}
           onConfirm={doDelete}

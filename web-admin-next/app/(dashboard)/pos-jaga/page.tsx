@@ -40,7 +40,7 @@ export default function PosJagaPage() {
     }
     try {
       setLokasi(await lokasiApi.list());
-    } catch {}
+    } catch (e: any) { toast(e?.message || "Gagal memuat data pendukung (lokasi/checkpoint/shift). Muat ulang halaman.", "warning"); }
   };
   useEffect(() => {
     load();
@@ -359,6 +359,7 @@ export default function PosJagaPage() {
       )}
       {del && (
         <ConfirmDialog
+          busy={saving}
           title="Hapus Pos Jaga?"
           msg={`"${del.nama}" akan dihapus.`}
           onConfirm={doDelete}

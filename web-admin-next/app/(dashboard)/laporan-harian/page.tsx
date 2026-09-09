@@ -196,9 +196,9 @@ export default function LaporanHarianPage() {
         {canValidate && selected.length > 0 && (
           <div className="bulk-bar">
             <span><span className="bulk-count">{selected.length}</span> laporan dipilih</span>
-            <button className="btn btn-sm btn-success" onClick={() => setBulk("approved")} disabled={saving}><i className="fas fa-check-double" /> Setujui semua</button>
-            <button className="btn btn-sm btn-outline text-warning" onClick={() => setBulk("revision")} disabled={saving}><i className="fas fa-undo" /> Minta revisi</button>
-            <button className="btn btn-sm btn-outline text-danger" onClick={() => setBulk("rejected")} disabled={saving}><i className="fas fa-times" /> Tolak</button>
+            <button className="btn btn-sm btn-success" onClick={() => { setBulkCatatan(""); setBulk("approved"); }} disabled={saving}><i className="fas fa-check-double" /> Setujui semua</button>
+            <button className="btn btn-sm btn-outline text-warning" onClick={() => { setBulkCatatan(""); setBulk("revision"); }} disabled={saving}><i className="fas fa-undo" /> Minta revisi</button>
+            <button className="btn btn-sm btn-outline text-danger" onClick={() => { setBulkCatatan(""); setBulk("rejected"); }} disabled={saving}><i className="fas fa-times" /> Tolak</button>
             <button className="btn btn-sm btn-outline" onClick={() => setSelected([])} disabled={saving}>Batal pilih</button>
           </div>
         )}
@@ -341,10 +341,10 @@ export default function LaporanHarianPage() {
       {bulk && (
         <Modal
           title={`${bulk === "approved" ? "Setujui" : bulk === "revision" ? "Minta Revisi" : "Tolak"} ${selected.length} Laporan?`}
-          onClose={() => !saving && setBulk(null)}
+          onClose={() => { if (!saving) { setBulk(null); setBulkCatatan(""); } }}
           footer={
             <>
-              <button className="btn btn-outline" onClick={() => setBulk(null)} disabled={saving}>Batal</button>
+              <button className="btn btn-outline" onClick={() => { setBulk(null); setBulkCatatan(""); }} disabled={saving}>Batal</button>
               <button className={`btn ${bulk === "approved" ? "btn-success" : bulk === "rejected" ? "btn-danger" : "btn-warning"}`} onClick={doBulk} disabled={saving || (bulk !== "approved" && !bulkCatatan.trim())}>
                 <i className={`fas ${saving ? "fa-spinner fa-spin" : "fa-check-double"}`} /> {saving ? "Memproses..." : `Ya, ${bulk === "approved" ? "setujui" : bulk === "revision" ? "minta revisi" : "tolak"} ${selected.length} laporan`}
               </button>

@@ -232,6 +232,7 @@ export default function PanicPage() {
 
       {confirmAct && (
         <ConfirmDialog
+          busy={saving}
           title={confirmAct.status === "resolved" ? "Tandai Selesai?" : "Tandai Alarm Palsu?"}
           msg={`Panic alert dari ${confirmAct.nama || "personil"} akan ditandai ${confirmAct.status === "resolved" ? "selesai ditangani" : "sebagai alarm palsu"}.`}
           confirmLabel={confirmAct.status === "resolved" ? "Ya, Selesai" : "Ya, Alarm Palsu"}
